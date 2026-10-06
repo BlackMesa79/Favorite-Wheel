@@ -1,0 +1,1 @@
+Replace Skyrim's Favorites menu with a categorized wheel, and access a separate action wheel for outfit presets and optional Face Lighting controls. Includes item details, customizable themes, and built-in settings.

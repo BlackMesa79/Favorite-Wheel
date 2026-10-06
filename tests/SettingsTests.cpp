@@ -1,0 +1,94 @@
+#include "Settings.h"
+#include "UIResources.h"
+#include "UILayout.h"
+#include "Transition.h"
+#include <Windows.h>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <cstdlib>
+#include <cmath>
+void Check(bool condition,const char* message) { if(!condition){std::cerr<<message<<'\n';std::exit(1);} }
+int main() {
+    using namespace Wheel;
+    const auto root=std::filesystem::path("build")/("settings-test-"+std::to_string(GetCurrentProcessId()));
+    std::filesystem::create_directories(root);
+    const auto path=root/"FavoriteWheel.ini";
+    {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
+    SetSettingsPath(path.string()); LoadSettings();
+    Check(Config().language=="en","Legacy Chinese=0 migration");
+    Check(Config().overlayOpacity==35 && Config().positionY==46 && Config().wheelScale==1.f,"New defaults ignore obsolete dim and blur keys");
+    Transition transition;
+    Check(transition.Update(true,true,true,.11f)>.49f && transition.value<1.f,"Opening fade advances");
+    Check(transition.Update(true,true,true,.11f)==1.f,"Opening completes in 220ms");
+    Check(transition.Update(false,true,true,.05f)>.49f && transition.value<1.f,"Closing fade advances");
+    Check(transition.Update(true,true,true,.014f)>.5f,"Rapid reopening reverses fade");
+    Check(transition.Update(false,true,false,0)==0.f,"Forced close clears transition");
+    Check(transition.Update(true,false,true,0)==1.f && transition.Update(false,false,true,0)==0.f,"Disabled animation switches immediately");
+    transition.Update(true,true,true,1.f);
+    Check(transition.Update(false,true,true,.22f)==0.f,"Closing completes in 220ms");
+    transition.Update(true,true,true,.088f);
+    const float pose=transition.value;
+    transition.Update(false,true,true,.044f);
+    transition.Update(true,true,true,.044f);
+    Check(std::abs(transition.value-pose)<.0001f,"Reverse uses the same continuous pose");
+    const float beforeNegative=transition.value;
+    transition.Update(true,true,true,-1.f);
+    Check(transition.value==beforeNegative,"Negative elapsed time does not reverse opening");
+    Check(BladeExpansion(.5f,0,10)>.99f && BladeExpansion(.5f,9,10)<.01f,"Sweep separates almost completed and newly starting blades");
+    Check(BladeExpansion(.75f,9,10)<1 && BladeExpansion(.75f,0,10)==1,"Closing folds the last blade before the first");
+    for(int slot=0;slot<9;++slot) {
+        Check(BladeExpansion(.4f,slot,10)>=BladeExpansion(.4f,slot+1,10),"Opening follows clockwise slot order");
+        const float start=.48f*slot/9;
+        Check(BladeExpansion(start,slot,10)==0 && BladeExpansion(start+.52f,slot,10)>.9999f,"Blade travel uses equal windows inside the total duration");
+    }
+    Check(std::abs(BladeExpansion(.26f,0,10)-.5f)<.0001f,"Blade travels evenly through its midpoint instead of front-loading motion");
+    for(int slot=0;slot<10;++slot) {
+        Check(BladeExpansion(0,slot,10)==0 && BladeExpansion(1,slot,10)==1,"All blades share total-duration endpoints");
+        float previous=0;
+        for(int frame=0;frame<=100;++frame) {
+            const float progress=frame/100.f,blade=BladeExpansion(progress,slot,10);
+            Check(std::isfinite(blade) && blade>=previous && blade<=1,"Blade geometry stays bounded and monotonic");
+            Check(SmoothPhase(blade,.55f,1.f)>=0 && SmoothPhase(blade,.55f,1.f)<=1,"Content remains bounded");
+            previous=blade;
+        }
+    }
+    const auto original=Config();
+    BeginSettings(); auto edited=Config(); edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
+    Check(Config()==edited,"Live preview");
+    RevertSettings(); Check(Config()==original,"Cancel restores every setting");
+    BeginSettings(); EditSettings(edited); Check(SaveSettings(),"Save settings");
+    RevertSettings(); Check(Config()==edited,"Closing after apply preserves applied values");
+    LoadSettings(); Check(Config()==edited,"Settings survive reload");
+    wchar_t value[32]{};
+    GetPrivateProfileStringW(L"Custom",L"Keep",L"",value,32,std::filesystem::absolute(path).c_str());
+    Check(std::wstring(value)==L"123","Unrelated INI keys survive");
+    BeginSettings(); DefaultSettings(); RevertSettings(); Check(Config()==edited,"Defaults can be canceled");
+    BeginSettings(); auto clamped=Config();clamped.wheelScale=99;clamped.positionX=-10;clamped.positionY=999;clamped.overlayOpacity=999;clamped.scale=99;clamped.sensitivity=-5; EditSettings(clamped);
+    Check(Config().scale==1.5f && Config().sensitivity==.2f,"Bounds enforced");
+    Check(Config().wheelScale==1.5f && Config().positionX==0 && Config().positionY==100 && Config().overlayOpacity==80,"Layout and dimming bounds enforced");
+    SetSettingsPath(root.string()); Check(!SaveSettings(),"Save failure reported");
+    RevertSettings(); Check(Config()==edited,"Failed save remains cancelable");
+    LoadResources("assets");
+    Check(Languages().size()>=2 && Themes().size()>=2,"Bundled resources load");
+    Check(Tr(edited,"settings")=="设置","UTF-8 language");
+    edited.language="missing";Check(Tr(edited,"settings")=="SETTINGS","Unknown language fallback");
+    const auto extra=root/"Resources"/"Languages";std::filesystem::create_directories(extra);
+    {std::ofstream file(extra/"partial.ini");file<<"Name=Partial\nsettings=Custom\napply=\n";}
+    const auto themeDir=root/"Resources"/"Themes";std::filesystem::create_directories(themeDir);
+    {std::ofstream file(themeDir/"custom.ini");file<<"Accent=12AB34FF\nPanel=not-a-color\nBorderWidth=999\nOrnament=-2\nIconScale=nan\nTitleScale=1.1\nLabelScale=1x\nHoverDuration=inf\nPageDuration=0\n";}
+    LoadResources((root/"Resources").string());
+    edited.language="partial";Check(Tr(edited,"settings")=="Custom" && Tr(edited,"apply")=="APPLY" && Tr(edited,"cancel")=="CANCEL","Partial/empty translation fallback");
+    edited.theme="custom";Check(Style(edited).accent==0xFF34AB12 && Style(edited).panel==Theme{}.panel,"RGBA color parsing and invalid color fallback");
+    const auto& visual=Style(edited);
+    Check(visual.borderWidth==2 && visual.ornament==0 && visual.iconScale==1 && visual.titleScale==1.1f && visual.labelScale==1 && visual.hoverDuration==.1f && visual.pageDuration==0,"Visual theme bounds, invalid/nonfinite fallback and zero-duration transitions");
+    LoadResources((root/"missing").string());
+    Check(Languages().size()==1 && Themes().size()==1 && Tr(edited,"apply")=="APPLY","Missing resource folder remains usable");
+    Check(WheelSlot(2,0)==-1 && WheelSlot(0,-1)==0 && WheelSlot(0,0)==-1,"Free pointer cannot use outside wheel or in center");
+    Check(!applyButton.Contains(cancelButton.x+10,cancelButton.y+10),"Apply and cancel do not overlap");
+    for(int row=0;row<settingRows;++row) {
+        const auto valueRect=ValueButton(row);
+        Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(row).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
+    }
+    std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
+}

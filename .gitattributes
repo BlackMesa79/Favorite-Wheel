@@ -1,0 +1,15 @@
+* text=auto eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.lua text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.cjs text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.ini text eol=lf
+*.svg text eol=lf
+*.html text eol=lf
+*.png binary
+# Preserve upstream notice text, including its original whitespace.
+licenses/*.txt -whitespace

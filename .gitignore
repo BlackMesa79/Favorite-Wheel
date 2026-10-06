@@ -1,0 +1,18 @@
+/.xmake/
+/build/
+/dist/
+/extern/CommonLibVR/
+/extern/imgui/
+/HANDOFF.md
+
+# Local tools, generated dependencies, and editor/cache files.
+/extern/
+node_modules/
+__pycache__/
+*.pyc
+/.vs/
+/.vscode/
+.DS_Store
+Thumbs.db
+*.user
+*.suo

@@ -1,0 +1,42 @@
+#include "Wheel.h"
+#include "RuntimeSupport.h"
+#include "Outfits.h"
+#include "Settings.h"
+#include "UIResources.h"
+namespace {
+    void OnMessage(SKSE::MessagingInterface::Message* message) {
+        if (!message) return;
+        switch (message->type) {
+        case SKSE::MessagingInterface::kPostPostLoad: Wheel::FaceLight::Discover(); break;
+        case SKSE::MessagingInterface::kDataLoaded:
+            if (Wheel::Config().enabled && (!Wheel::InstallRenderer() || !Wheel::InstallWheel()))
+                SKSE::log::error("FavoriteWheel initialization failed. See preceding errors.");
+            break;
+        case SKSE::MessagingInterface::kPreLoadGame: Wheel::SetGameActive(false); break;
+        case SKSE::MessagingInterface::kNewGame: Wheel::SetGameActive(true); break;
+        case SKSE::MessagingInterface::kPostLoadGame: Wheel::SetGameActive(message->data != nullptr); break;
+        default: break;
+        }
+    }
+}
+SKSEPluginLoad(const SKSE::LoadInterface* skse) {
+    SKSE::Init(skse);
+    Wheel::LoadSettings();
+    Wheel::LoadResources();
+    const auto config=Wheel::Config();
+    SKSE::log::info("UI resources: {} languages, {} themes; language={} theme={}",
+        Wheel::Languages().size(),Wheel::Themes().size(),config.language,config.theme);
+    const auto runtime=REL::Module::get().version();
+    if (!Wheel::RuntimeSupport::Supported(runtime)) {
+        SKSE::log::error("FavoriteWheel 0.3.13 unsupported runtime {}; supported test targets: 1.5.97, 1.6.1170, 1.7.99 and 1.7.104",runtime.string());
+        return false;
+    }
+    SKSE::log::info("FavoriteWheel runtime={} family={}; CommonLibSSE-NG v11.0.0 (94faaed0c60e)",
+        runtime.string(),REL::Module::IsAE()?"AE":"SE");
+    if(!SKSE::GetSerializationInterface())return false;
+    auto messaging = SKSE::GetMessagingInterface();
+    if (!messaging || !SKSE::GetTaskInterface() || !messaging->RegisterListener(OnMessage)) return false;
+    if(!Wheel::Outfits::Install())return false;
+    SKSE::log::info("FavoriteWheel 0.3.13 loaded; category ribbon and diamond page rail; smooth fan opening and reverse folding");
+    return true;
+}

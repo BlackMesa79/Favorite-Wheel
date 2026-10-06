@@ -1,0 +1,28 @@
+#pragma once
+#include <string>
+namespace Wheel {
+    struct Settings {
+        bool enabled = true;
+        std::string language = "zh_CN";
+        std::string theme = "classic";
+        bool showHints = true;
+        float scale = 1.0f;
+        float wheelScale = 1.0f;
+        int positionX = 28, positionY = 46;
+        int overlayOpacity = 35;
+        bool sounds = true, animations = true;
+        float sensitivity = 1.0f;
+        int switchKey = 19; // R, wheel mode switch while open.
+        int hotkey = -1; // -1 follows the game's Favorites binding.
+        std::string font = "C:/Windows/Fonts/msyh.ttc";
+        bool operator==(const Settings&) const = default;
+    };
+    Settings Config();
+    void LoadSettings();
+    void BeginSettings();
+    void EditSettings(Settings values);
+    void RevertSettings();
+    bool SaveSettings();
+    void DefaultSettings();
+    void SetSettingsPath(const std::string& path);
+}
