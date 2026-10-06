@@ -95,10 +95,6 @@ Other runtimes are not supported by this build. Skyrim VR is not supported. Test
 
 [b][url=https://www.nexusmods.com/skyrimspecialedition/mods/97674]Ultimate Animated Potions NG[/url][/b] and [b][url=https://www.nexusmods.com/skyrimspecialedition/mods/42602]Eating Animations and Sounds SE[/url][/b] worked in user testing. Consumables use the game's equipment path so those mods can receive their normal triggers. This is not a guarantee for every animation-mod setup.
 
-[b]Community Shaders and other overlays[/b] may depend on render order and their specific versions. The wheel's dimming overlay is designed to cover the game's HUD; it does not certify every external overlay, HDR, ENB, or frame-generation combination. Background blur is not used.
-
-[b]Inventory icon packs[/b] such as I4-based SWF libraries are not used. The wheel supplies its own line icons and needs no external icon dependency.
-
 [b]Item details[/b] are practical information from game records and supported calculations, rather than a complete copy of the vanilla or SkyUI description card. Trading prices, conditional/scripted effects, and special mod-specific corrections may differ. Poison application is not implemented; use poisons through the inventory instead. Beast-form controls return to the original Favorites menu.
 
 [size=4][color=#C9AA72][b]Themes & translations[/b][/color][/size]
@@ -121,7 +117,5 @@ The software is provided [b]without any warranty[/b], including implied warranti
 When reporting an issue, include your Skyrim and SKSE versions, the mod version, reproduction steps, relevant integrations or UI/animation mods, and [b]FavoriteWheel.log[/b]. The log is in your game's Documents folder under [b]My Games/Skyrim Special Edition/SKSE/[/b]. Add a crash log for crashes.
 
 Thanks to the SKSE, CommonLibSSE-NG, Address Library, Dear ImGui, spdlog, and Microsoft DirectX library contributors. Thanks to the testers helping validate the wheel across game versions.
-
-Grid Inventory and Outfit Wheeler were feature references. Favorite Wheel is independently implemented and does not include their code, icons, or artwork.
 
 [size=2]Developed with AI assistance and refined through hands-on testing. The cover is original vector promotional artwork, not an in-game screenshot.[/size]

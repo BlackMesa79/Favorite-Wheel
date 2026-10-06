@@ -36,7 +36,7 @@ Required:
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444), matching your game version. The supported 1.7 runtimes need their version-5 address databases.
 - Microsoft Visual C++ 2015–2022 x64 Redistributable.
 
-Keyboard and mouse are supported. Gamepad navigation is not implemented. Testing does not certify every feature on every runtime or every third-party mod combination. The 0.3.13 change that hides an unavailable Face Lighting category has passed local logic and rendering checks and still needs an in-game regression check.
+Keyboard and mouse are supported. Gamepad navigation is not implemented. Testing does not certify every feature on every runtime or every third-party mod combination. The user has confirmed the 0.3.13 release candidate works in-game on 1.6.1170.
 
 ## Installation
 
@@ -95,7 +95,7 @@ Controls cover the player, the NPC targeted before opening the wheel, the follow
 
 Ultimate Animated Potions NG and Eating Animations and Sounds SE worked in user testing. Consumables use the game's equipment path so those mods can receive their usual triggers. Specific animation and rendering combinations still require testing.
 
-Inventory Injector/SWF icon packs are not used. Icons are drawn by this project. Poison application is not implemented; use poisons through the inventory. Beast-form controls fall back to the original Favorites menu.
+Poison application is not implemented; use poisons through the inventory. Beast-form controls fall back to the original Favorites menu.
 
 ## Settings, themes, and translations
 
@@ -151,7 +151,7 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces an installation ZIP and a source ZIP containing pinned dependency sources. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.13.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 

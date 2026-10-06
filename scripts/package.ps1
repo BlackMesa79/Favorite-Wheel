@@ -1,27 +1,110 @@
 #Requires -Version 7.0
-param([switch]$SkipSource)
+param([switch]$SkipSource, [switch]$TestPackage)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$version = '0.3.13'
+$versionMatch = [regex]::Match((Get-Content -LiteralPath (Join-Path $projectRoot 'xmake.lua') -Raw), 'set_version\("([^"]+)"\)')
+if (!$versionMatch.Success) { throw 'Project version missing from xmake.lua.' }
+$version = $versionMatch.Groups[1].Value
 $dll = Join-Path $projectRoot 'build/windows/x64/release/FavoriteWheel.dll'
 if (!(Test-Path -LiteralPath $dll)) { throw 'Build the Release DLL before packaging.' }
 $dist = Join-Path $projectRoot 'dist'
 $stage = Join-Path $projectRoot ('build/package-' + [Guid]::NewGuid().ToString('N'))
 $plugins = Join-Path $stage 'SKSE/Plugins'
-New-Item -ItemType Directory -Force $dist,$plugins,(Join-Path $stage 'docs'),(Join-Path $stage 'licenses') | Out-Null
+New-Item -ItemType Directory -Force $dist,$plugins | Out-Null
 Copy-Item -LiteralPath $dll -Destination $plugins
 Copy-Item -LiteralPath (Join-Path $projectRoot 'FavoriteWheel.ini') -Destination $plugins
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets') -Destination (Join-Path $plugins 'FavoriteWheel') -Recurse
-foreach ($file in @('README.md','LICENSE','THIRD_PARTY_NOTICES.md')) {
-    Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination $stage
+$readme = @"
+Favorite Wheel - Radial Actions $version
+Copyright (C) 2026 BlackMesa79
+SPDX-License-Identifier: GPL-3.0-only
+https://github.com/BlackMesa79/Favorite-Wheel
+
+INSTALLATION AND CONTROLS
+Install with your mod manager and launch through SKSE64. Requires SKSE64 and
+Address Library matching your game version, plus the Microsoft Visual C++
+2015-2022 x64 Redistributable. No ESP, scripts, or SKSE Menu Framework required.
+
+Q opens favorites; Shift + Q opens actions; R switches wheels while open.
+A/D change categories; W/S or the mouse wheel change pages. Left click uses
+an entry; right click equips to the left hand where supported or manages an
+outfit preset. F2 opens settings; Esc/Tab closes or returns from a sub-list.
+Q follows your game's Favorites binding unless overridden in settings.
+
+The supplied configuration starts in Simplified Chinese. Select English in
+F2 settings, or set Language=en in SKSE/Plugins/FavoriteWheel.ini and restart.
+Keep your existing INI and custom languages/themes when upgrading.
+Outfit edits require a game save. Preserve matching .skse co-saves.
+Weapons, shields, and ammunition are excluded from outfit presets.
+Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
+
+RUNTIME SUPPORT
+Skyrim 1.5.97 and 1.6.1170 have been tested in-game.
+Skyrim 1.7.x is supported but has not yet been tested in-game; the exact
+supported 1.7 versions are 1.7.99 and 1.7.104. Use matching SKSE64 and Address
+Library v5 for those versions. Other runtimes and VR are not supported.
+
+SOURCE AND LICENSES
+This program is free software under GNU GPL version 3, without any warranty.
+Corresponding source and build instructions:
+https://github.com/BlackMesa79/Favorite-Wheel
+A matching source ZIP is supplied separately with the release. The repository
+main branch may contain later development; use the release's source archive
+when rebuilding this version.
+
+Complete GPL text and third-party notices follow in this file. Third-party
+components retain their own licenses and are not relicensed by this project.
+Paths mentioned in notices refer to the source checkout, not this mod archive.
+The installation archive contains only runtime files and this readme.txt.
+
+"@
+$licenseSections = @(
+    @{ Title='GNU GENERAL PUBLIC LICENSE v3'; File='LICENSE' },
+    @{ Title='THIRD-PARTY ATTRIBUTIONS'; File='THIRD_PARTY_NOTICES.md' },
+    @{ Title='CommonLibSSE-NG - GPL-3.0-or-later'; File='licenses/CommonLibSSE-NG-GPL-3.0.txt' },
+    @{ Title='CommonLibSSE-NG - Modding and Linking Exceptions'; File='licenses/CommonLibSSE-NG-EXCEPTIONS.txt' },
+    @{ Title='CommonLibSSE-NG - retained original MIT notice'; File='licenses/LICENSE-MIT.txt' },
+    @{ Title='CommonLibSSE-NG - HDE64 / MinHook notice'; File='licenses/LICENSE-hde64.txt' },
+    @{ Title='CommonLibVR - retained historical MIT notice'; File='licenses/CommonLibVR-MIT.txt' },
+    @{ Title='Dear ImGui - MIT'; File='licenses/Dear-ImGui-MIT.txt' },
+    @{ Title='spdlog - MIT'; File='licenses/spdlog-MIT.txt' },
+    @{ Title='DirectXMath - MIT'; File='licenses/DirectXMath-MIT.txt' },
+    @{ Title='DirectXTK - MIT'; File='licenses/DirectXTK-MIT.txt' }
+)
+foreach ($section in $licenseSections) {
+    $readme += "`n`n" + ('=' * 72) + "`n" + $section.Title + "`n" + ('=' * 72) + "`n`n"
+    $readme += Get-Content -LiteralPath (Join-Path $projectRoot $section.File) -Raw
 }
-Copy-Item -Path (Join-Path $projectRoot 'docs/*.md') -Destination (Join-Path $stage 'docs')
-Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/CommonLibSSE-NG-REVISION.txt') -Destination (Join-Path $stage 'docs')
-Copy-Item -Path (Join-Path $projectRoot 'licenses/*.txt') -Destination (Join-Path $stage 'licenses')
+Set-Content -LiteralPath (Join-Path $stage 'readme.txt') -Value $readme -Encoding utf8NoBOM
 $dllHash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash
-Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS.txt') -Value "$dllHash  SKSE/Plugins/FavoriteWheel.dll" -Encoding ascii
-$binaryZip = Join-Path $dist "FavoriteWheel-$version-test.zip"
+$packageSuffix = if ($TestPackage) { '-test' } else { '' }
+$binaryZip = Join-Path $dist "FavoriteWheel-$version$packageSuffix.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $binaryZip -Force
+
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$binaryArchive = [IO.Compression.ZipFile]::OpenRead($binaryZip)
+try {
+    $files = @($binaryArchive.Entries | Where-Object { !$_.FullName.EndsWith('/') })
+    $nonRuntimeFiles = @($files | Where-Object { !$_.FullName.StartsWith('SKSE/') })
+    if ($nonRuntimeFiles.Count -ne 1 -or $nonRuntimeFiles[0].FullName -ne 'readme.txt') {
+        throw 'Installation archive must contain only runtime files and readme.txt.'
+    }
+    foreach ($entry in $files) {
+        $stagedFile = Join-Path $stage $entry.FullName
+        if (!(Test-Path -LiteralPath $stagedFile -PathType Leaf)) { throw "Unexpected archive entry: $($entry.FullName)" }
+        $entryStream = $entry.Open()
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        try { $entryHash = [Convert]::ToHexString($algorithm.ComputeHash($entryStream)) }
+        finally { $entryStream.Dispose(); $algorithm.Dispose() }
+        if ($entryHash -ne (Get-FileHash -LiteralPath $stagedFile -Algorithm SHA256).Hash) {
+            throw "Archive contents differ: $($entry.FullName)"
+        }
+    }
+    $stagedFiles = @(Get-ChildItem -LiteralPath $stage -Recurse -File)
+    if ($files.Count -ne $stagedFiles.Count) { throw 'Installation archive is missing staged files.' }
+    Write-Output "Installation archive verified: $($files.Count) files, runtime files plus readme.txt only."
+} finally { $binaryArchive.Dispose() }
 
 if (!$SkipSource) {
     # Construct from a strict list: no repository internals, builds, local caches or game files.
@@ -33,7 +116,7 @@ if (!$SkipSource) {
     $hashes = [Collections.Generic.List[string]]::new()
     try {
         $selected = [Collections.Generic.List[IO.FileInfo]]::new()
-        foreach ($file in @('xmake.lua','.gitignore','FavoriteWheel.ini','README.md','LICENSE','THIRD_PARTY_NOTICES.md')) {
+        foreach ($file in @('xmake.lua','.gitignore','.gitattributes','FavoriteWheel.ini','README.md','LICENSE','THIRD_PARTY_NOTICES.md')) {
             $selected.Add((Get-Item -LiteralPath (Join-Path $projectRoot $file)))
         }
         foreach ($tree in @('include','src','tests','scripts','docs','licenses','assets','release-materials','extern/CommonLibVR','extern/imgui')) {
