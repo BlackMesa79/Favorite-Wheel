@@ -1,0 +1,12 @@
+Favorite Wheel - Radial Actions cover — 2026-10-06 (Asia/Hong_Kong)
+Editable SVG, 2560x1440 PNG and 1280x720 PNG.
+Matches FaceLighting-cover-v2, SkyrimTextBridge-cover and SimpleAmmoSwitcher-cover:
+solid #11191b charcoal, #f4f1e8 ivory, #d5af6c gold, same title baselines and typography.
+Original ten-slot radial illustration, adapted from this project's own line pictograms.
+Gold potion sector and central Q communicate selection; no optional-mod or version badges.
+Promotional artwork, not a game screenshot. No raster assets embedded.
+Text remains editable; the cover uses system Segoe UI and does not distribute fonts.
+English-only cover: FAVORITE WHEEL / RADIAL ACTIONS.
+Tagline: Your favorites and actions, at your fingertips.
+Avoids limiting the mod identity to outfit presets or any individual action module.
+Regenerate SVG with create-cover.cjs; export PNG with render-cover.cjs and the sharp module.

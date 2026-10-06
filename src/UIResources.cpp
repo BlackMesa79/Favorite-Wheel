@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <string_view>
 #include <cmath>
 #include <Windows.h>
 
@@ -17,6 +18,8 @@ namespace Wheel {
             {"lightUse","LMB TOGGLE PREFERENCE / OPEN LIST"},
             {"lightNavigation","SWITCH WHEEL · ESC BACK · F2 SETTINGS"},
             {"lightUnavailableShort","API UNAVAILABLE"},
+            {"lightWrongThread","Face Lighting rejected the calling thread. See FavoriteWheel.log."},
+            {"languageAuto","System"},
 
             {"functionTitle","FUNCTION WHEEL"},
             {"functionCount","ACTIONS"},
@@ -65,6 +68,7 @@ namespace Wheel {
             {"outfitWorking","Changing outfit, please wait..."},{"outfitInterrupted","Outfit interrupted by a game state change. Check your equipment."},
             {"wheelBindHint","Click to bind; right-click to reset (Favorites: game / switch: R)"},{"switchWheelKey","Switch wheel key"},
             {"outfitWheelTitle","FUNCTIONS · OUTFITS"},
+            {"outfitTitle","OUTFIT PRESETS"},
             {"outfitCategory","OUTFITS"},
             {"outfitCount","PRESETS"},
             {"outfitSave","SAVE CURRENT"},
@@ -109,20 +113,54 @@ namespace Wheel {
             {"compactNavigation","A / D CATEGORY  ·  W / S / SCROLL PAGE"},{"compactUse","LMB USE / RIGHT HAND  ·  RMB LEFT HAND"},{"compactClose","ESC CLOSE  ·  F2 SETTINGS"},
             {"wheelSize","Wheel size"},{"positionX","Horizontal position X"},{"positionY","Vertical position Y"},{"overlayOpacity","Background dimming"},{"sounds","Open / close sounds"},{"animations","Open / close animation"},
             {"layoutSettingsHelp","Apply and return to check layout; Esc cancels changes."},{"settings","SETTINGS"},{"settingsTitle","WHEEL SETTINGS"},{"settingsHelp","Changes preview immediately. Apply to save; Esc cancels."},
-            {"scale","Interface size"},{"sensitivity","Mouse sensitivity"},{"hints","Control hints"},{"language","Language"},{"theme","Theme"},{"hotkey","Favorites key"},
+            {"scale","Interface size"},{"sensitivity","Mouse sensitivity"},{"dim","Background darkness"},{"hints","Control hints"},{"language","Language"},{"theme","Theme"},{"hotkey","Favorites key"},
             {"on","ON"},{"off","OFF"},{"follow","Follow game"},{"capture","Press a key... Esc cancels"},{"bindHint","Click to bind; right-click to follow game"},
             {"apply","APPLY"},{"cancel","CANCEL"},{"defaults","DEFAULTS"},{"saveError","Could not save settings. Check folder access."},
             {"changed","Item changed. Reopen the wheel."},{"unsupported","Use this item in the inventory for now."}
         };
         std::vector<Language> languages{{"en","English","",english}};
         std::vector<Theme> themes{Theme{}};
+        std::string systemLanguage="en";
         std::string Trim(std::string value) {
             const auto first=value.find_first_not_of(" \t\r\n");
             return first==std::string::npos ? "" : value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);
         }
+        std::string NormalizeLanguage(std::string value) {
+            value=Trim(std::move(value));
+            if(value.empty() || value.size()>63)return {};
+            bool separator=true;
+            for(auto& c:value) {
+                if(c=='_' || c=='-') {
+                    if(separator)return {};
+                    c='-';separator=true;
+                } else if((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c<='9')) {
+                    if(c>='A' && c<='Z')c=static_cast<char>(c-'A'+'a');
+                    separator=false;
+                } else return {};
+            }
+            return separator?std::string{}:value;
+        }
+        std::string DetectSystemLanguage() {
+            wchar_t name[LOCALE_NAME_MAX_LENGTH]{};
+            if(!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(),SORT_DEFAULT),name,LOCALE_NAME_MAX_LENGTH,0))return "en";
+            std::string code;
+            for(const auto c:std::wstring_view(name)) {
+                if(c>127)return "en";
+                code+=static_cast<char>(c);
+            }
+            code=NormalizeLanguage(code);
+            return code.empty()?"en":code;
+        }
         std::unordered_map<std::string,std::string> Read(const std::filesystem::path& file) {
             std::unordered_map<std::string,std::string> values;
-            std::ifstream stream(file,std::ios::binary); std::string line;
+            std::error_code error;
+            const auto size=std::filesystem::file_size(file,error);
+            if(error || size>256*1024)return values;
+            std::ifstream input(file,std::ios::binary);
+            const std::string data((std::istreambuf_iterator<char>(input)),{});
+            if(input.bad() || data.empty() || data.size()>256*1024 || data.find('\0')!=std::string::npos ||
+                !MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,data.data(),static_cast<int>(data.size()),nullptr,0))return values;
+            std::istringstream stream(data); std::string line;
             while (std::getline(stream,line)) {
                 if (line.starts_with("\xEF\xBB\xBF")) line.erase(0,3);
                 line=Trim(line);
@@ -158,10 +196,16 @@ namespace Wheel {
     }
     void LoadResources(const std::string& root) {
         languages={{"en","English","",english}}; themes={Theme{}};
+        systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
         for (const auto& path:Files(std::filesystem::u8path(root)/"Languages")) {
-            auto values=Read(path); const auto id=path.stem().string();
-            Language entry{id,values.contains("Name")?values["Name"]:id,values["Font"],std::move(values)};
-            if (id=="en") languages[0]=std::move(entry); else languages.push_back(std::move(entry));
+            auto values=Read(path); const auto stem=path.stem().u8string();
+            const std::string id(stem.begin(),stem.end());const auto code=NormalizeLanguage(id);
+            if(code.empty() || code=="auto" || values.empty())continue;
+            const auto name=values.contains("Name")&&!values["Name"].empty()?values["Name"]:id;
+            Language entry{id,name,values["Font"],std::move(values)};
+            if(code=="en") {entry.id="en";languages[0]=std::move(entry);}
+            else if(std::none_of(languages.begin(),languages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
+                languages.push_back(std::move(entry));
         }
         for (const auto& path:Files(std::filesystem::u8path(root)/"Themes")) {
             auto values=Read(path); Theme entry;
@@ -183,12 +227,34 @@ namespace Wheel {
         }
     }
     const std::vector<Language>& Languages(){return languages;}
+    const std::string& SystemLanguage(){return systemLanguage;}
+    std::string ResolveLanguage(const std::string& requested,const std::string& systemLocale) {
+        auto code=NormalizeLanguage(requested);
+        if(code=="auto")code=NormalizeLanguage(systemLocale);
+        while(!code.empty()) {
+            for(const auto& language:languages)if(NormalizeLanguage(language.id)==code)return language.id;
+            const auto separator=code.rfind('-');
+            if(separator==std::string::npos)break;
+            code.resize(separator);
+        }
+        return "en";
+    }
+    std::string ActiveLanguage(const Settings& config){return ResolveLanguage(config.language,systemLanguage);}
+    std::string LanguageLabel(const Settings& config) {
+        const auto active=ActiveLanguage(config);
+        std::string name=active;
+        for(const auto& language:languages)if(language.id==active){name=language.name;break;}
+        return NormalizeLanguage(config.language)=="auto"?Tr(config,"languageAuto")+" ("+name+")":name;
+    }
     const std::vector<Theme>& Themes(){return themes;}
     const Theme& Style(const Settings& config) { for (const auto& t:themes) if(t.id==config.theme)return t; return themes[0]; }
     std::string Tr(const Settings& config,const std::string& key) {
-        for(const auto& language:languages) if(language.id==config.language) {
+        const auto active=ActiveLanguage(config);
+        for(const auto& language:languages) if(language.id==active) {
             const auto it=language.text.find(key); if(it!=language.text.end()&&!it->second.empty())return it->second;
         }
+        const auto translated=languages[0].text.find(key);
+        if(translated!=languages[0].text.end()&&!translated->second.empty())return translated->second;
         const auto it=english.find(key); return it!=english.end()?it->second:key;
     }
     std::string UIGlyphs(const Settings& config) {
@@ -211,9 +277,16 @@ namespace Wheel {
         text.pop_back();return text;
     }
     std::string FontPath(const Settings& config) {
-        for(const auto& language:languages) if(language.id==config.language&&!language.font.empty())return language.font;
+        const auto active=ActiveLanguage(config);
+        for(const auto& language:languages) if(language.id==active&&!language.font.empty())return language.font;
         const auto& theme=Style(config); return theme.font.empty()?config.font:theme.font;
     }
-    std::string CycleLanguage(const std::string& id,int delta){return Cycle(languages,id,delta);}
+    std::string CycleLanguage(const std::string& id,int delta){
+        const auto code=NormalizeLanguage(id)=="auto"?"auto":NormalizeLanguage(ResolveLanguage(id,systemLanguage));int index=0;
+        for(int i=0;i<static_cast<int>(languages.size());++i)if(NormalizeLanguage(languages[i].id)==code)index=i+1;
+        const int count=static_cast<int>(languages.size())+1;
+        index=((index+delta)%count+count)%count;
+        return index==0?"auto":languages[index-1].id;
+    }
     std::string CycleTheme(const std::string& id,int delta){return Cycle(themes,id,delta);}
 }

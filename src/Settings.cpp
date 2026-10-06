@@ -42,7 +42,9 @@ namespace Wheel {
         };
         settings = Settings{};
         settings.enabled = number(L"General",L"Enabled",1) != 0;
-        settings.language = Read(L"General",L"Language",number(L"General",L"Chinese",1) ? "zh_CN" : "en");
+        const auto legacyLanguage = Read(L"General",L"Chinese","");
+        settings.language = Read(L"General",L"Language",legacyLanguage.empty() ? "auto" :
+            (number(L"General",L"Chinese",1) ? "zh_CN" : "en"));
         settings.theme = Read(L"Display",L"Theme","classic");
         settings.showHints = number(L"Display",L"ShowHints",1) != 0;
         settings.wheelScale=number(L"Display",L"WheelScalePercent",100)/100.f;

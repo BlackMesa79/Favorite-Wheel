@@ -1,12 +1,12 @@
 # Favorite Wheel - Radial Actions
 
-![Favorite Wheel - Radial Actions](release-materials/0.3.13/FavoriteWheel-cover-1280.png)
+![Favorite Wheel - Radial Actions](release-materials/0.3.14/FavoriteWheel-cover-1280.png)
 
 **Your favorites and actions, at your fingertips.**
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.3.13**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.3.14**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -36,7 +36,7 @@ Required:
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444), matching your game version. The supported 1.7 runtimes need their version-5 address databases.
 - Microsoft Visual C++ 2015–2022 x64 Redistributable.
 
-Keyboard and mouse are supported. Gamepad navigation is not implemented. Testing does not certify every feature on every runtime or every third-party mod combination. The user has confirmed the 0.3.13 release candidate works in-game on 1.6.1170.
+Keyboard and mouse are supported. Gamepad navigation is not implemented. Testing does not certify every feature on every runtime or every third-party mod combination. The previous 0.3.13 build was confirmed in-game on 1.6.1170; the new automatic language selection still needs in-game verification.
 
 ## Installation
 
@@ -51,7 +51,7 @@ SKSE/Plugins/FavoriteWheel/Themes/*.ini
 
 Mark items and spells as favorites in your normal inventory and magic menus, return to gameplay, and press the Favorites key. SkyUI is optional. Disable competing Favorites-menu replacement features in other mods.
 
-The supplied INI starts in Simplified Chinese. To use English, open the wheel, press **F2**, and choose English, or set `Language=en` in `FavoriteWheel.ini` and restart. Fonts are loaded from your own system; no Windows fonts are distributed.
+The supplied INI uses `Language=auto`: follow the Windows display language, then fall back to English if no translation matches. F2 settings also offer explicit language selection. Existing manual choices are preserved on upgrade; choose System to enable automatic selection. Fonts are loaded from your own system; no Windows fonts are distributed.
 
 ## Default controls
 
@@ -103,7 +103,7 @@ Press F2 inside the wheel. Changes preview immediately; **APPLY** saves them and
 
 Preserve your INI and customized resources when upgrading. With MO2, also check Overwrite or the configured output mod for files written by the game.
 
-Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Missing translations fall back to English. Use a font covering your chosen language. Themes control colors and supported geometric styling, not arbitrary layouts or image replacement. Background blur is not used.
+Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. Themes control colors and supported geometric styling, not arbitrary layouts or image replacement. Background blur is not used.
 
 See the [resource guide](docs/RESOURCES.md) and [item information notes](docs/ITEM_INFORMATION.md).
 
@@ -151,13 +151,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.13.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.14.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [release-materials directory](release-materials/0.3.13) contains the original editable SVG cover, PNG exports, English Nexus summary, BBCode description, and local HTML preview. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [release-materials directory](release-materials/0.3.14) contains the original editable SVG cover, PNG exports, English Nexus summary, BBCode description, and local HTML preview. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

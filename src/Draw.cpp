@@ -368,10 +368,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey"};
-            std::string language = config.language;
-            for (const auto &entry : Languages())
-                if (entry.id == config.language)
-                    language = entry.name;
+            const auto language = LanguageLabel(config);
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
                                           std::to_string(int(std::round(config.sensitivity * 100))) + "%",
                                           tr(config.showHints ? "on" : "off"),

@@ -3,7 +3,7 @@
 namespace Wheel {
     struct Settings {
         bool enabled = true;
-        std::string language = "zh_CN";
+        std::string language = "auto"; // Windows display language, or an explicit language-file ID.
         std::string theme = "classic";
         bool showHints = true;
         float scale = 1.0f;

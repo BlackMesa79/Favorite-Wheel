@@ -24,11 +24,11 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     Wheel::LoadSettings();
     Wheel::LoadResources();
     const auto config=Wheel::Config();
-    SKSE::log::info("UI resources: {} languages, {} themes; language={} theme={}",
-        Wheel::Languages().size(),Wheel::Themes().size(),config.language,config.theme);
+    SKSE::log::info("UI resources: {} languages, {} themes; language={} system={} resolved={} theme={}",
+        Wheel::Languages().size(),Wheel::Themes().size(),config.language,Wheel::SystemLanguage(),Wheel::ActiveLanguage(config),config.theme);
     const auto runtime=REL::Module::get().version();
     if (!Wheel::RuntimeSupport::Supported(runtime)) {
-        SKSE::log::error("FavoriteWheel 0.3.13 unsupported runtime {}; supported test targets: 1.5.97, 1.6.1170, 1.7.99 and 1.7.104",runtime.string());
+        SKSE::log::error("FavoriteWheel 0.3.14 unsupported runtime {}; supported test targets: 1.5.97, 1.6.1170, 1.7.99 and 1.7.104",runtime.string());
         return false;
     }
     SKSE::log::info("FavoriteWheel runtime={} family={}; CommonLibSSE-NG v11.0.0 (94faaed0c60e)",
@@ -37,6 +37,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     auto messaging = SKSE::GetMessagingInterface();
     if (!messaging || !SKSE::GetTaskInterface() || !messaging->RegisterListener(OnMessage)) return false;
     if(!Wheel::Outfits::Install())return false;
-    SKSE::log::info("FavoriteWheel 0.3.13 loaded; category ribbon and diamond page rail; smooth fan opening and reverse folding");
+    SKSE::log::info("FavoriteWheel 0.3.14 loaded; automatic Windows UI language selection; category ribbon and fan transitions");
     return true;
 }

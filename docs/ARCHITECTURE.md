@@ -1,6 +1,8 @@
 # 工程说明
 
-当前版本：0.3.13。运行时精确支持1.5.97 / 1.6.1170 / 1.7.99 / 1.7.104；前两版已有用户实测，1.7尚未实机验证。依赖为CommonLibSSE-NG v11.0.0固定提交，历史目录名仍为extern/CommonLibVR。下文保留早期实现依据，涉及旧CommonLibVR快照/首版运行时的说明不是当前依赖声明；当前来源见依赖来源章节及COMMONLIB_1.7_REVIEW.md。
+当前版本：0.3.14。运行时精确支持1.5.97 / 1.6.1170 / 1.7.99 / 1.7.104；前两版已有用户实测，1.7尚未实机验证。依赖为CommonLibSSE-NG v11.0.0固定提交，历史目录名仍为extern/CommonLibVR。下文保留早期实现依据，涉及旧CommonLibVR快照/首版运行时的说明不是当前依赖声明；当前来源见依赖来源章节及COMMONLIB_1.7_REVIEW.md。
+
+0.3.14的UIResources在启动读取Windows显示语言，按Language=auto或显式语言代码解析完整地区/通用语言/英文回退；文本、字体和字形预热统一使用解析后的语言。auto模式不覆盖为实际语言ID，旧配置保留手动选择。翻译接口和文件规范见LOCALIZATION.md。
 
 - `main.cpp`：SKSE 生命周期、运行时检查（首版 1.6.1170）和初始化。
 - `ActorRuntime.h`：复用面部光照已验证的显式 Actor 虚表调用适配。此 CommonLibVR 快照在平面版也声明了额外的 TESObjectREFR Unk_8C，不能直接调用后续的 IsDead / DrinkPotion；使用库实现注明的 SE/AE 0x99 / 0x10F。新增同一布局的模拟 Actor 回归测试，保留依赖库本身不变。

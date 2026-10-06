@@ -18,6 +18,10 @@ namespace Wheel {
     };
     void LoadResources(const std::string& root="Data/SKSE/Plugins/FavoriteWheel");
     const std::vector<Language>& Languages();
+    std::string ResolveLanguage(const std::string& requested,const std::string& systemLocale);
+    std::string ActiveLanguage(const Settings& config);
+    const std::string& SystemLanguage();
+    std::string LanguageLabel(const Settings& config);
     const std::vector<Theme>& Themes();
     const Theme& Style(const Settings& config);
     std::string Tr(const Settings& config, const std::string& key);

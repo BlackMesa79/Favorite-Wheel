@@ -31,9 +31,13 @@ an entry; right click equips to the left hand where supported or manages an
 outfit preset. F2 opens settings; Esc/Tab closes or returns from a sub-list.
 Q follows your game's Favorites binding unless overridden in settings.
 
-The supplied configuration starts in Simplified Chinese. Select English in
-F2 settings, or set Language=en in SKSE/Plugins/FavoriteWheel.ini and restart.
+The supplied configuration follows your Windows display language. If no
+translation matches, it falls back to English. F2 settings offer System mode
+and manual choices. Set Language=auto to follow the system or Language=en to
+force English in SKSE/Plugins/FavoriteWheel.ini; restart after manual edits.
 Keep your existing INI and custom languages/themes when upgrading.
+Existing manual language choices stay unchanged; select System to opt in.
+Translation guide: https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md
 Outfit edits require a game save. Preserve matching .skse co-saves.
 Weapons, shields, and ammunition are excluded from outfit presets.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
