@@ -1,6 +1,6 @@
 # Favorite Wheel - Radial Actions
 
-![Favorite Wheel - Radial Actions](release-materials/0.3.14/FavoriteWheel-cover-1280.png)
+![Favorite Wheel - Radial Actions](release-materials/0.3.15/FavoriteWheel-cover-1280.png)
 
 **Your favorites and actions, at your fingertips.**
 

@@ -1,3 +1,4 @@
 0.3.15
 - Redesigned all 29 item and action icons with consistent outline shapes and finer details.
 - Refined weapon silhouettes, equipment contours, and outfit and lighting symbols for a cleaner appearance.
+- Updated the cover artwork to match the new icon style.
