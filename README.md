@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.3.14**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.3.15**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -16,7 +16,7 @@ Current version: **0.3.14**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu F
 - **Outfit management:** capture currently worn equipment, apply or remove an outfit, rename, overwrite, delete, import, and export presets.
 - **Optional integrations:** Face Lighting SKSE public API V1 and compatible Skyrim Text Bridge IME input.
 - **Built-in settings:** wheel size and X/Y position, background dimming, mouse sensitivity, bindings, sounds, animations, language, and theme.
-- **Original UI:** line icons, neighboring category titles, diamond page indicators, and staggered fan-style transitions.
+- **Original UI:** 29 redesigned outline icons, neighboring category titles, diamond page indicators, and staggered fan-style transitions.
 - **Resource support:** English and Simplified Chinese; Classic Gold, Frost, Engraved Gold, and Quiet Slate themes; external language and theme files.
 - **Session memory:** each wheel remembers its last category during the current game session. Category changes preserve the cursor position.
 
@@ -151,7 +151,7 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.14.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.15.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 

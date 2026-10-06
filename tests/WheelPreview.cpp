@@ -188,17 +188,22 @@ int main(int argc, char** argv) {
     ImGui_ImplDX11_NewFrame(); ImGui::NewFrame(); Wheel::DrawWheel(Wheel::preview,opacity,expansion);
     if(argc>4 && std::string(argv[4])=="icons") {
         auto d=ImGui::GetBackgroundDrawList();
-        d->AddRectFilled({width*.53f,80},{width-40.f,height-80.f},IM_COL32(20,25,33,255),16);
-        const char* labels[]={"Sword","Dagger","Axe","Mace","Bow","Crossbow","Staff","Arrow","Armor","Robe","Helmet","Gloves","Boots","Ring","Amulet","Shield","Potion","Food","Magic","Scroll","Torch","Other","Save outfit","Import","Outfit"};
-        const float left=width*.55f,cell=(width*.43f-40)/5,top=height*.14f,step=height*.15f;
-        for(int i=0;i<25;++i) {
+        const float sheetScale=height/1440.f;
+        d->AddRectFilled({width*.53f,60*sheetScale},{width-30*sheetScale,height-60*sheetScale},IM_COL32(18,23,29,255),16*sheetScale);
+        auto titleFont=Wheel::FontAt(24*sheetScale);
+        d->AddText(titleFont,24*sheetScale,{width*.55f,92*sheetScale},IM_COL32(229,207,159,255),"N O R T H   E T C H  /  2 9");
+        const char* labels[]={"Sword","Dagger","Axe","Mace","Bow","Crossbow","Staff","Arrow","Armor","Robe","Helmet","Gloves","Boots","Ring","Amulet","Shield","Potion","Food","Magic","Scroll","Torch","Other","Save outfit","Import","Outfit","Player light","Target light","Group light","Back"};
+        const float left=width*.55f,cell=(width*.43f-40*sheetScale)/5,top=height*.18f,step=height*.135f;
+        for(int i=0;i<29;++i) {
             Wheel::Item item;
             if(i<22)item.icon=static_cast<Wheel::IconKind>(i+1);
-            else item.action=i==22?Wheel::ActionKind::SaveOutfit:i==23?Wheel::ActionKind::ImportOutfits:Wheel::ActionKind::Outfit;
+            else if(i<25)item.action=i==22?Wheel::ActionKind::SaveOutfit:i==23?Wheel::ActionKind::ImportOutfits:Wheel::ActionKind::Outfit;
+            else item.icon=static_cast<Wheel::IconKind>(static_cast<int>(Wheel::IconKind::LightPlayer)+i-25);
             const ImVec2 at{left+(i%5+.5f)*cell,top+(i/5)*step};
-            Wheel::DrawIcon(d,at,item,1.7f,IM_COL32(229,207,159,255));
-            auto font=Wheel::FontAt(20);auto size=font->CalcTextSizeA(20,FLT_MAX,0,labels[i]);
-            d->AddText(font,20,{at.x-size.x/2,at.y+45},IM_COL32(225,230,237,255),labels[i]);
+            Wheel::DrawIcon(d,at,item,1.85f*sheetScale,IM_COL32(229,207,159,255));
+            const float labelSize=20*sheetScale;
+            auto font=Wheel::FontAt(labelSize);auto size=font->CalcTextSizeA(labelSize,FLT_MAX,0,labels[i]);
+            d->AddText(font,labelSize,{at.x-size.x/2,at.y+52*sheetScale},IM_COL32(173,180,187,255),labels[i]);
         }
     }
     ImGui::Render();
