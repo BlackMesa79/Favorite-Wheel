@@ -44,7 +44,8 @@ int main(){
     inventory={{plain,false},{plain,true}};
     Check(Match(plain,inventory)==1,"Equivalent plain copies prefer worn item");
     inventory={{armor,true},{alternate,true}};
-    Check(Resolve(outfit,inventory,matches)&&!Wearing(inventory,matches),"Extra armor triggers full replacement, not false equipped badge");
+    Check(Resolve(outfit,inventory,matches)&&!Wearing(inventory,matches),"Extra armor still triggers full replacement");
+    Check(WearingPieces(inventory,matches),"An extra worn item must not hide the preset equipped badge");
     auto duplicate=outfit;duplicate.pieces.push_back(armor);
     Check(!Resolve(duplicate,inventory,matches),"One instance cannot satisfy two pieces");
     {
@@ -89,5 +90,29 @@ int main(){
         Check(Resolve(exact,collision,matches,&problem) && problem.reason==ResolveReason::None,
             "A successful recheck clears a previous diagnostic");
     }
-    std::cout<<"Outfit serialization, malformed input, instance matching, preflight and toggle tests passed\n";
+    {
+        auto boots=armor;boots.base.id=0x2345;boots.unique=43;boots.label="Boots";
+        auto necklace=plain;necklace.base.id=0x3456;necklace.label="Necklace";
+        Preset manual{9,"Manually equipped",{armor,boots}};
+        // No applied-preset ID or history is needed. Resolve current worn flags
+        // even when inventory order differs and spare copies are present.
+        std::vector<Candidate> current{{boots,true},{alternate,false},{armor,true}};
+        Check(Resolve(manual,current,matches)&&WearingPieces(current,matches)&&Wearing(current,matches),
+            "Manually wearing all saved instances shows equipped and toggles off an exact set");
+        current.push_back({necklace,true});
+        Check(Resolve(manual,current,matches)&&WearingPieces(current,matches)&&!Wearing(current,matches),
+            "An extra necklace or hidden armor accessory preserves the badge without changing full-set transaction checks");
+        current[0].worn=false;
+        Check(Resolve(manual,current,matches)&&!WearingPieces(current,matches),
+            "A single unequipped preset piece removes the badge despite extra apparel");
+        current[0].worn=true;current[2].worn=false;current[1].worn=true;
+        Check(Resolve(manual,current,matches)&&!WearingPieces(current,matches),
+            "A different worn same-base instance cannot falsely mark the saved instance equipped");
+        current[2].worn=true;current[1].worn=false;
+        Check(Resolve(manual,current,matches)&&WearingPieces(current,matches),
+            "Re-equipping the saved item manually restores the badge on the next snapshot");
+        Check(!WearingPieces(current,{})&&!Wearing(current,{}),"An empty match list is never an equipped preset");
+        Check(!WearingPieces(current,{-1})&&!WearingPieces(current,{99}),"Invalid candidate indices never show equipped");
+    }
+    std::cout<<"Outfit serialization, malformed input, instance matching, manual wear badges, preflight and toggle tests passed\n";
 }

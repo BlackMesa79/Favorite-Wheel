@@ -51,6 +51,11 @@ Existing manual language choices stay unchanged; select System to opt in.
 Translation guide: https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md
 Outfit edits require a game save. Preserve matching .skse co-saves.
 Weapons, shields, and ammunition are excluded from outfit presets.
+The equipped badge checks that every saved outfit instance is worn, including
+manual equipment changes; additional apparel does not hide the badge.
+Selecting a preset still removes an exact outfit, or replaces the complete
+managed outfit when additional apparel is worn. The 0.4.6 badge fix needs
+in-game confirmation.
 Outfits allow up to 64 worn pieces. Equivalent spare copies without a unique ID
 are accepted only when all saved signature fields match. Unique-ID collisions
 remain invalid. Unavailable preset details name the failing piece and reason;

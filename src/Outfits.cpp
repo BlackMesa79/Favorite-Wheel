@@ -140,7 +140,7 @@ namespace Wheel::Outfits {
         result.push_back({{},Category::Armor,Tr(Config(),"outfitImport"),0,false,true,true,ActionKind::ImportOutfits});
         for(const auto& p:presets) {
             std::vector<int> matches;ResolveProblem problem;const bool valid=Resolve(p,inventory,matches,&problem);
-            result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&Wearing(inventory,matches),false,valid,ActionKind::Outfit,p.id});
+            result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&WearingPieces(inventory,matches),false,valid,ActionKind::Outfit,p.id});
             if(valid)reportedProblems.erase(p.id);
             else {
                 result.back().detail=Tr(Config(),ReasonKey(problem.reason))+": "+p.pieces[problem.piece].label;

@@ -107,8 +107,16 @@ namespace Wheel::Outfits {
             }
             return true;
         }
+    // The badge describes the preset's pieces, including items equipped manually.
+    // Additional worn apparel does not make those pieces unequipped.
+    template<class Candidate> bool WearingPieces(const std::vector<Candidate>& inventory,const std::vector<int>& matches) {
+            return !matches.empty() && std::all_of(matches.begin(),matches.end(),[&](int i){
+                return i>=0 && static_cast<std::size_t>(i)<inventory.size() && inventory[i].worn;
+            });
+        }
+    // Outfit transactions still require the complete managed set to match.
     template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches) {
-            return std::all_of(matches.begin(),matches.end(),[&](int i){return inventory[i].worn;}) &&
+            return WearingPieces(inventory,matches) &&
                 std::count_if(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;})==matches.size();
         }
 

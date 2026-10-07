@@ -1,0 +1,5 @@
+0.4.6 test build
+- Fix the equipped outfit badge being suppressed by additional apparel or hidden armor accessories after manually wearing every saved piece.
+- Keep instance identity checks, full outfit replacement, and exact-set unequip behavior unchanged.
+- Include the 0.4.5 equivalent-copy matching fix and missing-piece diagnostics.
+- Local outfit regression checks passed; the reported in-game badge behavior needs confirmation.
