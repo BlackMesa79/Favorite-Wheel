@@ -1,10 +1,51 @@
 #include "TimePolicy.h"
+#include "QueuedTask.h"
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
+#include <string>
 namespace {
     void Check(bool value,const char* message){if(!value){std::cerr<<message<<'\n';std::exit(1);}}
     bool Matches(Wheel::TimePair a,Wheel::TimePair b){return Wheel::SameTime(a.current,b.current)&&Wheel::SameTime(a.target,b.target);}
+    void TaskFailures() {
+        using namespace Wheel;
+        TimeLease lease;
+        TimePair engine=*lease.Begin({.5f,.5f},.2f);
+        std::atomic<bool> queued{true};
+        std::function<void()> callback;
+        int errors=0,runs=0;
+        std::string message;
+        auto failure=[&](const char* error) {
+            ++errors;message=error;
+            if(auto restore=lease.End(engine))engine=*restore;
+        };
+        ScheduleQueuedTask(queued,[&] {
+            callback=[&] {RunQueuedTask(queued,[] {throw std::runtime_error("inventory read failed");},failure);};
+        },failure);
+        Check(queued && errors==0 && lease.Active(),"Queued work retains its slot and slowdown until execution");
+        callback();
+        Check(!queued && errors==1 && message=="inventory read failed" && !lease.Active() && Matches(engine,{.5f,.5f}),
+            "A failed inventory task frees its slot and error cleanup restores the preexisting time effect");
+        Check(!queued.exchange(true),"A later request can reuse the failed queue slot");
+        RunQueuedTask(queued,[&] {++runs;},failure);
+        Check(!queued && runs==1 && errors==1,"Successful retry runs once without repeating error cleanup");
+        queued=true;
+        RunQueuedTask(queued,[] {return;},failure);
+        Check(!queued && errors==1,"An obsolete task returning early still frees its queue slot");
+        engine=*lease.Begin({.5f,.5f},.2f);queued=true;
+        ScheduleQueuedTask(queued,[] {throw std::bad_alloc();},failure);
+        Check(!queued && errors==2 && !lease.Active() && Matches(engine,{.5f,.5f}),
+            "Allocation failure while scheduling cannot permanently block reopening or leave slowdown owned");
+        queued=true;
+        RunQueuedTask(queued,[] {throw 7;},failure);
+        Check(!queued && errors==3 && !message.empty(),"An unknown C++ exception releases the slot and reports once");
+        queued=true;bool propagated=false;
+        try {RunQueuedTask(queued,[] {throw std::runtime_error("read failed");},[](const char*) {throw std::runtime_error("report failed");});}
+        catch(const std::runtime_error&){propagated=true;}
+        Check(propagated && !queued,"Unwinding the error handler still releases the slot");
+    }
 }
 int main() {
     using namespace Wheel;
@@ -41,5 +82,6 @@ int main() {
         applied=lease.Begin({.75f,.75f},factor);restored=lease.End(*applied);
         Check(restored && Matches(*restored,{.75f,.75f}),"Rapid open/close cycles never compound the slowdown");
     }
-    std::cout<<"Relative slowdown, native transitions, nested pause, external ownership and repeated cleanup passed\n";
+    TaskFailures();
+    std::cout<<"Relative slowdown, native transitions, nested pause, external ownership, repeated cleanup and task failure recovery passed\n";
 }

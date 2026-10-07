@@ -9,6 +9,7 @@
 #include "InventoryPages.h"
 #include "TimeControl.h"
 #include "TimePolicy.h"
+#include "QueuedTask.h"
 #include "ActorRuntime.h"
 #include "ActionPolicy.h"
 #include "UIResources.h"
@@ -23,6 +24,10 @@
 namespace Wheel {
     namespace {
         std::mutex viewMutex;
+        // Native menu callbacks, input and player-update callbacks can overlap.
+        // Serialize opening/closing with time synchronization. Recursive entry is
+        // required because a time conflict cancels from inside SyncWheelTime.
+        std::recursive_mutex lifecycleMutex;
         View view;
         InventoryPages inventoryPages;
         std::vector<Item> functionItems;
@@ -34,6 +39,7 @@ namespace Wheel {
         std::chrono::steady_clock::time_point nextInventoryRefresh{};
         std::optional<ItemKey> hoverKey;
         std::chrono::steady_clock::time_point hoverStarted;
+        std::uint64_t hoverSerial=0; // Input pump only; a reopened wheel starts a new dwell.
         int favoritePage=0,functionPage=0;
         bool favoriteCategoryChosen=false; // Session-local navigation, independent of wheel mode.
         FaceLight::Section functionCategory=FaceLight::Section::Outfits; // Remember the top-level type, not a child list.
@@ -132,6 +138,7 @@ namespace Wheel {
             }
         }
         void SyncWheelTime() {
+            std::lock_guard lifecycle(lifecycleMutex);
             bool open,settings;int dialog;
             {std::lock_guard lock(viewMutex);open=view.open;settings=view.settingsOpen;dialog=view.outfitDialog;}
             if(!open){TimeControl::EndSession();RequestPause(false);return;}
@@ -142,6 +149,17 @@ namespace Wheel {
                 SKSE::log::warn("Wheel canceled: time state could not be safely maintained");Cancel();return;
             }
             RequestPause(pause);
+        }
+        void FailedTask(std::uint64_t generation,std::uint64_t serial,const char* task,const char* error,bool outfit=false) {
+            SKSE::log::error("Wheel {} task failed: {}",task,error);
+            std::lock_guard lifecycle(lifecycleMutex);
+            if(generation!=epoch.load())return;
+            if(outfit)Outfits::CancelJob();
+            // A failure belonging to an earlier wheel cannot close a newer one.
+            if(serial==openSerial.load()) {
+                if(outfit){std::lock_guard lock(actionMutex);pendingAction.reset();}
+                Cancel();
+            }
         }
         void PublishPage(ItemPage page) { // viewMutex held
             view.items=std::move(page.items);view.itemOffset=page.offset;view.totalItems=page.total;
@@ -173,21 +191,25 @@ namespace Wheel {
             // Clear a previous wheel/page even when an older request is still queued.
             // The input pump retries after that stale task releases the queue flag.
             if(!refresh){std::lock_guard lock(viewMutex);view.inventoryLoading=true;if(!view.functions)PublishPage({});}
+            const bool scope=Config().allInventory;
             if(directoryTaskQueued.exchange(true))return;
             const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
             const auto stamp=inventoryChanges.load();
-            const bool scope=Config().allInventory;
-            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,serial,revision,scope,stamp,refresh] {
-                if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
-                    IsOpen() && Focused() && ValidPlayer() && !BlockedMenu()) {
-                    auto items=CollectInventory(scope);
-                    std::lock_guard lock(viewMutex);
-                    if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() && view.open) {
-                        PublishDirectory(std::move(items),scope,refresh);inventoryStamp=stamp;
-                    }
-                }
-                directoryTaskQueued=false;
-            });else directoryTaskQueued=false;
+            auto failed=[generation,serial](const char* error){FailedTask(generation,serial,"directory",error);};
+            ScheduleQueuedTask(directoryTaskQueued,[&] {
+                if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,serial,revision,scope,stamp,refresh,failed] {
+                    RunQueuedTask(directoryTaskQueued,[&] {
+                        if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
+                            IsOpen() && Focused() && ValidPlayer() && !BlockedMenu()) {
+                            auto items=CollectInventory(scope);
+                            std::lock_guard lock(viewMutex);
+                            if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() && view.open) {
+                                PublishDirectory(std::move(items),scope,refresh);inventoryStamp=stamp;
+                            }
+                        }
+                    },failed);
+                });else directoryTaskQueued=false;
+            },failed);
         }
         void PumpLiveInventory() {
             const auto now=std::chrono::steady_clock::now();
@@ -222,6 +244,7 @@ namespace Wheel {
             else if(needsDirectory)RequestDirectory();
         }
         void Open(bool functions) {
+            std::lock_guard lifecycle(lifecycleMutex);
             FaceLight::Capture(); // After the previous player-update hook, before pause.
             const bool scope=Config().allInventory;
             const auto stamp=inventoryChanges.load();
@@ -247,21 +270,24 @@ namespace Wheel {
             SKSE::log::info("Wheel opened: mode={} scope={} entries={} timeMode={} slowPercent={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size(),Config().timeMode,Config().slowPercent);
         }
         void RequestOpen(bool functions) {
+            std::lock_guard lifecycle(lifecycleMutex);
             std::lock_guard lock(openMutex);
             if(openQueued.exchange(true))return;
             pendingOpen=PendingOpen{functions,epoch.load(),++openSerial,
                 std::chrono::steady_clock::now()+std::chrono::seconds(2)};
         }
         void PumpOpen() {
+            std::lock_guard lifecycle(lifecycleMutex);
             if(!openQueued)return;
             std::optional<PendingOpen> request;
             {std::lock_guard lock(openMutex);request=std::move(pendingOpen);pendingOpen.reset();}
             if(!request || request->serial!=openSerial.load())return;
-            const auto reason=OpenBlockReason();
-            if(request->generation==epoch.load() && !IsOpen() && !reason &&
-                std::chrono::steady_clock::now()<request->deadline)Open(request->functions);
-            else SKSE::log::info("Wheel opening canceled on player update: {}",reason?reason:"state changed or expired");
-            if(request->serial==openSerial.load())openQueued=false;
+            RunQueuedTask(openQueued,[&] {
+                const auto reason=OpenBlockReason();
+                if(request->generation==epoch.load() && !IsOpen() && !reason &&
+                    std::chrono::steady_clock::now()<request->deadline)Open(request->functions);
+                else SKSE::log::info("Wheel opening canceled on player update: {}",reason?reason:"state changed or expired");
+            },[&](const char* error){FailedTask(request->generation,request->serial,"open",error);});
         }
         void FunctionNavigate(FaceLight::Section section,bool preservePointer=false) {
             {std::lock_guard lock(viewMutex);
@@ -359,6 +385,8 @@ namespace Wheel {
             });
         }
         void PumpDetails() {
+            const auto serial=openSerial.load();
+            if(hoverSerial!=serial){hoverSerial=serial;hoverKey.reset();}
             const auto current=Snapshot();
             const int radial=WheelSlot(current.x,current.y),index=PageItemIndex(current,radial);
             if(!current.open || current.functions || current.settingsOpen || current.outfitDialog || current.inventoryLoading ||
@@ -366,36 +394,40 @@ namespace Wheel {
             const auto& item=current.items[index];
             const auto now=std::chrono::steady_clock::now();
             const auto tick=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
-            if(item.infoReady && (current.config.timeMode==0 || tick-item.infoReadAt<500))return;
             if(!hoverKey || *hoverKey!=item.key){hoverKey=item.key;hoverStarted=now;return;}
+            if(item.infoReady && (current.config.timeMode==0 || tick-item.infoReadAt<500))return;
             if(now-hoverStarted<std::chrono::milliseconds(80) || detailTaskQueued.exchange(true))return;
-            const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
+            const auto generation=epoch.load(),revision=directoryRevision.load();
             std::size_t catalogIndex;
             {std::lock_guard lock(viewMutex);catalogIndex=inventoryPages.Index(current.category,current.page,radial);}
-            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected=item,catalogIndex,generation,serial,revision] {
-                auto stillSelected=[&] {
-                    const auto v=Snapshot();const int slot=WheelSlot(v.x,v.y),i=PageItemIndex(v,slot);
-                    return generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
-                        v.open && !v.functions && !v.settingsOpen && !v.outfitDialog && slot>=0 &&
-                        i>=0 && i<static_cast<int>(v.items.size()) && v.items[i].key==selected.key;
-                };
-                if(stillSelected() && Focused() && ValidPlayer() && !BlockedMenu()) {
-                    const auto started=std::chrono::steady_clock::now();
-                    ItemInfo info;const bool valid=ReadItemInfo(selected,info);
-                    const auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
-                    if(elapsed>8)SKSE::log::info("Inventory detail: form={:08X} total_ms={:.2f}",selected.key.form,elapsed);
-                    std::lock_guard lock(viewMutex);
-                    if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
-                        view.open && catalogIndex<inventoryPages.items.size() && inventoryPages.items[catalogIndex].key==selected.key) {
-                        auto& cached=inventoryPages.items[catalogIndex];cached.info=std::move(info);cached.infoReady=true;
-                        cached.infoReadAt=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now().time_since_epoch()).count());
-                        if(!valid)cached.detail=Tr(Config(),"changed");
-                        if(!view.functions)for(auto& visible:view.items)if(visible.key==cached.key)visible=cached;
-                    }
-                }
-                detailTaskQueued=false;
-            });else detailTaskQueued=false;
+            auto failed=[generation,serial](const char* error){FailedTask(generation,serial,"detail",error);};
+            ScheduleQueuedTask(detailTaskQueued,[&] {
+                if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected=item,catalogIndex,generation,serial,revision,failed] {
+                    RunQueuedTask(detailTaskQueued,[&] {
+                        auto stillSelected=[&] {
+                            const auto v=Snapshot();const int slot=WheelSlot(v.x,v.y),i=PageItemIndex(v,slot);
+                            return generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
+                                v.open && !v.functions && !v.settingsOpen && !v.outfitDialog && slot>=0 &&
+                                i>=0 && i<static_cast<int>(v.items.size()) && v.items[i].key==selected.key;
+                        };
+                        if(stillSelected() && Focused() && ValidPlayer() && !BlockedMenu()) {
+                            const auto started=std::chrono::steady_clock::now();
+                            ItemInfo info;const bool valid=ReadItemInfo(selected,info);
+                            const auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+                            if(elapsed>8)SKSE::log::info("Inventory detail: form={:08X} total_ms={:.2f}",selected.key.form,elapsed);
+                            std::lock_guard lock(viewMutex);
+                            if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
+                                view.open && catalogIndex<inventoryPages.items.size() && inventoryPages.items[catalogIndex].key==selected.key) {
+                                auto& cached=inventoryPages.items[catalogIndex];cached.info=std::move(info);cached.infoReady=true;
+                                cached.infoReadAt=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now().time_since_epoch()).count());
+                                cached.detail=valid?std::string{}:Tr(Config(),"changed");
+                                if(!view.functions)for(auto& visible:view.items)if(visible.key==cached.key)visible=cached;
+                            }
+                        }
+                    },failed);
+                });else detailTaskQueued=false;
+            },failed);
         }
         std::optional<PendingAction> TakeAction(ActionExecutor executor) {
             std::lock_guard lock(actionMutex);
@@ -417,19 +449,25 @@ namespace Wheel {
             {std::lock_guard lock(actionMutex);taskAction=pendingAction &&
                 ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand)==ActionExecutor::TaskQueue;}
             if ((!taskAction && !Outfits::Busy()) || actionTaskQueued.exchange(true)) return;
+            const auto generation=epoch.load(),serial=openSerial.load();
+            auto failed=[generation,serial](const char* error){FailedTask(generation,serial,"action",error,true);};
             // Favorites and outfit jobs retain their existing SKSE task path.
-            SKSE::GetTaskInterface()->AddTask([] {
-                auto submit=TakeAction(ActionExecutor::TaskQueue);
-                if (submit) {
-                    if(submit->item.action==ActionKind::Outfit){outfitGeneration=submit->generation;Outfits::Apply(submit->item.actionId);}
-                    else UseFavorite(submit->item, submit->left);
-                }
-                if(!submit && Outfits::Busy()) {
-                    auto ui=RE::UI::GetSingleton();
-                    Outfits::Tick(outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
-                }
-                actionTaskQueued = false;
-            });
+            ScheduleQueuedTask(actionTaskQueued,[&] {
+                if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,failed] {
+                    RunQueuedTask(actionTaskQueued,[&] {
+                        if(generation!=epoch.load())return;
+                        auto submit=TakeAction(ActionExecutor::TaskQueue);
+                        if (submit) {
+                            if(submit->item.action==ActionKind::Outfit){outfitGeneration=submit->generation;Outfits::Apply(submit->item.actionId);}
+                            else UseFavorite(submit->item, submit->left);
+                        }
+                        if(!submit && Outfits::Busy()) {
+                            auto ui=RE::UI::GetSingleton();
+                            Outfits::Tick(outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
+                        }
+                    },failed);
+                });else actionTaskQueued=false;
+            },failed);
         }
         void PlayerUpdate(RE::PlayerCharacter* player,float delta) {
             // Face Lighting establishes its accepted thread in the previous hook.
@@ -857,6 +895,7 @@ namespace Wheel {
             }
             static RE::IMenu* Create() { return new WheelMenu; }
             RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
+                std::lock_guard lifecycle(lifecycleMutex);
                 if (message.type == RE::UI_MESSAGE_TYPE::kHide || message.type == RE::UI_MESSAGE_TYPE::kForceHide) {
                     const auto old=Snapshot();
                     if(old.outfitDialog==1 || old.outfitDialog==2)TextBridge::Reset();
@@ -895,6 +934,7 @@ namespace Wheel {
             PauseGuardMenu(){depthPriority=2;menuFlags.set(Flag::kPausesGame,Flag::kDisablePauseMenu);}
             static RE::IMenu* Create(){return new PauseGuardMenu;}
             RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
+                std::lock_guard lifecycle(lifecycleMutex);
                 if(message.type==RE::UI_MESSAGE_TYPE::kShow) {
                     bool wanted;{std::lock_guard lock(pauseMutex);wanted=pauseRequested;}
                     if(!wanted)if(auto q=RE::UIMessageQueue::GetSingleton())q->AddMessage(pauseMenuName,RE::UI_MESSAGE_TYPE::kHide,nullptr);
@@ -954,6 +994,7 @@ namespace Wheel {
     void SetViewport(float width,float height) { if(width>0 && height>0) {viewportWidth=width; viewportHeight=height;} }
     bool IsOpen() { std::lock_guard lock(viewMutex); return view.open; }
     void Cancel(bool effects) {
+        std::lock_guard lifecycle(lifecycleMutex);
         {std::lock_guard lock(openMutex);++openSerial;openQueued=false;pendingOpen.reset();}
         const auto current=Snapshot();
         if(current.outfitDialog==1 || current.outfitDialog==2)TextBridge::Reset();
@@ -968,6 +1009,7 @@ namespace Wheel {
         }
     }
     void SetGameActive(bool active) {
+        std::lock_guard lifecycle(lifecycleMutex);
         ++epoch;
         Outfits::CancelJob();
         FaceLight::Clear();

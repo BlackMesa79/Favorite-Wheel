@@ -1,0 +1,5 @@
+0.4.3 test build
+- Serialize wheel opening, time synchronization, cancellation, and menu cleanup to prevent stale pause requests.
+- Recover queue slots after C++ task or scheduling failures; stale-task error cleanup cannot close a newer wheel.
+- Reset hover timing across cached items and reopening, and clear outdated item-change warnings after a successful refresh.
+- No new settings; existing INI files are preserved. Version 0.4.2 received positive in-game feedback; these fixes need a further check.
