@@ -14,6 +14,12 @@ namespace Wheel {
         float sensitivity = 1.0f;
         int switchKey = 19; // R, wheel mode switch while open.
         int hotkey = -1; // -1 follows the game's Favorites binding.
+        int hotkeyModifier = 0; // Shift=1, Ctrl=2, Alt=4, combinable.
+        int actionHotkey = -1; // -1 follows the effective favorites-wheel key.
+        int actionModifier = 1;
+        int gamepadHotkey = -1; // -1 follows the game's controller Favorites binding.
+        int gamepadModifier = -1;
+        int gamepadActionModifier = 274; // LB, SKSE macro keycode.
         std::string font = "C:/Windows/Fonts/msyh.ttc";
         bool operator==(const Settings&) const = default;
     };

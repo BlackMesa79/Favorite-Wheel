@@ -1,0 +1,5 @@
+0.3.16
+- Added controller opening, stick selection, navigation, actions and settings support.
+- Added independent keyboard opening keys and Shift/Ctrl/Alt modifiers for both wheels.
+- Added configurable controller opening key and modifiers, plus a separate Controls settings tab.
+- Tightened Favorites-key matching to avoid intercepting unrelated quick-slot events.

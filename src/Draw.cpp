@@ -140,9 +140,9 @@ namespace Wheel
         }
         void Keycap(ImDrawList *d, ImVec2 at, const char *key, const Theme &t, float s, bool enabled = true)
         {
-            const float r = 11 * s;
-            d->AddRectFilled({at.x - r, at.y - r}, {at.x + r, at.y + r}, t.panel | 0xFF000000u, 3 * s);
-            d->AddRect({at.x - r, at.y - r}, {at.x + r, at.y + r}, Alpha(t.border, enabled ? .85f : .35f), 3 * s, 0, s);
+            const float r = 11 * s, w=std::max(r,static_cast<float>(std::strlen(key))*4.5f*s+4*s);
+            d->AddRectFilled({at.x - w, at.y - r}, {at.x + w, at.y + r}, t.panel | 0xFF000000u, 3 * s);
+            d->AddRect({at.x - w, at.y - r}, {at.x + w, at.y + r}, Alpha(t.border, enabled ? .85f : .35f), 3 * s, 0, s);
             Text(d, at, key, 14 * s, enabled ? t.accent : t.muted, 0, t.textShadow);
         }
         void CategoryStrip(ImDrawList *d, ImVec2 c, float s, const View &v, float pageFade)
@@ -190,8 +190,8 @@ namespace Wheel
             const float keyOffset = edge + 22.f;
             if (v.config.showHints && ribbon.size > 1)
             {
-                Keycap(d, {c.x - keyOffset * s, y}, "A", t, s);
-                Keycap(d, {c.x + keyOffset * s, y}, "D", t, s);
+                Keycap(d, {c.x - keyOffset * s, y}, v.gamepad?"LB":"A", t, s);
+                Keycap(d, {c.x + keyOffset * s, y}, v.gamepad?"RB":"D", t, s);
             }
             for (int i = 0; i < ribbon.size; ++i)
             {
@@ -214,8 +214,8 @@ namespace Wheel
                         bottom = top + (pages.size - 1) * 34 * s;
             if (v.config.showHints)
             {
-                Keycap(d, {x, top - 34 * s}, "W", t, s, total > 1);
-                Keycap(d, {x, bottom + 34 * s}, "S", t, s, total > 1);
+                Keycap(d, {x, top - 34 * s}, v.gamepad?"UP":"W", t, s, total > 1);
+                Keycap(d, {x, bottom + 34 * s}, v.gamepad?"DN":"S", t, s, total > 1);
             }
             for (int i = 0; i < pages.size; ++i)
             {
@@ -364,45 +364,52 @@ namespace Wheel
             const auto &config = v.config;
             const auto &t = Style(config);
             auto tr = [&](const char *key) { return Tr(config, key); };
-            PanelFrame(d, c, s, t, tr("settingsTitle"), tr("layoutSettingsHelp"));
+            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.gamepad?"padSettingsHelp":v.settingsControls?"keyboardControlsHelp":"layoutSettingsHelp"));
+            Button(d,c,s,v,generalTab,tr("settingsGeneral"),!v.settingsControls);
+            Button(d,c,s,v,controlsTab,tr("settingsControls"),v.settingsControls);
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
-                                            "overlayOpacity", "sounds",      "animations", "switchWheelKey"};
+                                            "overlayOpacity", "sounds",      "animations", "switchWheelKey",
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier"};
             const auto language = LanguageLabel(config);
+            auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
                                           std::to_string(int(std::round(config.sensitivity * 100))) + "%",
                                           tr(config.showHints ? "on" : "off"),
                                           language,
                                           t.name,
-                                          v.capturingKey && !v.captureSwitch ? "..." : KeyLabel(config),
+                                          KeyLabel(config),
                                           std::to_string(config.positionX) + "%",
                                           std::to_string(config.positionY) + "%",
                                           std::to_string(config.overlayOpacity) + "%",
                                           tr(config.sounds ? "on" : "off"),
                                           tr(config.animations ? "on" : "off"),
-                                          v.capturingKey && v.captureSwitch ? "..." : KeyLabel([&] {
-                                              auto x = config;
-                                              x.hotkey = config.switchKey;
-                                              return x;
-                                          }())};
-            for (int row = 0; row < settingRows; ++row)
+                                          key(config.switchKey),ModifierLabel(config,config.hotkeyModifier),
+                                          config.actionHotkey<0?tr("followFavorite"):key(config.actionHotkey),ModifierLabel(config,config.actionModifier),
+                                          PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier)};
+            for (int slot = 0; slot < SettingCount(v.settingsControls); ++slot)
             {
-                const float top = -212.f + row * 31;
+                const int row=SettingRow(v.settingsControls,slot);
+                const float top = -173.f + slot * 31;
                 const float size = 16 * s * t.labelScale;
-                if (row % 2 == 0)
+                if (slot % 2 == 0)
                     d->AddRectFilled({c.x - 300 * s, c.y + top * s}, {c.x + 300 * s, c.y + (top + 28) * s},
                                      Alpha(t.border, .07f), 3 * s);
                 LeftText(d, {c.x - 281 * s, c.y + (top + 14) * s - std::round(size) / 2},
                          Fit(tr(keys[row]), size, 300 * s), size, t.text);
-                if (row != 5 && row != 11)
+                if (!BindingRow(row))
                 {
-                    Button(d, c, s, v, MinusButton(row), "-");
-                    Button(d, c, s, v, PlusButton(row), "+");
+                    Button(d, c, s, v, MinusButton(slot), "-");
+                    Button(d, c, s, v, PlusButton(slot), "+");
                 }
-                Button(d, c, s, v, ValueButton(row), values[row]);
+                Button(d, c, s, v, ValueButton(slot),v.capturingKey && v.captureBinding==row?"...":values[row]);
             }
-            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? "capture" : "wheelBindHint"), 14 * s, 610 * s),
+            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsControls?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
+            if(v.settingsControls) {
+                const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
+                Text(d,{c.x,c.y+145*s},Fit(tr(conflict?"bindingConflict":"controlsBindHint"),14*s,610*s),14*s,conflict?t.accent:t.muted);
+            }
             Button(d, c, s, v, defaultsButton, tr("defaults"));
             Button(d, c, s, v, cancelButton, tr("cancel"));
             Button(d, c, s, v, applyButton, tr("apply"), true);
@@ -442,7 +449,7 @@ namespace Wheel
             switch (item.action)
             {
             case ActionKind::Outfit:
-                key = item.usable ? "outfitSelect" : "outfitUnavailable";
+                key = item.usable ? (v.gamepad?"padUse":"outfitSelect") : "outfitUnavailable";
                 break;
             case ActionKind::SaveOutfit:
                 key = "outfitSave";
@@ -461,7 +468,7 @@ namespace Wheel
                 key = "lightBack";
                 break;
             default:
-                key = item.usable ? "select" : "inventory";
+                key = item.usable ? (v.gamepad?"padSelect":"select") : "inventory";
                 break;
             }
             return Tr(v.config, key);
@@ -737,12 +744,12 @@ namespace Wheel
                 d->AddLine({left + 12 * s, top}, {right - 12 * s, top}, Alpha(t.border, .45f), s);
                 Text(
                     d, {c.x, top + 14 * s},
-                    Fit(tr(v.functions ? (v.functionSection == FaceLight::Section::Outfits ? "functionUse" : "lightUse")
+                    Fit(tr(v.gamepad?"padUse":v.functions ? (v.functionSection == FaceLight::Section::Outfits ? "functionUse" : "lightUse")
                                        : "compactUse"),
                         14 * s, 535 * s),
                     14 * s, t.muted, 0, t.textShadow);
                 Text(d, {c.x, top + 36 * s},
-                     Fit(KeyLabel([&] {
+                     Fit(v.gamepad?tr("padNavigation"):KeyLabel([&] {
                              auto x = config;
                              x.hotkey = config.switchKey;
                              return x;

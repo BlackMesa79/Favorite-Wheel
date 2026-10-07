@@ -30,6 +30,12 @@ namespace Wheel {
             v.sensitivity = std::clamp(v.sensitivity,.2f,3.f);
             if(v.switchKey<2 || v.switchKey>255 || v.switchKey==60)v.switchKey=19;
             if (v.hotkey < -1 || v.hotkey > 255) v.hotkey = -1;
+            if(v.actionHotkey< -1 || v.actionHotkey>255)v.actionHotkey=-1;
+            v.hotkeyModifier=std::clamp(v.hotkeyModifier,0,7);
+            v.actionModifier=std::clamp(v.actionModifier,0,7);
+            if(v.gamepadHotkey!= -1 && (v.gamepadHotkey<266 || v.gamepadHotkey>281))v.gamepadHotkey=-1;
+            if(v.gamepadModifier!= -1 && (v.gamepadModifier<266 || v.gamepadModifier>281))v.gamepadModifier=-1;
+            if(v.gamepadActionModifier!= -1 && (v.gamepadActionModifier<266 || v.gamepadActionModifier>281))v.gamepadActionModifier=274;
         }
     }
     Settings Config() { std::lock_guard lock(settingsMutex); return settings; }
@@ -55,6 +61,12 @@ namespace Wheel {
         settings.animations=number(L"Effects",L"Animations",1)!=0;
         settings.switchKey=number(L"Controls",L"SwitchWheelKey",19);
         settings.hotkey = number(L"Controls",L"Hotkey",-1);
+        settings.hotkeyModifier=number(L"Controls",L"HotkeyModifier",0);
+        settings.actionHotkey=number(L"Controls",L"ActionHotkey",-1);
+        settings.actionModifier=number(L"Controls",L"ActionModifier",1);
+        settings.gamepadHotkey=number(L"Controls",L"GamepadHotkey",-1);
+        settings.gamepadModifier=number(L"Controls",L"GamepadModifier",-1);
+        settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",274);
         settings.scale = number(L"Display",L"ScalePercent",100)/100.f;
         settings.sensitivity = number(L"Controls",L"SensitivityPercent",100)/100.f;
         settings.font = Read(L"Display",L"Font",settings.font);
@@ -102,6 +114,12 @@ namespace Wheel {
             write(L"Effects",L"Animations",settings.animations?"1":"0") &&
             write(L"Controls",L"SwitchWheelKey",std::to_string(settings.switchKey)) &&
             write(L"Controls",L"Hotkey",std::to_string(settings.hotkey)) &&
+            write(L"Controls",L"HotkeyModifier",std::to_string(settings.hotkeyModifier)) &&
+            write(L"Controls",L"ActionHotkey",std::to_string(settings.actionHotkey)) &&
+            write(L"Controls",L"ActionModifier",std::to_string(settings.actionModifier)) &&
+            write(L"Controls",L"GamepadHotkey",std::to_string(settings.gamepadHotkey)) &&
+            write(L"Controls",L"GamepadModifier",std::to_string(settings.gamepadModifier)) &&
+            write(L"Controls",L"GamepadActionModifier",std::to_string(settings.gamepadActionModifier)) &&
             write(L"Controls",L"SensitivityPercent",std::to_string(static_cast<int>(settings.sensitivity*100+.5f))) &&
             write(L"Display",L"ScalePercent",std::to_string(static_cast<int>(settings.scale*100+.5f)));
         WritePrivateProfileStringW(nullptr,nullptr,nullptr,temporary.c_str());

@@ -16,7 +16,8 @@ namespace Wheel {
         std::string inventoryGlyphs;
         bool open = false;
         bool animateClose = false;
-        bool settingsOpen = false, capturingKey = false, captureSwitch=false, saveError = false;
+        bool settingsOpen = false, capturingKey = false, settingsControls=false, gamepad=false, saveError = false;
+        int captureBinding=0; // favorites, actions, switch, controller favorites
         Settings config;
         Category category = Category::Weapons;
         int page = 0;
@@ -33,4 +34,5 @@ namespace Wheel {
     void DrawWheel(const View& view,float opacity=1.f,float expansion=1.f);
     void ResetVisualFeedback(); // Render thread only; new open/session must not reuse old hover state.
     void SetViewport(float width, float height);
+    void AdvanceGamepadPointer(float elapsed);
 }

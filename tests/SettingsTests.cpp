@@ -22,6 +22,15 @@ int main() {
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     SetSettingsPath(path.string()); LoadSettings();
     Check(Config().language=="en","Legacy Chinese=0 migration");
+    Check(Config().hotkeyModifier==0 && Config().actionHotkey==-1 && Config().actionModifier==1 &&
+        Config().gamepadHotkey==-1 && Config().gamepadActionModifier==274,"Old INIs preserve Q / Shift+Q and controller defaults");
+    BeginSettings();auto bindings=Config();bindings.hotkey=33;bindings.hotkeyModifier=2;
+    bindings.actionHotkey=44;bindings.actionModifier=6;bindings.gamepadHotkey=273;bindings.gamepadModifier=280;bindings.gamepadActionModifier=275;
+    EditSettings(bindings);Check(SaveSettings(),"Save separate keyboard/controller bindings");LoadSettings();
+    Check(Config()==bindings,"Binding keys and modifiers round trip together");
+    BeginSettings();bindings.hotkeyModifier=99;bindings.actionModifier=-4;bindings.gamepadHotkey=0;bindings.gamepadActionModifier=255;
+    EditSettings(bindings);Check(Config().hotkeyModifier==7 && Config().actionModifier==0 && Config().gamepadHotkey==-1 && Config().gamepadActionModifier==274,"Invalid chord and controller values are bounded");
+    RevertSettings();Check(Config().actionModifier==6,"Cancelled binding edit restores previous chords");
     Check(Config().overlayOpacity==35 && Config().positionY==46 && Config().wheelScale==1.f,"New defaults ignore obsolete dim and blur keys");
     Transition transition;
     Check(transition.Update(true,true,true,.11f)>.49f && transition.value<1.f,"Opening fade advances");
@@ -117,9 +126,10 @@ int main() {
     Check(Tr(edited,"apply")=="APPLY" && Tr(edited,"outfitTitle")=="OUTFIT PRESETS" && Tr(edited,"lightWrongThread").starts_with("Face Lighting rejected"),"Incomplete automatic catalog has complete English fallbacks");
     Check(WheelSlot(2,0)==-1 && WheelSlot(0,-1)==0 && WheelSlot(0,0)==-1,"Free pointer cannot use outside wheel or in center");
     Check(!applyButton.Contains(cancelButton.x+10,cancelButton.y+10),"Apply and cancel do not overlap");
-    for(int row=0;row<settingRows;++row) {
-        const auto valueRect=ValueButton(row);
-        Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(row).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
+    for(bool controls:{false,true})for(int slot=0;slot<SettingCount(controls);++slot) {
+        const auto valueRect=ValueButton(slot);
+        Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
+        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
     }
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
 }

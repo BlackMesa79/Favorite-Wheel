@@ -30,6 +30,13 @@ A/D change categories; W/S or the mouse wheel change pages. Left click uses
 an entry; right click equips to the left hand where supported or manages an
 outfit preset. F2 opens settings; Esc/Tab closes or returns from a sub-list.
 Q follows your game's Favorites binding unless overridden in settings.
+Settings / Controls configures independent keyboard main keys and Shift/Ctrl/Alt
+modifiers. Old configuration files retain Q and Shift+Q defaults.
+Controller: Favorites binding opens; LB + Favorites opens actions; left stick
+selects; A uses; X equips left hand/manages; LB/RB change categories; D-Pad
+Up/Down changes pages; Y switches wheels; B closes; Start opens settings.
+Controller main key and modifiers are configurable. In settings, the left stick
+moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 
 The supplied configuration follows your Windows display language. If no
 translation matches, it falls back to English. F2 settings offer System mode

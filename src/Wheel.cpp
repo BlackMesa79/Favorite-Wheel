@@ -4,6 +4,7 @@
 #include "Settings.h"
 #include "InputGate.h"
 #include "OpenPolicy.h"
+#include "InputBindings.h"
 #include "ActorRuntime.h"
 #include "ActionPolicy.h"
 #include "UIResources.h"
@@ -24,6 +25,8 @@ namespace Wheel {
         bool favoriteCategoryChosen=false; // Session-local navigation, independent of wheel mode.
         FaceLight::Section functionCategory=FaceLight::Section::Outfits; // Remember the top-level type, not a child list.
         bool shiftHeld[2]{};
+        bool keyboardHeld[256]{}, padHeld[16]{};
+        float padX=0, padY=0;
         float nameRepeatAt[256]{};
         std::atomic<bool> gameActive{false};
         std::atomic<std::uint64_t> epoch{0};
@@ -138,6 +141,7 @@ namespace Wheel {
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
                 view.inventoryGlyphs=std::move(names);view.open = true; view.animateClose=false; view.functions=functions;view.functionSection=functionCategory;view.outfitDialog=0; view.settingsOpen = view.capturingKey = view.saveError = false;
                 view.page = functions?(functionCategory==FaceLight::Section::Outfits?functionPage:0):favoritePage; view.x = view.y = 0;
+                padX=padY=0;
                 FilterItems();
                 if (!functions && !favoriteCategoryChosen) {
                     // Pick a populated category only on the first favorites opening.
@@ -288,19 +292,53 @@ namespace Wheel {
             playerUpdateInstalled=true;
             SKSE::log::info("Wheel player-update hook installed after DataLoaded");
         }
-        std::uint32_t FavoritesScanCode() {
+        std::uint32_t FavoritesScanCode(RE::INPUT_DEVICE device=RE::INPUT_DEVICE::kKeyboard) {
             auto controls = RE::ControlMap::GetSingleton();
-            return controls ? controls->GetMappedKey("Favorites", RE::INPUT_DEVICE::kKeyboard, RE::UserEvents::INPUT_CONTEXT_ID::kGameplay) : 0xFFFFFFFF;
+            return controls ? controls->GetMappedKey("Favorites", device, RE::UserEvents::INPUT_CONTEXT_ID::kGameplay) : 0xFFFFFFFF;
         }
-        bool ToggleKey(const RE::ButtonEvent* button) {
-            return button->GetDevice() == RE::INPUT_DEVICE::kKeyboard &&
-                FavoritesKeyMatches(Config().hotkey, FavoritesScanCode(), button->GetIDCode(), button->GetUserEvent().c_str());
+        int HeldModifiers() {
+            return ((keyboardHeld[42]||keyboardHeld[54])?1:0) |
+                ((keyboardHeld[29]||keyboardHeld[157])?2:0) | ((keyboardHeld[56]||keyboardHeld[184])?4:0);
+        }
+        int EffectiveKeyboardKey(const Settings& config) {
+            return ResolveFavoritesKey(config.hotkey,FavoritesScanCode());
+        }
+        int EffectiveGamepadKey(const Settings& config) {
+            if(config.gamepadHotkey>=0)return config.gamepadHotkey;
+            const auto mapped=FavoritesScanCode(RE::INPUT_DEVICE::kGamepad);
+            if(mapped==0xFF || mapped==0xFFFFFFFF)return -1;
+            const auto key=SKSE::InputMap::GamepadMaskToKeycode(mapped);
+            return key>=266 && key<=281?static_cast<int>(key):-1;
+        }
+        bool ReplacedEntrance(const RE::ButtonEvent* button) {
+            const auto config=Config();
+            if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard)
+                return button->GetIDCode()==FavoritesScanCode() && static_cast<int>(button->GetIDCode())==EffectiveKeyboardKey(config);
+            if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad)
+                return button->GetIDCode()==FavoritesScanCode(RE::INPUT_DEVICE::kGamepad) &&
+                    static_cast<int>(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()))==EffectiveGamepadKey(config);
+            return false;
+        }
+        Opening ToggleKey(const RE::ButtonEvent* button) {
+            const auto config=Config();
+            if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
+                const int favorite=EffectiveKeyboardKey(config);
+                return KeyboardOpening(button->GetIDCode(),HeldModifiers(),favorite,config.hotkeyModifier,
+                    config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier);
+            }
+            if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad) {
+                const int favorite=EffectiveGamepadKey(config);
+                auto held=[&](int key){return key<0 || (key!=favorite && key>=266 && key<=281 && padHeld[key-266]);};
+                return GamepadOpening(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()),favorite,
+                    held(config.gamepadModifier),held(config.gamepadActionModifier));
+            }
+            return Opening::None;
         }
 
         void EnterSettings() {
             BeginSettings();
             std::lock_guard lock(viewMutex);
-            view.settingsOpen=true; view.capturingKey=false; view.saveError=false;
+            view.settingsOpen=true; view.capturingKey=false; view.settingsControls=false; view.saveError=false;
             view.x=view.y=0;
         }
         void LeaveSettings(bool save) {
@@ -329,6 +367,12 @@ namespace Wheel {
             case 9: config.sounds=!config.sounds; break;
             case 10: config.animations=!config.animations; break;
             case 11: config.switchKey=19; break;
+            case 12: config.hotkeyModifier=Wrap(config.hotkeyModifier+direction,8); break;
+            case 13: config.actionHotkey=-1;config.actionModifier=1; break;
+            case 14: config.actionModifier=Wrap(config.actionModifier+direction,8); break;
+            case 15: config.gamepadHotkey=-1; break;
+            case 16: config.gamepadModifier=Wrap((config.gamepadModifier<0?0:config.gamepadModifier-265)+direction,17);config.gamepadModifier=config.gamepadModifier?config.gamepadModifier+265:-1; break;
+            case 17: config.gamepadActionModifier=Wrap((config.gamepadActionModifier<0?0:config.gamepadActionModifier-265)+direction,17);config.gamepadActionModifier=config.gamepadActionModifier?config.gamepadActionModifier+265:-1; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -337,14 +381,18 @@ namespace Wheel {
             const auto current=Snapshot();
             const float x=current.x*224, y=current.y*224;
             if (current.capturingKey) return;
+            if(generalTab.Contains(x,y) || controlsTab.Contains(x,y)) {
+                std::lock_guard lock(viewMutex);view.settingsControls=controlsTab.Contains(x,y);return;
+            }
             if (applyButton.Contains(x,y) && !right) { LeaveSettings(true); return; }
             if (cancelButton.Contains(x,y) && !right) { LeaveSettings(false); return; }
             if (defaultsButton.Contains(x,y) && !right) { DefaultSettings(); return; }
-            for (int row=0;row<settingRows;++row) {
-                if(row!=5 && row!=11 && MinusButton(row).Contains(x,y)) { AdjustSetting(row,-1); return; }
-                if(row!=5 && row!=11 && PlusButton(row).Contains(x,y)) { AdjustSetting(row,1); return; }
-                if(ValueButton(row).Contains(x,y)) {
-                    if((row==5 || row==11) && !right) { std::lock_guard lock(viewMutex); view.capturingKey=true;view.captureSwitch=row==11; }
+            for (int slot=0;slot<SettingCount(current.settingsControls);++slot) {
+                const int row=SettingRow(current.settingsControls,slot);
+                if(!BindingRow(row) && MinusButton(slot).Contains(x,y)) { AdjustSetting(row,-1); return; }
+                if(!BindingRow(row) && PlusButton(slot).Contains(x,y)) { AdjustSetting(row,1); return; }
+                if(ValueButton(slot).Contains(x,y)) {
+                    if(BindingRow(row) && !right) { std::lock_guard lock(viewMutex); view.capturingKey=true;view.captureBinding=row; }
                     else AdjustSetting(row,right?-1:1);
                     return;
                 }
@@ -424,8 +472,38 @@ namespace Wheel {
             if (IsOpen() && (!Focused() || !ValidPlayer() || BlockedMenu())) Cancel();
             const auto bridge=TextBridge::Query();
             bool characterBatch=false;
-            for(auto event=events?*events:nullptr;event;event=event->next)
+            // Resolve chords from the whole physical batch before mutating events.
+            // The main button may precede its modifier in the same input poll.
+            if(auto manager=RE::BSInputDeviceManager::GetSingleton()) {
+                if(auto keyboard=manager->GetKeyboard())
+                    for(unsigned i=0;i<256;++i)keyboardHeld[i]=(keyboard->GetRuntimeData().curState[i]&0x80)!=0;
+                std::fill_n(padHeld,16,false);
+                if(auto pad=manager->GetGamepad();pad && pad->IsEnabled()) {
+                    const auto& buttons=static_cast<RE::BSInputDevice*>(pad)->GetRuntimeData().deviceButtons;
+                    for(int i=0;i<16;++i) {
+                        const auto at=buttons.find(SKSE::InputMap::GamepadKeycodeToMask(i+266));
+                        padHeld[i]=at!=buttons.end() && at->second && at->second->heldDownSecs>0;
+                    }
+                } else {std::lock_guard lock(viewMutex);padX=padY=0;}
+            }
+            for(auto event=events?*events:nullptr;event;event=event->next) {
                 if(auto c=event->AsCharEvent();c && c->keyCode>=32)characterBatch=true;
+                if(auto b=event->AsButtonEvent()) {
+                    if(b->GetDevice()==RE::INPUT_DEVICE::kKeyboard && b->GetIDCode()<256)keyboardHeld[b->GetIDCode()]=b->IsPressed();
+                    if(b->GetDevice()==RE::INPUT_DEVICE::kGamepad) {
+                        const auto key=SKSE::InputMap::GamepadMaskToKeycode(b->GetIDCode());
+                        if(key>=266 && key<=281)padHeld[key-266]=b->IsPressed();
+                    }
+                }
+                if(auto stick=event->AsThumbstickEvent();stick && IsOpen() && stick->IsLeft()) {
+                    std::lock_guard lock(viewMutex);padX=stick->xValue;padY=stick->yValue;
+                    if(std::hypot(padX,padY)>.2f) {
+                        view.gamepad=true;
+                        if(!view.settingsOpen && !view.outfitDialog)AimStick(view.x,view.y,padX,padY);
+                    }
+                }
+            }
+            shiftHeld[0]=keyboardHeld[42];shiftHeld[1]=keyboardHeld[54];
             for (auto event = events ? *events : nullptr; event; event = event->next) {
                 if (auto button = event->AsButtonEvent()) {
                     const auto code = button->GetIDCode();
@@ -441,8 +519,13 @@ namespace Wheel {
                             nameRepeat=true;nameRepeatAt[code]=button->GetRuntimeData().heldDownSecs+.05f;
                         }
                     }
-                    if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && (code==42 || code==54))shiftHeld[code==54]=pressed;
-                    const bool toggle = ToggleKey(button);
+                    const auto opening=ToggleKey(button);
+                    const bool toggle = opening!=Opening::None;
+                    const auto pad=button->GetDevice()==RE::INPUT_DEVICE::kGamepad?
+                        SKSE::InputMap::GamepadMaskToKeycode(code):0u;
+                    if(down && (button->GetDevice()==RE::INPUT_DEVICE::kGamepad || button->GetDevice()==RE::INPUT_DEVICE::kKeyboard || button->GetDevice()==RE::INPUT_DEVICE::kMouse)) {
+                        std::lock_guard lock(viewMutex);view.gamepad=pad!=0;
+                    }
                     if (down && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && (code == 16 || toggle)) {
                         const auto reason = OpenBlockReason();
                         const auto player = RE::PlayerCharacter::GetSingleton();
@@ -450,6 +533,12 @@ namespace Wheel {
                         SKSE::log::info("Favorites key: scan={} mapped={} event='{}' match={} open={} blocked='{}' race={:08X} racePlayable={}",
                             code, FavoritesScanCode(), button->GetUserEvent().c_str(), toggle, IsOpen(), reason ? reason : "none",
                             race ? race->GetFormID() : 0, race && race->GetPlayable());
+                    }
+                    if(down && pad && (toggle || pad==266 || static_cast<int>(pad)==EffectiveGamepadKey(Config()))) {
+                        const auto reason=OpenBlockReason();
+                        SKSE::log::info("Controller entrance: raw={} key={} mapped={} effective={} mode={} open={} blocked='{}'",
+                            code,pad,FavoritesScanCode(RE::INPUT_DEVICE::kGamepad),EffectiveGamepadKey(Config()),
+                            opening==Opening::Actions?"actions":opening==Opening::Favorites?"favorites":"none",IsOpen(),reason?reason:"none");
                     }
                     bool consume = captureBatch || inputGate.Swallowed(identity);
                     const auto current=Snapshot();
@@ -469,23 +558,41 @@ namespace Wheel {
                             else if(code==28)OutfitAccept();
                             else if(naming)NameKey(code,!bridge.active && !characterBatch);
                         } else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse && code==0)OutfitClick();
+                        else if(pad==277)EndOutfitDialog();
+                        else if(pad==276)OutfitClick();
+                        else if(pad==279 && !naming)OutfitAccept();
                     } else if (down && current.open && current.settingsOpen && !inputGate.Swallowed(identity)) {
-                        if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
-                            if(current.capturingKey) {
-                                if(code!=1) { auto config=Config(); if(current.captureSwitch)config.switchKey=static_cast<int>(code);else config.hotkey=static_cast<int>(code); EditSettings(config); }
-                                std::lock_guard lock(viewMutex); view.capturingKey=false;
-                            } else if(code==1 || code==15) LeaveSettings(false);
+                        if(current.capturingKey) {
+                            const bool cancel=(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==1) || pad==277;
+                            const bool capture=current.captureBinding==15?(pad>=266 && pad<=281):
+                                (button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code<255 && !ModifierBit(code));
+                            if(cancel || capture) {
+                                if(!cancel) {
+                                    auto config=Config();
+                                    if(current.captureBinding==15)config.gamepadHotkey=static_cast<int>(pad);
+                                    else if(current.captureBinding==11)config.switchKey=static_cast<int>(code);
+                                    else if(current.captureBinding==13){config.actionHotkey=static_cast<int>(code);config.actionModifier=HeldModifiers();}
+                                    else {config.hotkey=static_cast<int>(code);config.hotkeyModifier=HeldModifiers();}
+                                    EditSettings(config);
+                                }
+                                std::lock_guard lock(viewMutex);view.capturingKey=false;
+                            }
+                        } else if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
+                            if(code==1 || code==15) LeaveSettings(false);
                         } else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse && code<2) SettingsClick(code==1);
+                        else if(pad==276 || pad==278)SettingsClick(pad==278);
+                        else if(pad==277)LeaveSettings(false);
+                        else if(pad==274 || pad==275){std::lock_guard lock(viewMutex);view.settingsControls=pad==275;}
                     } else if (down && current.open && !inputGate.Swallowed(identity) &&
-                        button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==60) {
+                        ((button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==60) || pad==270)) {
                         EnterSettings(); // Remains reachable even if Favorites itself is bound to F2.
                     } else if(down && current.open && !inputGate.Swallowed(identity) &&
-                        button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==static_cast<unsigned>(Config().switchKey)) {
+                        ((button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==static_cast<unsigned>(Config().switchKey)) || pad==279)) {
                         SwitchWheel();
-                    } else if (down && !inputGate.Swallowed(identity) && toggle) {
+                    } else if (down && !inputGate.Swallowed(identity) && toggle && (!pad || !current.open)) {
                         if (IsOpen() || openQueued) { Cancel(true); consume = captureBatch = true; }
                         else if (closing || HasPendingAction() || Outfits::Busy()) { consume = true;if(Outfits::Busy())RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),"outfitWorking").c_str()); }
-                        else if (!OpenBlockReason()) { RequestOpen(shiftHeld[0]||shiftHeld[1]); consume = captureBatch = true; }
+                        else if (!OpenBlockReason()) { RequestOpen(opening==Opening::Actions); consume = captureBatch = true; }
                     } else if (down && IsOpen() && !inputGate.Swallowed(identity)) {
                         if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
                             switch (code) {
@@ -501,10 +608,30 @@ namespace Wheel {
                             if (code == 0 || code == 1) Activate(code == 1);
                             else if (code == 8) ChangePage(-1);
                             else if (code == 9) ChangePage(1);
+                        } else if(pad) {
+                            switch(pad) {
+                            case 276:Activate(false);break;
+                            case 278:Activate(true);break;
+                            case 277:if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true);break;
+                            case 274: case 268:ChangeCategory(-1);break;
+                            case 275: case 269:ChangeCategory(1);break;
+                            case 266:ChangePage(-1);break;
+                            case 267:ChangePage(1);break;
+                            default:break;
+                            }
                         }
+                    } else if(down && !toggle && ReplacedEntrance(button) && !OpenBlockReason()) {
+                        // A configured modifier is required for the replaced vanilla entrance.
+                        // This only owns the mapped entrance, never number / Numpad quick slots.
+                        consume=true;
                     }
                     const bool wheelImpulse = button->GetDevice() == RE::INPUT_DEVICE::kMouse && code >= 8;
                     const auto decision = inputGate.Filter(identity, pressed, up, consume, wheelImpulse);
+                    if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
+                        (code==82 || code==79 || code==80 || code==81))
+                        SKSE::log::info("Numpad input: scan={} event='{}' wheel={} queued={} closing={} filter={}",
+                            code,button->GetUserEvent().c_str(),current.open,openQueued.load(),closing.load(),
+                            decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":"suppress");
                     if (decision != InputGate::Result::Pass) {
                         // Deliver one release for controls the engine already saw pressed before opening.
                         // Suppress newly pressed wheel buttons through their physical release after closing.
@@ -515,6 +642,7 @@ namespace Wheel {
                 } else if (auto mouse = event->AsMouseMoveEvent(); mouse && captureBatch) {
                     if (IsOpen()) {
                         std::lock_guard lock(viewMutex);
+                        if(mouse->mouseInputX || mouse->mouseInputY){view.gamepad=false;padX=padY=0;}
                         const auto config=Config();
                         const float width=viewportWidth.load(),height=viewportHeight.load();
                         if(view.settingsOpen || view.outfitDialog) {
@@ -536,7 +664,11 @@ namespace Wheel {
                 }
             }
             previousDispatch(source, events);
-            if (!Focused()) {inputGate.Reset();shiftHeld[0]=shiftHeld[1]=false;}
+            if (!Focused()) {
+                inputGate.Reset();shiftHeld[0]=shiftHeld[1]=false;
+                std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
+                std::lock_guard lock(viewMutex);padX=padY=0;
+            }
             PumpAction();
         }
 
@@ -582,6 +714,15 @@ namespace Wheel {
     }
 
     View Snapshot() { std::lock_guard lock(viewMutex); auto copy=view; copy.config=Config(); return copy; }
+    void AdvanceGamepadPointer(float elapsed) {
+        std::lock_guard lock(viewMutex);
+        if(!view.open || !view.gamepad || (!view.settingsOpen && !view.outfitDialog))return;
+        const auto config=Config();
+        const float scale=LayoutScale(viewportWidth,viewportHeight,config.scale);
+        const float speed=2.4f*config.sensitivity*std::clamp(elapsed,0.f,.05f);
+        view.x=std::clamp(view.x+StickAxis(padX)*speed,-viewportWidth.load()/(448*scale),viewportWidth.load()/(448*scale));
+        view.y=std::clamp(view.y-StickAxis(padY)*speed,-viewportHeight.load()/(448*scale),viewportHeight.load()/(448*scale));
+    }
     void SetViewport(float width,float height) { if(width>0 && height>0) {viewportWidth=width; viewportHeight=height;} }
     bool IsOpen() { std::lock_guard lock(viewMutex); return view.open; }
     void Cancel(bool effects) {
@@ -606,8 +747,9 @@ namespace Wheel {
         gameActive = active;
         Cancel();
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
+        inputGate.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
         allItems.clear();
-        { std::lock_guard lock(viewMutex); view.items.clear(); }
+        { std::lock_guard lock(viewMutex); view.items.clear();padX=padY=0; }
         SKSE::log::info("Game active={}", active);
         if (active) SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={}", dispatchCount.load(), FavoritesScanCode(), Config().hotkey);
     }

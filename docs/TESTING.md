@@ -273,3 +273,7 @@
 请记录：操作步骤、实际结果、期望结果、物品名称及所属模组、是否同名多实例、键鼠绑定、分辨率、CS/ENB/帧生成情况，以及 `FavoriteWheel.log`。崩溃时附加现有 Crash Logger 的报告。
 
 0.1.6 本地验证：WheelLogicTests、ActorRuntimeTests、SettingsTests 通过；WARP 实际 Draw.cpp 在 1440p 轮盘/设置与 720p 英文空轮盘输出通过，像素读回验证背景不变和扇区完全不透明；原生字号、字形增量与重建通过。游戏内 CS 合成层级及 GPU 帧率未验证。
+
+## 0.3.16 手柄与入口组合键
+
+具体回归与按键码见[INPUT_CONTROLS.md](INPUT_CONTROLS.md)。本版的手柄与Numpad用户环境需要实机复测；现有运行时兼容测试记录不代表新输入功能已在游戏中验证。

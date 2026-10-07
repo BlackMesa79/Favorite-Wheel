@@ -28,6 +28,8 @@ namespace Wheel {
     std::string UIGlyphs(const Settings& config);
     std::string FontPath(const Settings& config);
     std::string KeyLabel(const Settings& config);
+    std::string ModifierLabel(const Settings& config,int modifier);
+    std::string PadLabel(const Settings& config,int key,bool follow=false);
     std::string CycleLanguage(const std::string& id,int delta);
     std::string CycleTheme(const std::string& id,int delta);
 }

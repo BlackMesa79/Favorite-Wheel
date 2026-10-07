@@ -37,6 +37,10 @@ int main(int argc, char** argv) {
     Wheel::EditSettings(config);
     Wheel::preview.config=config;
     Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";
+    if(argc>4 && (std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad")) {
+        Wheel::preview.settingsOpen=true;Wheel::preview.settingsControls=true;
+    }
+    Wheel::preview.gamepad=argc>4 && (std::string(argv[4])=="pad" || std::string(argv[4])=="controls-pad");
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     D3D_FEATURE_LEVEL level;

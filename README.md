@@ -1,6 +1,6 @@
 # Favorite Wheel - Radial Actions
 
-![Favorite Wheel - Radial Actions](release-materials/0.3.15/FavoriteWheel-cover-1280.png)
+![Favorite Wheel - Radial Actions](release-materials/0.3.16/FavoriteWheel-cover-1280.png)
 
 **Your favorites and actions, at your fingertips.**
 
@@ -58,7 +58,7 @@ The supplied INI uses `Language=auto`: follow the Windows display language, then
 | Action | Control |
 | --- | --- |
 | Open/close favorites | Q, or your game's Favorites binding |
-| Open action wheel | Shift + Favorites binding |
+| Open action wheel | Shift + Favorites binding; key and modifier configurable |
 | Switch favorites/actions | R while open; configurable |
 | Change category | A / D or Left / Right |
 | Change page | W / S, Up / Down, or mouse wheel |
@@ -68,6 +68,23 @@ The supplied INI uses `Language=auto`: follow the Windows display language, then
 | Manage an outfit preset | Right click on the preset |
 | Close/back | Esc / Tab; a follower sub-list returns to its parent |
 | Open settings | F2 while the wheel is open |
+
+Controller controls (Xbox names; equivalent PlayStation buttons use the same positions):
+
+| Action | Controller |
+| --- | --- |
+| Open favorites | Game's controller Favorites binding (normally D-Pad Up) |
+| Open actions | LB + controller Favorites binding |
+| Select an entry | Left stick; release to keep the selection |
+| Use / right hand | A |
+| Left hand / manage preset | X |
+| Change category | LB / RB or D-Pad Left / Right |
+| Change page | D-Pad Up / Down |
+| Switch wheel | Y |
+| Back / close | B |
+| Settings | Start while open |
+
+The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the left stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB select the appearance/control settings tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
 
 Opening the wheel pauses gameplay. Item use and actions execute after the menu closes and gameplay resumes. Animations do not delay those actions. Spells and shouts are equipped for normal casting, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
 
@@ -99,7 +116,13 @@ Poison application is not implemented; use poisons through the inventory. Beast-
 
 ## Settings, themes, and translations
 
-Press F2 inside the wheel. Changes preview immediately; **APPLY** saves them and returns to the wheel. Cancel discards unsaved edits. Manual INI changes require a restart. `Enabled=0` restores the original Favorites menu.
+Press F2 (controller: Start) inside the wheel. Appearance and controls have separate tabs. Changes preview immediately; **APPLY** saves them and returns to the wheel. Cancel discards unsaved edits. Manual INI changes require a restart. `Enabled=0` restores the original Favorites menu.
+
+The **CONTROLS** tab provides independent favorites/actions keyboard keys and modifiers. Click a key field, hold the desired Shift/Ctrl/Alt modifiers and press the main key, or cycle modifier combinations separately. Right-click / controller X resets the main key. Exact modifier matching prevents one chord from opening both wheels; identical chords prioritize actions and show a warning. `ActionHotkey=-1` follows the effective favorites key, including a custom override. Keyboard settings do not alter controller bindings.
+
+Controller favorites follows the game binding unless overridden; the favorites and actions modifiers are independently configurable. Controller action modifiers supplement the same main controller key. B is reserved for cancelling button capture; Start/Y retain settings/mode-switch functions while open. Choose a modifier different from the main button. Ordinary Q without the required modifier does not open vanilla Favorites when that same game binding is replaced; blocked contexts and `Enabled=0` yield to the game. Other gameplay shortcut events remain intact while the wheel is closed.
+
+See [input bindings and testing](docs/INPUT_CONTROLS.md) for INI codes and regression coverage.
 
 Preserve your INI and customized resources when upgrading. With MO2, also check Overwrite or the configured output mod for files written by the game.
 

@@ -2,6 +2,7 @@
 #include "FunctionNavigation.h"
 #include "InputGate.h"
 #include "OpenPolicy.h"
+#include "InputBindings.h"
 #include "ActionPolicy.h"
 #include "EquipPolicy.h"
 #include "NavigationPresentation.h"
@@ -57,9 +58,26 @@ int main() {
     Check(!PlayerEligible(true,true,true,false,true), "beast form yields to vanilla");
     Check(!PlayerEligible(false,true,true,false,false) && !PlayerEligible(true,true,true,true,false), "loading and dead player cannot open");
     Check(FavoritesKeyMatches(-1,16,16,"") && FavoritesKeyMatches(-1,33,33,""), "default and rebound physical favorites key");
-    Check(FavoritesKeyMatches(-1,0xFFFFFFFF,33,"Favorites"), "semantic Favorites event fallback");
+    Check(!FavoritesKeyMatches(-1,0xFFFFFFFF,33,"Favorites"), "unmapped semantic events are not wheel entry keys");
     Check(!FavoritesKeyMatches(-1,0xFFFFFFFF,16,"") && !FavoritesKeyMatches(-1,255,16,"ToggleFavorite"), "unbound key and inventory ToggleFavorite do not open wheel");
     Check(!FavoritesKeyMatches(44,16,16,"Favorites") && FavoritesKeyMatches(44,16,44,""), "explicit override takes priority");
+    for(unsigned key:{82u,79u,80u,81u,2u,3u,4u,5u}) {
+        Check(!FavoritesKeyMatches(-1,16,key,"Favorites"),"quick slots cannot impersonate the physical Favorites binding");
+        Check(KeyboardOpening(key,0,16,0,16,1)==Opening::None,"quick slots cannot open either default wheel");
+        InputGate shortcuts;
+        Check(shortcuts.Filter(key,true,false,false)==R::Pass && shortcuts.Filter(key,true,false,false)==R::Pass &&
+            shortcuts.Filter(key,false,true,false)==R::Pass,"unrelated shortcuts pass down, hold and up outside the wheel");
+    }
+    Check(KeyboardOpening(16,0,16,0,16,1)==Opening::Favorites && KeyboardOpening(16,1,16,0,16,1)==Opening::Actions,"default Q and Shift+Q are distinct chords");
+    Check(KeyboardOpening(16,3,16,2,16,1)==Opening::None,"extra modifiers do not match another wheel");
+    Check(KeyboardOpening(44,6,16,2,44,6)==Opening::Actions && KeyboardOpening(16,2,16,2,44,6)==Opening::Favorites,"separate main keys and Ctrl+Alt action chord");
+    Check(KeyboardOpening(16,0,16,0,16,0)==Opening::Actions,"identical bindings use deterministic actions priority");
+    Check(GamepadOpening(266,266,true,false)==Opening::Favorites && GamepadOpening(266,266,true,true)==Opening::Actions && GamepadOpening(267,266,true,true)==Opening::None,"controller opening key and modifier priority");
+    Check(GamepadOpening(266,-1,true,true)==Opening::None && GamepadOpening(282,282,true,true)==Opening::None,"unmapped controller does not open");
+    float sx=.3f,sy=.4f;AimStick(sx,sy,0,1);
+    Check(sx==0 && sy==-1,"controller Y axis points up on screen");
+    AimStick(sx,sy,.1f,.1f);Check(sx==0 && sy==-1,"releasing stick preserves selection for confirmation");
+    Check(StickAxis(.19f)==0 && StickAxis(1)==1 && StickAxis(-1)==-1,"settings pointer deadzone and full range");
     std::cout << "Wheel logic tests passed\n";
     using A = ActionDecision;
     Check(DecideAction(1,1,true,true,false,false,false)==A::Wait, "wait for queued hide");

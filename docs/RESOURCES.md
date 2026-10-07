@@ -48,3 +48,5 @@ Font 为可选字体路径。0.3.3 开放下列视觉参数，旧主题不需要
 0.1.7 的遮罩是固定黑色，由 OverlayOpacityPercent 控制；扇区在稳定状态仍为不透明，开关动画期间整体淡入淡出。新增文字键包含 wheelSize、positionX、positionY、overlayOpacity、sounds、animations、layoutSettingsHelp。
 
 0.3.8顶部邻近分类仍使用已有语言键；选中标题使用TitleScale，邻近项固定较小的原生字号。新增A/D/W/S键帽沿用已有颜色；ShowHints=0时隐藏键帽和底部两行提示，分类/分页状态继续显示。不新增主题/语言键。物品详情卡为右侧分页保留空间，主题字体和字号按最终布局烘焙，不随开闭动画缩放。
+
+0.3.16 设置分外观/控制页，独立键盘入口、组合修饰键及手柄入口/修饰键。新提示均可本地化，新增key见en.ini末尾；界面根据最后操作设备切换手柄与键鼠提示。手柄采用Xbox按键名称，PlayStation按键对应位置相同。已有翻译文件缺新键回退英文。

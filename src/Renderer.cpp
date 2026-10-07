@@ -52,6 +52,7 @@ namespace Wheel {
             const auto nowTick=std::chrono::steady_clock::now();
             float elapsed=std::clamp(std::chrono::duration<float>(nowTick-tick).count(),0.f,.25f);
             tick=nowTick;
+            AdvanceGamepadPointer(elapsed);
             const auto current=Snapshot();
             if(current.open && !wasOpen) {elapsed=0;ResetVisualFeedback();}
             wasOpen=current.open;

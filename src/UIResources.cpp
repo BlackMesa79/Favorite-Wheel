@@ -66,6 +66,9 @@ namespace Wheel {
             {"lightError","Face Lighting operation failed. Check the log."},
 
             {"outfitWorking","Changing outfit, please wait..."},{"outfitInterrupted","Outfit interrupted by a game state change. Check your equipment."},
+            {"controlsBindHint","Modifiers match exactly. Right-click / X resets a main key."},{"bindingConflict","Matching shortcuts: actions take priority."},
+            {"keyboardControlsHelp","Configure independent opening keys and modifiers for both wheels."},{"controlsCaptureHint","Click a main key to bind; right-click / X restores its default."},{"appearanceHint","Changes preview immediately. Apply saves; cancel restores settings."},{"padSelect","A SELECT / USE  ·  X LEFT HAND"},
+            {"settingsGeneral","APPEARANCE"},{"settingsControls","CONTROLS"},{"favoriteModifier","Favorites modifier"},{"actionHotkey","Actions key"},{"actionModifier","Actions modifier"},{"gamepadHotkey","Controller favorites key"},{"gamepadModifier","Controller favorites modifier"},{"gamepadActionModifier","Controller actions modifier"},{"modifierNone","None"},{"followFavorite","Follow favorites key"},{"captureChord","Hold modifiers and press a key; Esc cancels."},{"capturePad","Press a controller button; B / Esc cancels."},{"padUse","A USE / RIGHT HAND  ·  X LEFT HAND / MANAGE"},{"padNavigation","Y SWITCH WHEEL  ·  B BACK / CLOSE  ·  START SETTINGS"},{"padSettingsHelp","Left stick moves pointer; A selects; X resets; B cancels; LB/RB tabs."},
             {"wheelBindHint","Click to bind; right-click to reset (Favorites: game / switch: R)"},{"switchWheelKey","Switch wheel key"},
             {"outfitWheelTitle","FUNCTIONS · OUTFITS"},
             {"outfitTitle","OUTFIT PRESETS"},
@@ -263,6 +266,7 @@ namespace Wheel {
         for(const auto& language:languages) text+=language.name;
         for(const auto& theme:themes) text+=theme.name;
         text+=KeyLabel(config);auto switchConfig=config;switchConfig.hotkey=config.switchKey;text+=KeyLabel(switchConfig);
+        switchConfig.hotkey=config.actionHotkey;text+=KeyLabel(switchConfig);
         return text;
     }
     std::string KeyLabel(const Settings& config) {
@@ -275,6 +279,18 @@ namespace Wheel {
         std::string text(size,'\0');
         WideCharToMultiByte(CP_UTF8,0,name,-1,text.data(),size,nullptr,nullptr);
         text.pop_back();return text;
+    }
+    std::string ModifierLabel(const Settings& config,int modifier) {
+        if(!modifier)return Tr(config,"modifierNone");
+        std::string result;
+        for(auto [bit,name]:{std::pair{1,"Shift"},std::pair{2,"Ctrl"},std::pair{4,"Alt"}})
+            if(modifier&bit){if(!result.empty())result+=" + ";result+=name;}
+        return result;
+    }
+    std::string PadLabel(const Settings& config,int key,bool follow) {
+        if(key<0)return Tr(config,follow?"follow":"modifierNone");
+        constexpr const char* names[]={"D-Pad Up","D-Pad Down","D-Pad Left","D-Pad Right","Start","Back","LS","RS","LB","RB","A","B","X","Y","LT","RT"};
+        return key>=266 && key<=281?names[key-266]:"?";
     }
     std::string FontPath(const Settings& config) {
         const auto active=ActiveLanguage(config);
