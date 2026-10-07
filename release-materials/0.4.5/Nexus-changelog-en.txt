@@ -1,0 +1,6 @@
+0.4.5 test build
+- Fix immediate outfit unavailability when equivalent tempered, enchanted, or renamed spare copies have no unique ID.
+- Check the worn outfit before saving; reject a known invalid snapshot without overwriting an existing preset.
+- Unavailable preset details now identify the first failing piece and reason. Logs include matching fields and candidates.
+- Preserve exact unique-ID checks and the existing save format.
+- Local outfit, settings, wheel, inventory, runtime-layout and DLL metadata checks passed. Confirmation with the affected Shattered Royal Armor inventory is pending.

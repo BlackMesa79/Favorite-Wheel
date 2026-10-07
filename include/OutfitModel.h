@@ -73,20 +73,35 @@ namespace Wheel::Outfits {
         in>>std::ws;if(!in.eof())return false;
         result=std::move(next);return true;
     }
-    // A unique id requires an exact match. Ordinary indistinguishable copies may be interchanged.
+    // A unique id requires an exact match. Without one, copies with the same
+    // complete signature are interchangeable, including temper/name/enchantment.
     template<class Candidate> int Match(const Piece& p,const std::vector<Candidate>& candidates) {
         int found=-1;
         for(int i=0;i<static_cast<int>(candidates.size());++i) if(Same(p,candidates[i].piece)) {
-            if(found>=0 && (p.unique || p.enchantment.id || !p.customName.empty() || std::abs(p.health-1.f)>.0001f))return -2;
+            if(found>=0 && p.unique)return -2;
             if(found<0 || candidates[i].worn) found=i;
         }
         return found;
     }
-    template<class Candidate> bool Resolve(const Preset& p,const std::vector<Candidate>& inventory,std::vector<int>& matches) {
+    enum class ResolveReason { None, Missing, Changed, Ambiguous, Duplicate };
+    struct ResolveProblem {
+        ResolveReason reason=ResolveReason::None;
+        std::size_t piece=0;
+    };
+    template<class Candidate> bool Resolve(const Preset& p,const std::vector<Candidate>& inventory,std::vector<int>& matches,
+        ResolveProblem* problem=nullptr) {
             matches.clear();std::vector<int> used;
-            for(const auto& piece:p.pieces) {
+            if(problem)*problem={};
+            for(std::size_t at=0;at<p.pieces.size();++at) {
+                const auto& piece=p.pieces[at];
                 const int i=Match(piece,inventory);
-                if(i<0 || std::find(used.begin(),used.end(),i)!=used.end())return false;
+                if(i<0 || std::find(used.begin(),used.end(),i)!=used.end()) {
+                    if(problem) {
+                        const bool basePresent=std::any_of(inventory.begin(),inventory.end(),[&](const auto& c){return c.piece.base==piece.base;});
+                        *problem={i==-2?ResolveReason::Ambiguous:i<0?(basePresent?ResolveReason::Changed:ResolveReason::Missing):ResolveReason::Duplicate,at};
+                    }
+                    return false;
+                }
                 used.push_back(i);
                 matches.push_back(i);
             }

@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
         for(int i=0;i<23;++i) Wheel::preview.items.push_back({{},Wheel::Category::Armor,names[i%10],1,i==2,false,true,Wheel::ActionKind::Favorite,0,icons[i%10]});
         for(int i=0;i<8;++i)Wheel::preview.items[i].quickSlot=i;
     }
-    if(argc>4 && (std::string(argv[4])=="functions" || std::string(argv[4])=="functions-no-light" || std::string(argv[4])=="manage" || std::string(argv[4])=="name" || std::string(argv[4])=="name-long" || std::string(argv[4])=="confirm-delete" || std::string(argv[4])=="confirm-overwrite")) {
+    if(argc>4 && (std::string(argv[4])=="functions" || std::string(argv[4])=="functions-no-light" || std::string(argv[4])=="outfit-missing" || std::string(argv[4])=="manage" || std::string(argv[4])=="name" || std::string(argv[4])=="name-long" || std::string(argv[4])=="confirm-delete" || std::string(argv[4])=="confirm-overwrite")) {
         Wheel::preview.functions=true;
         Wheel::preview.faceLightAvailable=std::string(argv[4])!="functions-no-light";
         Wheel::preview.items={
@@ -84,7 +84,11 @@ int main(int argc, char** argv) {
             {{},Wheel::Category::Armor,"城镇便装",5,true,false,true,Wheel::ActionKind::Outfit,1},
             {{},Wheel::Category::Armor,"冒险重甲",7,false,false,true,Wheel::ActionKind::Outfit,2},
             {{},Wheel::Category::Armor,"物品缺失的旅行套装",4,false,false,false,Wheel::ActionKind::Outfit,3}};
-        if(std::string(argv[4])!="functions" && std::string(argv[4])!="functions-no-light") {
+        if(std::string(argv[4])=="outfit-missing") {
+            auto& item=Wheel::preview.items[2];item.equipped=false;item.usable=false;
+            item.detail=Wheel::Tr(config,"outfitItemChanged")+": "+
+                (config.language=="zh_CN"?"破碎皇家护甲 · 黑檀色左肩与腰部装饰配件（传奇）":"Shattered Royal Armor - Ebony left shoulder and waist accessory (Legendary)");
+        } else if(std::string(argv[4])!="functions" && std::string(argv[4])!="functions-no-light") {
             Wheel::preview.outfitDialog=std::string(argv[4])=="manage"?3:1;
             if(std::string(argv[4])=="confirm-delete")Wheel::preview.outfitDialog=5;
             if(std::string(argv[4])=="confirm-overwrite")Wheel::preview.outfitDialog=4;

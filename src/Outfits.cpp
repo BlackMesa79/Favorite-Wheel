@@ -7,10 +7,12 @@
 #include <fstream>
 #include <chrono>
 #include <optional>
+#include <unordered_map>
 namespace Wheel::Outfits {
     namespace {
         std::mutex mutex;
         std::vector<Preset> presets;
+        std::unordered_map<std::uint32_t,ResolveProblem> reportedProblems; // mutex held; log only state changes.
         constexpr std::uint32_t record=0x46574F50;
         const std::filesystem::path folder="Data/SKSE/Plugins/FavoriteWheel/Outfits";
         struct Candidate {Piece piece; RE::TESObjectARMO* armor; RE::ExtraDataList* extra; bool worn,quest;};
@@ -23,6 +25,9 @@ namespace Wheel::Outfits {
         Piece Describe(RE::TESObjectARMO* armor,RE::ExtraDataList* extra,bool labels) {
             Piece x;x.base=Ref(armor);const auto name=armor->GetName();x.label=name&&*name?name:"?";
             if(extra) {
+                // Display-name generation may update text display extras. Capture
+                // the instance signature after that work, never before it.
+                if(labels)if(auto label=extra->GetDisplayName(armor);label && *label)x.label=label;
                 if(auto e=extra->GetByType<RE::ExtraEnchantment>())x.enchantment=Ref(e->enchantment);
                 if(auto h=extra->GetByType<RE::ExtraHealth>())x.health=h->health;
                 if(auto u=extra->GetByType<RE::ExtraUniqueID>()) {x.unique=u->uniqueID;x.owner=Ref(RE::TESForm::LookupByID(u->baseID));}
@@ -30,7 +35,6 @@ namespace Wheel::Outfits {
                     x.customName=t->displayName.c_str();
                     if(t->customNameLength>0 && t->customNameLength<x.customName.size())x.customName.resize(t->customNameLength);
                 }
-                if(labels)if(auto label=extra->GetDisplayName(armor);label && *label)x.label=label;
             }
             return x;
         }
@@ -60,6 +64,31 @@ namespace Wheel::Outfits {
             if(ref.plugin.empty())return ref.id;
             auto data=RE::TESDataHandler::GetSingleton();return data?data->LookupFormID(ref.id,ref.plugin):0;
         }
+        const char* ReasonKey(ResolveReason reason) {
+            switch(reason) {
+            case ResolveReason::Missing:return "outfitItemMissing";
+            case ResolveReason::Changed:return "outfitItemChanged";
+            case ResolveReason::Ambiguous:return "outfitItemAmbiguous";
+            case ResolveReason::Duplicate:return "outfitItemDuplicate";
+            default:return "outfitMissing";
+            }
+        }
+        void LogProblem(const Preset& preset,const std::vector<Candidate>& inventory,ResolveProblem problem,const char* stage) {
+            if(problem.piece>=preset.pieces.size())return;
+            const auto& expected=preset.pieces[problem.piece];
+            SKSE::log::warn("Outfit validation: stage={} preset={} name='{}' pieces={} failed_piece={} reason={} label='{}' base={}:{:X} runtime={:08X} uid={} owner={}:{:X} enchant={}:{:X} health={} custom='{}'",
+                stage,preset.id,preset.name,preset.pieces.size(),problem.piece+1,ReasonKey(problem.reason),expected.label,
+                expected.base.plugin,expected.base.id,RuntimeID(expected.base),expected.unique,expected.owner.plugin,expected.owner.id,
+                expected.enchantment.plugin,expected.enchantment.id,expected.health,expected.customName);
+            unsigned count=0;
+            for(const auto& candidate:inventory)if(candidate.piece.base==expected.base) {
+                const auto& actual=candidate.piece;
+                if(count<4)SKSE::log::warn("Outfit candidate: worn={} uid={} owner={}:{:X} enchant={}:{:X} health={} custom='{}'",
+                    candidate.worn,actual.unique,actual.owner.plugin,actual.owner.id,actual.enchantment.plugin,actual.enchantment.id,actual.health,actual.customName);
+                ++count;
+            }
+            SKSE::log::warn("Outfit validation: same_base_candidates={} (at most 4 detailed above)",count);
+        }
         struct Operation {Piece piece;bool equip;};
         struct Job {
             Preset preset;std::vector<Operation> operations;std::size_t index=0;
@@ -80,9 +109,9 @@ namespace Wheel::Outfits {
             std::lock_guard lock(mutex);const auto text=Encode(presets);
             if(!api->WriteRecord(record,1,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets");
         }
-        void Revert(SKSE::SerializationInterface*) {std::lock_guard lock(mutex);presets.clear();}
+        void Revert(SKSE::SerializationInterface*) {std::lock_guard lock(mutex);presets.clear();reportedProblems.clear();}
         void Load(SKSE::SerializationInterface* api) {
-            std::lock_guard lock(mutex);presets.clear();std::uint32_t type,version,length;
+            std::lock_guard lock(mutex);presets.clear();reportedProblems.clear();std::uint32_t type,version,length;
             while(api->GetNextRecordInfo(type,version,length)) {
                 if(type!=record || version!=1 || length>1024*1024)continue;
                 std::string text(length,'\0');std::vector<Preset> loaded;
@@ -110,15 +139,28 @@ namespace Wheel::Outfits {
         result.push_back({{},Category::Armor,Tr(Config(),"outfitSave"),0,false,true,true,ActionKind::SaveOutfit});
         result.push_back({{},Category::Armor,Tr(Config(),"outfitImport"),0,false,true,true,ActionKind::ImportOutfits});
         for(const auto& p:presets) {
-            std::vector<int> matches;const bool valid=Resolve(p,inventory,matches);
+            std::vector<int> matches;ResolveProblem problem;const bool valid=Resolve(p,inventory,matches,&problem);
             result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&Wearing(inventory,matches),false,valid,ActionKind::Outfit,p.id});
+            if(valid)reportedProblems.erase(p.id);
+            else {
+                result.back().detail=Tr(Config(),ReasonKey(problem.reason))+": "+p.pieces[problem.piece].label;
+                const auto previous=reportedProblems.find(p.id);
+                if(previous==reportedProblems.end() || previous->second.reason!=problem.reason || previous->second.piece!=problem.piece) {
+                    LogProblem(p,inventory,problem,"entries");reportedProblems[p.id]=problem;
+                }
+            }
         }
         return result;
     }
     bool Capture(const std::string& name,std::uint32_t replace) {
         Preset next;next.name=name;if(!ValidName(name))return false;
-        for(const auto& c:Inventory(0,true))if(c.worn)next.pieces.push_back(c.piece);
+        const auto inventory=Inventory(0,true);
+        for(const auto& c:inventory)if(c.worn)next.pieces.push_back(c.piece);
         if(next.pieces.empty()||next.pieces.size()>64){Tell("outfitEmpty");return false;}
+        std::vector<int> matches;ResolveProblem problem;
+        if(!Resolve(next,inventory,matches,&problem)) {
+            LogProblem(next,inventory,problem,"capture");Tell("outfitCaptureMismatch");return false;
+        }
         std::lock_guard lock(mutex);
         auto found=std::find_if(presets.begin(),presets.end(),[&](const auto& p){return p.id==replace;});
         if(replace && found==presets.end())return false;
@@ -129,6 +171,8 @@ namespace Wheel::Outfits {
         std::vector<Preset> validated;
         if(!Decode(Encode(updated),validated)){Tell("outfitLimit");return false;}
         presets=std::move(updated);
+        reportedProblems.erase(next.id);
+        SKSE::log::info("Outfit saved: preset={} name='{}' pieces={}",next.id,next.name,next.pieces.size());
         Tell("outfitSaved");return true;
     }
     bool Rename(std::uint32_t id,const std::string& name) {
@@ -139,7 +183,7 @@ namespace Wheel::Outfits {
             return true;
         }return false;
     }
-    bool Remove(std::uint32_t id) {std::lock_guard lock(mutex);return std::erase_if(presets,[&](const auto& p){return p.id==id;})>0;}
+    bool Remove(std::uint32_t id) {std::lock_guard lock(mutex);reportedProblems.erase(id);return std::erase_if(presets,[&](const auto& p){return p.id==id;})>0;}
     bool Export(std::uint32_t id) {
         Preset copy;
         {std::lock_guard lock(mutex);for(const auto& p:presets)if(p.id==id)copy=p;}
@@ -201,10 +245,9 @@ namespace Wheel::Outfits {
         if(busy)return;
         Preset p;{std::lock_guard lock(mutex);for(const auto& entry:presets)if(entry.id==id)p=entry;}
         if(!p.id)return;
-        auto inventory=Inventory();std::vector<int> matches;
-        if(!Resolve(p,inventory,matches)) {
-            for(const auto& piece:p.pieces)if(const int match=Match(piece,inventory);match<0)
-                SKSE::log::warn("Outfit {} preflight: '{}' {}:{:X} unique={} match={}",id,piece.label,piece.base.plugin,piece.base.id,piece.unique,match);
+        auto inventory=Inventory();std::vector<int> matches;ResolveProblem problem;
+        if(!Resolve(p,inventory,matches,&problem)) {
+            LogProblem(p,inventory,problem,"apply");
             Tell("outfitMissing");return;
         }
         auto player=RE::PlayerCharacter::GetSingleton();auto manager=RE::ActorEquipManager::GetSingleton();if(!player||!manager)return;
