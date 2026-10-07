@@ -1,0 +1,6 @@
+0.4.0 (since 0.3.15)
+- Added controller support for selection, activation, category/page navigation and settings.
+- Added configurable favorites/action opening keys and independent Shift/Ctrl/Alt modifiers.
+- Added native 1–8 quick-slot assignment: hover to bind or unbind, with slot numbers shown on entries.
+- Tightened Favorites entry matching and preserved other gameplay shortcuts while the wheel is closed.
+- Added Skyrim Steam 1.6.640 support. In-game testing on 1.6.640, 1.7.99 and 1.7.104 is still pending.

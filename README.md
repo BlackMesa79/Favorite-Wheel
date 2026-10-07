@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.3.18**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.4.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -184,13 +184,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.18.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.0.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [release-materials directory](release-materials/0.3.14) contains the original editable SVG cover, PNG exports, English Nexus summary, BBCode description, and local HTML preview. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.4.0 release materials](release-materials/0.4.0) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 
