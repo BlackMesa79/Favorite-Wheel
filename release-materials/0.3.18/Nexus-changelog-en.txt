@@ -1,0 +1,4 @@
+0.3.18
+- Added Skyrim Steam 1.6.640 to the supported runtime list. Earlier builds refused to load on this version.
+- Added runtime layout, actor dispatch and address-library coverage for 1.6.640. In-game testing on this runtime is still pending.
+- Controller controls, modifiers and native quick-slot assignment have received successful user test feedback on 1.6.1170.

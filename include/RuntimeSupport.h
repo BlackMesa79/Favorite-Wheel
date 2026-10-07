@@ -5,10 +5,11 @@
 
 namespace Wheel::RuntimeSupport
 {
-    // Keep new releases opt-in; 1.7.99/104 are test targets awaiting gameplay reports.
+    // Keep new releases opt-in; 1.6.640 and 1.7.99/104 await gameplay reports.
     constexpr bool Supported(REL::Version version)
     {
-        return version == REL::Version{1, 5, 97, 0} || version == REL::Version{1, 6, 1170, 0} ||
+        return version == REL::Version{1, 5, 97, 0} || version == REL::Version{1, 6, 640, 0} ||
+               version == REL::Version{1, 6, 1170, 0} ||
                version == REL::Version{1, 7, 99, 0} || version == REL::Version{1, 7, 104, 0};
     }
     constexpr std::uint64_t inputDispatchSE = 67315, inputDispatchAE = 68617;

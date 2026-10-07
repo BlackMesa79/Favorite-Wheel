@@ -99,7 +99,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 3, 17, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{0, 3, 18, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,
@@ -111,12 +111,13 @@ namespace
 int wmain(int argc, wchar_t **argv)
 {
     using namespace Wheel::RuntimeSupport;
-    Check(argc == 1 || argc == 3 || argc == 5, "optional args: SE, AE, then 1.7.99 and 1.7.104 address libraries");
-    Check(Supported({1, 5, 97, 0}) && Supported({1, 6, 1170, 0}) && Supported({1, 7, 99, 0}) &&
+    Check(argc == 1 || argc == 3 || argc == 5 || argc == 6,
+          "optional args: 1.5.97, 1.6.1170, then 1.7.99, 1.7.104, then 1.6.640 address libraries");
+    Check(Supported({1, 5, 97, 0}) && Supported({1, 6, 640, 0}) && Supported({1, 6, 1170, 0}) && Supported({1, 7, 99, 0}) &&
               Supported({1, 7, 104, 0}),
           "target runtimes accepted");
     for (const auto version :
-         {REL::Version{1, 5, 80, 0}, REL::Version{1, 6, 640, 0}, REL::Version{1, 6, 1130, 0}, REL::Version{1, 4, 15, 0},
+         {REL::Version{1, 5, 80, 0}, REL::Version{1, 6, 659, 0}, REL::Version{1, 6, 1130, 0}, REL::Version{1, 4, 15, 0},
           REL::Version{1, 7, 98, 0}, REL::Version{1, 7, 105, 0}, REL::Version{1, 7, 104, 1}})
         Check(!Supported(version), "unaudited releases and VR stay rejected");
     struct Layout
@@ -127,7 +128,9 @@ int wmain(int argc, wchar_t **argv)
     };
     const std::array layouts = {
         Layout{{1, 5, 97, 0}, 0xE8, 0x3D8, 0xB8, 67315}, Layout{{1, 6, 1170, 0}, 0xF0, 0x3E0, 0xC0, 68617},
-        Layout{{1, 7, 99, 0}, 0xF0, 0x3E8, 0xC0, 68617}, Layout{{1, 7, 104, 0}, 0xF0, 0x3E8, 0xC0, 68617}};
+        Layout{{1, 7, 99, 0}, 0xF0, 0x3E8, 0xC0, 68617}, Layout{{1, 7, 104, 0}, 0xF0, 0x3E8, 0xC0, 68617},
+        // Preserve the existing optional-library argument order; append 1.6.640.
+        Layout{{1, 6, 640, 0}, 0xE8, 0x3E0, 0xC0, 68617}};
     unsigned index = 0;
     for (const auto &layout : layouts)
     {

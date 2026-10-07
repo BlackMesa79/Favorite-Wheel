@@ -55,6 +55,8 @@ Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT
 Skyrim 1.5.97 and 1.6.1170 have been tested in-game.
+Skyrim 1.6.640 is supported starting with 0.3.18. Local runtime layout and
+address-library checks passed; in-game testing on 1.6.640 is pending.
 Skyrim 1.7.x is supported but has not yet been tested in-game; the exact
 supported 1.7 versions are 1.7.99 and 1.7.104. Use matching SKSE64 and Address
 Library v5 for those versions. Other runtimes and VR are not supported.

@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.3.17**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.3.18**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -25,10 +25,11 @@ Current version: **0.3.17**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu F
 | Skyrim runtime | Status |
 | --- | --- |
 | SE 1.5.97 | Tested in-game by a user on an earlier test build |
+| AE 1.6.640 | Supported by this build; in-game testing pending |
 | AE 1.6.1170 | Tested in-game, including the CommonLib dependency update |
 | 1.7.99 / 1.7.104 | Supported by this build; not yet tested in-game |
 
-The plugin accepts these four exact Steam runtimes. Other versions, GOG runtimes, and VR are not supported by this build. Support for these two 1.7 releases does not automatically cover future 1.7.x updates.
+The plugin accepts these five exact Steam runtimes. Other versions, GOG runtimes, and VR are not supported by this build. Support for these two 1.7 releases does not automatically cover future 1.7.x updates.
 
 Required:
 
@@ -36,7 +37,7 @@ Required:
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444), matching your game version. The supported 1.7 runtimes need their version-5 address databases.
 - Microsoft Visual C++ 2015–2022 x64 Redistributable.
 
-Keyboard, mouse, and controller controls are implemented. The new controller/chord controls and native quick-slot assignment still need in-game testing. Runtime test records do not certify every feature or every third-party mod combination.
+Keyboard, mouse, and controller controls are implemented. Controller/chord controls and native quick-slot assignment have received successful user testing on 1.6.1170. Runtime test records do not certify every feature or every third-party mod combination.
 
 ## Installation
 
@@ -183,7 +184,7 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.17.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.18.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
