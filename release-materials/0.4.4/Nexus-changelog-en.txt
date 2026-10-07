@@ -1,0 +1,6 @@
+0.4.4 test build
+- Keep preexisting movement directions while the live wheel is open; releasing a key stops that direction.
+- New movement presses inside the wheel only operate its UI. Still-held movement keys resume immediately after actual menu closure, including gameplay remaps.
+- Retain the left stick's opening movement vector until centered; new wheel aim does not redirect the character.
+- Remove native menu input context from the overlay; keep pause mode and action/click release protection.
+- Local input, time, settings, name editing, and runtime-layout checks passed. In-game movement/input-hook regression testing is pending.

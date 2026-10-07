@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.4.3**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.4.4**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -96,7 +96,9 @@ The opening button acts as navigation while the controller wheel is open; use B 
 
 Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. Item use and actions execute after the menu closes and its time control is released. Animations do not delay those actions. Spells and shouts are equipped for normal casting, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
 
-Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. Version 0.4.2 received positive in-game feedback; the 0.4.3 lifecycle and task-recovery fixes need a further in-game check. See [time mode notes](docs/TIME_MODE.md) and the [0.4.3 review](docs/REVIEW_0.4.3.md) for lifecycle, coexistence limits, and testing.
+Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. Version 0.4.2 received positive in-game feedback; subsequent recovery and movement fixes need further in-game checks. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
+
+In live modes, a movement direction held before opening is retained until you release that key. New movement-key presses inside the wheel only operate its UI; a key still held when both wheel menus close resumes movement immediately. Gameplay remaps are respected. The left stick retains its opening movement vector until centered, while still aiming the wheel; new stick movement from rest does not move the character until closing. Pause mode and settings/dialogs still pause the world. Attack clicks, opening keys, and other actions remain suppressed until release. These 0.4.4 changes need in-game regression testing.
 
 ## Native numerical shortcuts
 
@@ -192,13 +194,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.3.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.4.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.4.3 release materials](release-materials/0.4.3) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.4.4 release materials](release-materials/0.4.4) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

@@ -56,6 +56,45 @@ int main() {
     gate.Filter(30,true,false,true);
     gate.Reset();
     Check(gate.Filter(30,true,false,false)==R::Pass, "focus-loss reset recovers a lost release");
+    {
+        InputGate movement;
+        Check(IsMovementEvent("Forward") && IsMovementEvent("Back") && IsMovementEvent("Strafe Left") && IsMovementEvent("Strafe Right"),
+            "Only directional gameplay bindings identify movement regardless of the physical key");
+        Check(!IsMovementEvent("Left Attack/Block") && !IsMovementEvent("Jump") && !IsMovementEvent("Favorites") && !IsMovementEvent("Sprint"),
+            "Combat, entrances and toggle actions cannot acquire movement passthrough");
+        Check(movement.Filter(17,true,false,false,false,true)==R::Pass,"Movement starts in gameplay");
+        Check(movement.Filter(17,true,false,true,false,true)==R::Pass &&
+            movement.Filter(17,true,false,true,false,true)==R::Pass,"Opening preserves an already held direction without synthesizing release");
+        Check(movement.Filter(30,true,false,true,false,true)==R::Suppress &&
+            movement.Filter(30,true,false,true,false,true)==R::Suppress,"New wheel direction presses cannot change character direction");
+        Check(movement.Filter(17,false,true,true,false,true)==R::Pass,"Releasing preexisting movement while open reaches gameplay immediately");
+        Check(movement.Filter(17,true,false,true,false,true)==R::Suppress,"Re-pressing a released movement key only operates the wheel");
+        Check(movement.Filter(17,true,false,false,false,true)==R::Resume,"A UI-held W resumes immediately after actual close without physical re-press");
+        Check(movement.Filter(17,true,false,false,false,true)==R::Pass,"Resumed held movement does not emit repeated new presses");
+        Check(movement.Filter(17,false,true,false,false,true)==R::Pass,"Release after resume stops movement normally");
+        Check(movement.Filter(30,false,true,false,false,true)==R::Suppress,"A new UI movement key released at close emits no orphan gameplay release");
+        movement.Filter(17,true,false,false,false,true);
+        movement.Filter(17,true,false,true,false,true);
+        Check(movement.Filter(17,true,false,false,false,true)==R::Resume,"Preexisting held direction also re-establishes input after a paused dialog");
+        movement.Filter(256,true,false,true);
+        Check(movement.Filter(256,true,false,false)==R::Suppress && movement.Filter(256,false,true,false)==R::Suppress,
+            "Movement recovery cannot release a UI click into an attack");
+        movement.Filter(16,true,false,true);
+        Check(movement.Filter(16,true,false,false)==R::Suppress,"Wheel entrance remains swallowed until physical release");
+        movement.Reset();
+        Check(movement.Filter(17,true,false,true,false,true)==R::Suppress,"Focus/load reset cannot retain a stale allowed direction");
+        MovementStickGate stick;
+        auto filter=[&](float x,float y){stick.Filter(x,y);return std::array<float,2>{x,y};};
+        Check(filter(.3f,.8f)==std::array<float,2>{.3f,.8f},"Gameplay left stick passes normally");
+        stick.Capture(true);
+        Check(filter(-.9f,.1f)==std::array<float,2>{.3f,.8f},"Wheel aiming keeps the opening movement vector, not the new aim");
+        Check(filter(.05f,.1f)==std::array<float,2>{0,0},"Centering the stick stops the retained movement");
+        Check(filter(1,0)==std::array<float,2>{0,0},"New stick aim cannot restart movement inside the wheel");
+        stick.Capture(false);
+        Check(filter(1,0)==std::array<float,2>{1,0},"Closing immediately returns the current stick position to gameplay");
+        stick.Reset();stick.Capture(true);
+        Check(filter(0,1)==std::array<float,2>{0,0},"Idle or reset stick never starts movement on opening");
+    }
     Check(PlayerEligible(true,true,true,false,false), "normal player and humanoid vampire/custom race eligible without race playable flag");
     Check(!PlayerEligible(true,true,true,false,true), "beast form yields to vanilla");
     Check(!PlayerEligible(false,true,true,false,false) && !PlayerEligible(true,true,true,true,false), "loading and dead player cannot open");

@@ -104,7 +104,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 4, 3, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{0, 4, 4, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,
@@ -175,6 +175,9 @@ int wmain(int argc, wchar_t **argv)
         std::memcpy(&value, button.data() + 0x28, sizeof(value));
         std::memcpy(&held, button.data() + 0x2C, sizeof(held));
         Check(value == 0 && held == .5f && event->IsUp(), "input gate writes native button release");
+        event->GetRuntimeData().value=1.f;
+        event->GetRuntimeData().heldDownSecs=0.f;
+        Check(event->IsDown() && !event->IsHeld(),"Resumed movement writes a native fresh-down event at the correct offset");
         alignas(RE::ExtraHotkey) std::array<std::byte, 0x18> extraHotkey{};
         Write(extraHotkey,0x10,static_cast<std::uint8_t>(255));
         auto quick=reinterpret_cast<RE::ExtraHotkey*>(extraHotkey.data());

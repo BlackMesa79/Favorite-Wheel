@@ -62,6 +62,12 @@ SlowTimePercent defaults to 20 (5..100), relative to the existing game speed.
 Settings and outfit dialogs pause in every mode; UI animation timing is unchanged.
 The world keeps running in live modes. Detected external time changes close the
 wheel without overwriting the other source. Slow-time coexistence needs testing.
+In live modes, a direction held before opening remains active until released.
+New movement presses inside the wheel only operate its UI. Movement keys still
+held when both wheel menus close resume immediately; gameplay remaps are respected.
+Left-stick movement keeps the opening vector until centered; new aim from rest
+only selects entries. Attacks and opening keys retain release protection.
+Movement input changes in 0.4.4 need in-game testing, including other input hooks.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT

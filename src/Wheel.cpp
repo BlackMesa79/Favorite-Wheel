@@ -64,6 +64,7 @@ namespace Wheel {
         std::atomic<bool> updateLogged{false};
         std::atomic<float> viewportWidth{1280}, viewportHeight{900};
         InputGate inputGate;
+        MovementStickGate movementStick;
         std::mutex pauseMutex;
         bool pauseRequested=false;
         using Dispatch = void(RE::BSTEventSource<RE::InputEvent*>*, RE::InputEvent**);
@@ -673,7 +674,10 @@ namespace Wheel {
         }
         void InputHook(RE::BSTEventSource<RE::InputEvent*>* source, RE::InputEvent** events) {
             if (dispatchCount.fetch_add(1) == 0) SKSE::log::info("Input dispatch active (first callback)");
-            bool captureBatch = IsOpen() || closing || openQueued;
+            auto ui=RE::UI::GetSingleton();
+            bool captureBatch = IsOpen() || closing || openQueued ||
+                (ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)));
+            movementStick.Capture(captureBatch);
             if (IsOpen() && (!Focused() || !ValidPlayer() || BlockedMenu())) Cancel();
             const auto bridge=TextBridge::Query();
             bool characterBatch=false;
@@ -689,7 +693,7 @@ namespace Wheel {
                         const auto at=buttons.find(SKSE::InputMap::GamepadKeycodeToMask(i+266));
                         padHeld[i]=at!=buttons.end() && at->second && at->second->heldDownSecs>0;
                     }
-                } else {std::lock_guard lock(viewMutex);padX=padY=0;}
+                } else {movementStick.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
             }
             for(auto event=events?*events:nullptr;event;event=event->next) {
                 if(auto c=event->AsCharEvent();c && c->keyCode>=32)characterBatch=true;
@@ -833,15 +837,28 @@ namespace Wheel {
                         consume=true;
                     }
                     const bool wheelImpulse = button->GetDevice() == RE::INPUT_DEVICE::kMouse && code >= 8;
-                    const auto decision = inputGate.Filter(identity, pressed, up, consume, wheelImpulse);
+                    // Identify the physical gameplay binding, including remaps.
+                    // A wheel entrance takes priority even if bound to movement.
+                    auto controls=RE::ControlMap::GetSingleton();
+                    const auto device=button->GetDevice();
+                    const bool movement=!toggle && !ReplacedEntrance(button) && controls &&
+                        (device==RE::INPUT_DEVICE::kKeyboard || device==RE::INPUT_DEVICE::kMouse || device==RE::INPUT_DEVICE::kGamepad) &&
+                        IsMovementEvent(controls->GetUserEventName(code,button->GetDevice()));
+                    const auto decision = inputGate.Filter(identity, pressed, up,
+                        movement?captureBatch:consume, wheelImpulse, movement);
                     if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
                         ((code>=2 && code<=11) || code==82 || (code>=79 && code<=81)))
                         SKSE::log::info("Numeric shortcut input: scan={} event='{}' wheel={} queued={} closing={} filter={}",
                             code,button->GetUserEvent().c_str(),current.open,openQueued.load(),closing.load(),
-                            decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":"suppress");
-                    if (decision != InputGate::Result::Pass) {
-                        // Deliver one release for controls the engine already saw pressed before opening.
-                        // Suppress newly pressed wheel buttons through their physical release after closing.
+                            decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":
+                            decision==InputGate::Result::Resume?"resume":"suppress");
+                    if(decision==InputGate::Result::Resume) {
+                        // A held UI movement key needs a fresh down when gameplay
+                        // resumes, rather than waiting for a physical re-press.
+                        button->GetRuntimeData().heldDownSecs=0;
+                    } else if (decision != InputGate::Result::Pass) {
+                        // Release captured gameplay actions once; keep wheel
+                        // clicks/entrances suppressed through physical release.
                         auto& data = button->GetRuntimeData();
                         data.value = 0;
                         data.heldDownSecs = decision == InputGate::Result::Release ? std::max(.001f, data.heldDownSecs) : 0;
@@ -866,13 +883,15 @@ namespace Wheel {
                 } else if(auto character=event->AsCharEvent();character && captureBatch) {
                     const auto current=Snapshot();
                     if(current.outfitDialog!=1 && current.outfitDialog!=2)character->keyCode=0;
-                } else if (auto stick = event->AsThumbstickEvent(); stick && captureBatch) {
-                    stick->xValue = stick->yValue = 0;
+                } else if (auto stick = event->AsThumbstickEvent(); stick) {
+                    movementStick.Capture(captureBatch);
+                    if(stick->IsLeft())movementStick.Filter(stick->xValue,stick->yValue);
+                    else if(captureBatch)stick->xValue=stick->yValue=0;
                 }
             }
             previousDispatch(source, events);
             if (!Focused()) {
-                inputGate.Reset();shiftHeld[0]=shiftHeld[1]=false;
+                inputGate.Reset();movementStick.Reset();shiftHeld[0]=shiftHeld[1]=false;
                 std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
@@ -890,8 +909,9 @@ namespace Wheel {
         public:
             WheelMenu() {
                 depthPriority = 3;
-                menuFlags.set(Flag::kDisablePauseMenu, Flag::kUsesMenuContext,Flag::kRequiresUpdate);
-                inputContext = Context::kMenuMode;
+                // This is an input-gated overlay. Native menu mode resets held
+                // gameplay movement; input ownership is handled in InputHook.
+                menuFlags.set(Flag::kDisablePauseMenu,Flag::kRequiresUpdate);
             }
             static RE::IMenu* Create() { return new WheelMenu; }
             RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
@@ -1018,7 +1038,7 @@ namespace Wheel {
         gameActive = active;
         Cancel();
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
-        inputGate.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
+        inputGate.Reset();movementStick.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
         { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
             view.items.clear();view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);
