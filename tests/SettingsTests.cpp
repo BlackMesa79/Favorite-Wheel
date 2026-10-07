@@ -123,7 +123,8 @@ int main() {
     LoadResources(automaticRoot.string());
     Check(ActiveLanguage(edited)==detected && Tr(edited,"settings")=="Auto translated" && FontPath(edited)=="Detected.ttf","Automatic mode resolves real Windows UI locale for text and font together");
     Check(LanguageLabel(edited)=="System (Detected UI)","Automatic label includes the resolved language name");
-    Check(Tr(edited,"apply")=="APPLY" && Tr(edited,"outfitTitle")=="OUTFIT PRESETS" && Tr(edited,"lightWrongThread").starts_with("Face Lighting rejected"),"Incomplete automatic catalog has complete English fallbacks");
+    Check(Tr(edited,"apply")=="APPLY" && Tr(edited,"outfitTitle")=="OUTFIT PRESETS" && Tr(edited,"lightWrongThread").starts_with("Face Lighting rejected") &&
+        Tr(edited,"quickSlotHint")=="HOVER + 1-8 BIND / UNBIND QUICK SLOT","Incomplete automatic catalog has complete English fallbacks");
     Check(WheelSlot(2,0)==-1 && WheelSlot(0,-1)==0 && WheelSlot(0,0)==-1,"Free pointer cannot use outside wheel or in center");
     Check(!applyButton.Contains(cancelButton.x+10,cancelButton.y+10),"Apply and cancel do not overlap");
     for(bool controls:{false,true})for(int slot=0;slot<SettingCount(controls);++slot) {

@@ -99,7 +99,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 3, 16, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{0, 3, 17, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,
@@ -163,6 +163,17 @@ int wmain(int argc, wchar_t **argv)
         std::memcpy(&value, button.data() + 0x28, sizeof(value));
         std::memcpy(&held, button.data() + 0x2C, sizeof(held));
         Check(value == 0 && held == .5f && event->IsUp(), "input gate writes native button release");
+        alignas(RE::ExtraHotkey) std::array<std::byte, 0x18> extraHotkey{};
+        Write(extraHotkey,0x10,static_cast<std::uint8_t>(255));
+        auto quick=reinterpret_cast<RE::ExtraHotkey*>(extraHotkey.data());
+        Check(quick->hotkey.underlying()==255,"native unbound favorite marker");
+        quick->hotkey=RE::ExtraHotkey::Hotkey::kSlot8;
+        Check(extraHotkey[0x10]==std::byte{7},"quick-slot assignment writes native instance byte");
+        quick->hotkey=RE::ExtraHotkey::Hotkey::kUnbound;
+        Check(extraHotkey[0x10]==std::byte{255},"unbinding retains ExtraHotkey marker and writes unbound value");
+        alignas(RE::MagicFavorites) std::array<std::byte,0x40> magicFavorites{};
+        const auto favoriteData=reinterpret_cast<RE::MagicFavorites*>(magicFavorites.data());
+        Check(reinterpret_cast<const std::byte*>(&favoriteData->hotkeys)==magicFavorites.data()+0x28,"native magic quick-slot array offset");
         alignas(RE::BSGraphics::Renderer) std::array<std::byte, 0x3000> graphics{};
         // Flat render data starts at 0x10; swap chain 0x58+0x18,
         // UI framebuffer RTV 0xA58+0x10. Never dereference sentinel pointers.

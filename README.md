@@ -1,12 +1,12 @@
 # Favorite Wheel - Radial Actions
 
-![Favorite Wheel - Radial Actions](release-materials/0.3.16/FavoriteWheel-cover-1280.png)
+![Favorite Wheel - Radial Actions](release-materials/0.3.15/FavoriteWheel-cover-1280.png)
 
 **Your favorites and actions, at your fingertips.**
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.3.15**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.3.17**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -36,7 +36,7 @@ Required:
 - [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444), matching your game version. The supported 1.7 runtimes need their version-5 address databases.
 - Microsoft Visual C++ 2015–2022 x64 Redistributable.
 
-Keyboard and mouse are supported. Gamepad navigation is not implemented. Testing does not certify every feature on every runtime or every third-party mod combination. The previous 0.3.13 build was confirmed in-game on 1.6.1170; the new automatic language selection still needs in-game verification.
+Keyboard, mouse, and controller controls are implemented. The new controller/chord controls and native quick-slot assignment still need in-game testing. Runtime test records do not certify every feature or every third-party mod combination.
 
 ## Installation
 
@@ -63,6 +63,7 @@ The supplied INI uses `Language=auto`: follow the Windows display language, then
 | Change category | A / D or Left / Right |
 | Change page | W / S, Up / Down, or mouse wheel |
 | Select an entry | Mouse; return to the center to clear selection |
+| Assign / unassign native quick slot | Hover a favorite and press 1–8 (no modifiers) |
 | Use/equip right hand/execute | Left click or Enter |
 | Equip left hand, where supported | Right click |
 | Manage an outfit preset | Right click on the preset |
@@ -87,6 +88,14 @@ Controller controls (Xbox names; equivalent PlayStation buttons use the same pos
 The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the left stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB select the appearance/control settings tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
 
 Opening the wheel pauses gameplay. Item use and actions execute after the menu closes and gameplay resumes. Animations do not delay those actions. Spells and shouts are equipped for normal casting, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
+
+## Native numerical shortcuts
+
+Hover an item, spell, or shout in the favorites wheel and press **1–8** to assign a native quick slot. Press the same number on that entry again to clear its binding. Binding a used number replaces its previous occupant; assigning a different number moves the selected entry to that slot. The item stays favorited when unbound. Assigned entries show their native number on the sector, including assignments already present in your save.
+
+Close the wheel and press the number during gameplay to use the assigned favorite through Skyrim's normal shortcut handler. **Save the game after changing bindings.** These bindings use Skyrim's native item/spell data rather than a second mod-owned quick-slot list. Binding does not activate the item and does not close the wheel. Numerical assignment is disabled in action-wheel pages, settings and naming dialogs. If a number is also configured as a wheel entrance/mode switch, that wheel control takes priority; choose a different control to bind that slot.
+
+Skyrim provides eight native slots. **9 and 0 are not added as extra native slots**; other mods' expanded shortcuts continue to receive their inputs outside the wheel. Game-provided `Hotkey1`–`Hotkey8` remaps are recognized for assignment; the unmodified top-row 1–8 keys work inside the wheel even without such events. If existing shortcuts still fail with the wheel closed, include the new `Numeric shortcut input` log entries; passing input alone does not prove an external shortcut integration handled it.
 
 ## Outfit presets
 
@@ -174,7 +183,7 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.15.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.3.17.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 

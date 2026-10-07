@@ -35,6 +35,10 @@ modifiers. Old configuration files retain Q and Shift+Q defaults.
 Controller: Favorites binding opens; LB + Favorites opens actions; left stick
 selects; A uses; X equips left hand/manages; LB/RB change categories; D-Pad
 Up/Down changes pages; Y switches wheels; B closes; Start opens settings.
+Hover a favorite and press 1-8 to bind/unbind a native quick slot. Assigned
+entries show their number. Close the wheel and use the normal gameplay shortcut.
+Save the game after changing bindings. Native slots are 1-8; this does not add
+9/0 slots. Other mods' extended shortcuts pass through outside the wheel.
 Controller main key and modifiers are configurable. In settings, the left stick
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 

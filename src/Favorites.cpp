@@ -4,6 +4,7 @@
 #include "UIResources.h"
 #include "EquipPolicy.h"
 #include "ItemInfoCapture.h"
+#include "QuickSlots.h"
 #include <chrono>
 
 namespace Wheel {
@@ -94,6 +95,8 @@ namespace Wheel {
                 if (!name || !*name) name = object->GetName();
                 result.push_back({Key(object, extra), Classify(object), name && *name ? name : "?", amount,
                     extra->HasType<RE::ExtraWorn>() || extra->HasType<RE::ExtraWornLeft>(), false, Supported(object), ActionKind::Favorite, 0, ClassifyIcon(object)});
+                const auto assigned=static_cast<int>(extra->GetByType<RE::ExtraHotkey>()->hotkey.underlying());
+                result.back().quickSlot=ValidQuickSlot(assigned)?assigned:-1;
                 if(includeInfo)result.back().info=CaptureItemInfo(object,extra,player);
             }
         }
@@ -110,6 +113,8 @@ namespace Wheel {
                         equipped |= player->GetEquippedObjectInSlot(slot) == form;
                 }
                 result.push_back({{form->GetFormID()}, Category::Magic, name && *name ? name : "?", 1, equipped, true, true});
+                for(int slot=0;slot<nativeQuickSlots && slot<static_cast<int>(favorites->hotkeys.size());++slot)
+                    if(favorites->hotkeys[slot]==form){result.back().quickSlot=slot;break;}
                 if(includeInfo && spell)result.back().info=CaptureSpellInfo(spell,player);
             }
         }
@@ -123,6 +128,53 @@ namespace Wheel {
         const auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
         if(elapsed>8)SKSE::log::info("Favorites snapshot: items={} details={} total_ms={:.2f}",result.size(),includeInfo,elapsed);
         return result;
+    }
+
+    bool BindFavoriteQuickSlot(const Item& requested,int slot) {
+        if(!ValidQuickSlot(slot) || requested.action!=ActionKind::Favorite)return false;
+        auto player=RE::PlayerCharacter::GetSingleton();
+        auto magic=RE::MagicFavorites::GetSingleton();
+        if(!player || !magic || ActorRuntime::IsDead(player))return false;
+        // Revalidate the exact inventory instance before using its borrowed extra list.
+        const auto current=CollectFavorites(false);
+        const auto found=std::find_if(current.begin(),current.end(),[&](const Item& item){return item.key==requested.key;});
+        if(found==current.end()){Notify("changed");return false;}
+        RE::ExtraHotkey* target=nullptr;
+        RE::TESForm* spell=nullptr;
+        if(found->magic) {
+            spell=RE::TESForm::LookupByID<RE::TESForm>(found->key.form);
+            if(!spell || (!spell->As<RE::SpellItem>() && !spell->As<RE::TESShout>()))return false;
+        } else {
+            auto extra=reinterpret_cast<RE::ExtraDataList*>(found->key.extra);
+            target=extra?extra->GetByType<RE::ExtraHotkey>():nullptr;
+            if(!target)return false;
+        }
+        const int next=AssignedQuickSlot(found->quickSlot,slot);
+        // Allocate the magic-slot array before modifying anything else.
+        // Do not truncate slots owned by extensions beyond the native eight.
+        if(spell && next>=0 && magic->hotkeys.size()<nativeQuickSlots)magic->hotkeys.resize(nativeQuickSlots);
+        auto inventory=player->GetInventory();
+        bool inventoryChanged=false;
+        for(auto& [object,data]:inventory) {
+            const auto& [count,entry]=data;
+            if(!object || count<=0 || !entry || !entry->extraLists)continue;
+            for(auto extra:*entry->extraLists)if(extra)if(auto hotkey=extra->GetByType<RE::ExtraHotkey>()) {
+                const int old=static_cast<int>(hotkey->hotkey.underlying());
+                const int replacement=ReassignedQuickSlot(old,hotkey==target,slot,next);
+                if(replacement!=old) {
+                    // kUnbound keeps the ExtraHotkey: removing it would also unfavorite the item.
+                    hotkey->hotkey=static_cast<RE::ExtraHotkey::Hotkey>(replacement);
+                    inventoryChanged=true;
+                }
+            }
+        }
+        if(inventoryChanged)player->AddChange(static_cast<std::uint32_t>(RE::TESObjectREFR::ChangeFlags::kInventory));
+        for(std::size_t i=0;i<std::min<std::size_t>(magic->hotkeys.size(),nativeQuickSlots);++i)
+            if(i==static_cast<std::size_t>(slot) || (spell && magic->hotkeys[i]==spell))magic->hotkeys[i]=nullptr;
+        if(spell && next>=0)magic->hotkeys[next]=spell;
+        SKSE::log::info("Favorite quick slot: form={:08X} extra={:X} key={} assignment={}",
+            found->key.form,found->key.extra,slot+1,next<0?"unbound":"bound");
+        return true;
     }
 
     void UseFavorite(const Item& requested, bool leftHand) {

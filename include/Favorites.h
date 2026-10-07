@@ -30,7 +30,9 @@ namespace Wheel {
         std::string detail;
         FaceLightingAPI::Request lightRequest;
         ItemInfo info;
+        int quickSlot=-1; // Native 1..8 index; unrelated to the radial sector index.
     };
     std::vector<Item> CollectFavorites(bool includeInfo=true); // Game thread only; never dereference engine data in Draw.
     void UseFavorite(const Item& item, bool leftHand);
+    bool BindFavoriteQuickSlot(const Item& item,int slot); // Game-thread inventory mutation, never from Draw.
 }

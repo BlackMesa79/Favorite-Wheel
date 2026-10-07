@@ -5,6 +5,7 @@
 #include "InputGate.h"
 #include "OpenPolicy.h"
 #include "InputBindings.h"
+#include "QuickSlots.h"
 #include "ActorRuntime.h"
 #include "ActionPolicy.h"
 #include "UIResources.h"
@@ -240,6 +241,29 @@ namespace Wheel {
                 pendingAction = PendingAction{selected, left, epoch.load(), std::chrono::steady_clock::now() + std::chrono::seconds(2)};
             }
             Cancel(true);
+        }
+        void BindQuickSlot(int slot) {
+            const auto current=Snapshot();
+            const int radial=WheelSlot(current.x,current.y),index=current.page*slots+radial;
+            if(current.functions || current.settingsOpen || current.outfitDialog || radial<0 || index<0 ||
+                index>=static_cast<int>(current.items.size()) || !ValidQuickSlot(slot))return;
+            const auto selected=current.items[index];
+            const auto generation=epoch.load(),serial=openSerial.load();
+            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected,slot,generation,serial] {
+                const auto now=Snapshot();
+                if(generation!=epoch.load() || serial!=openSerial.load() || !now.open || now.functions ||
+                    now.settingsOpen || now.outfitDialog || !Focused() || !ValidPlayer() || BlockedMenu())return;
+                if(!BindFavoriteQuickSlot(selected,slot))return;
+                const auto assigned=CollectFavorites(false);
+                std::lock_guard lock(viewMutex);
+                if(generation!=epoch.load() || serial!=openSerial.load() || !view.open || view.functions)return;
+                // Preserve expensive item-info snapshots and cursor/category state.
+                for(auto& item:allItems) {
+                    item.quickSlot=-1;
+                    for(const auto& fresh:assigned)if(item.key==fresh.key){item.quickSlot=fresh.quickSlot;break;}
+                }
+                FilterItems();
+            });
         }
         std::optional<PendingAction> TakeAction(ActionExecutor executor) {
             std::lock_guard lock(actionMutex);
@@ -595,7 +619,9 @@ namespace Wheel {
                         else if (!OpenBlockReason()) { RequestOpen(opening==Opening::Actions); consume = captureBatch = true; }
                     } else if (down && IsOpen() && !inputGate.Swallowed(identity)) {
                         if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
-                            switch (code) {
+                            const int quickSlot=QuickSlotFromKey(code,button->GetUserEvent().c_str());
+                            if(!current.functions && HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
+                            else switch (code) {
                             case 1: case 15: if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true); break; // Esc / Tab
                             case 30: case 203: ChangeCategory(-1); break; // A / left
                             case 32: case 205: ChangeCategory(1); break; // D / right
@@ -628,8 +654,8 @@ namespace Wheel {
                     const bool wheelImpulse = button->GetDevice() == RE::INPUT_DEVICE::kMouse && code >= 8;
                     const auto decision = inputGate.Filter(identity, pressed, up, consume, wheelImpulse);
                     if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
-                        (code==82 || code==79 || code==80 || code==81))
-                        SKSE::log::info("Numpad input: scan={} event='{}' wheel={} queued={} closing={} filter={}",
+                        ((code>=2 && code<=11) || code==82 || (code>=79 && code<=81)))
+                        SKSE::log::info("Numeric shortcut input: scan={} event='{}' wheel={} queued={} closing={} filter={}",
                             code,button->GetUserEvent().c_str(),current.open,openQueued.load(),closing.load(),
                             decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":"suppress");
                     if (decision != InputGate::Result::Pass) {

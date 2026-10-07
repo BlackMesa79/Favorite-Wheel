@@ -3,11 +3,13 @@
 #include "InputGate.h"
 #include "OpenPolicy.h"
 #include "InputBindings.h"
+#include "QuickSlots.h"
 #include "ActionPolicy.h"
 #include "EquipPolicy.h"
 #include "NavigationPresentation.h"
 #include <cstdlib>
 #include <iostream>
+#include <array>
 void Check(bool ok, const char* message) { if (!ok) { std::cerr << message << '\n'; std::exit(1); } }
 int main() {
     using namespace Wheel;
@@ -61,7 +63,7 @@ int main() {
     Check(!FavoritesKeyMatches(-1,0xFFFFFFFF,33,"Favorites"), "unmapped semantic events are not wheel entry keys");
     Check(!FavoritesKeyMatches(-1,0xFFFFFFFF,16,"") && !FavoritesKeyMatches(-1,255,16,"ToggleFavorite"), "unbound key and inventory ToggleFavorite do not open wheel");
     Check(!FavoritesKeyMatches(44,16,16,"Favorites") && FavoritesKeyMatches(44,16,44,""), "explicit override takes priority");
-    for(unsigned key:{82u,79u,80u,81u,2u,3u,4u,5u}) {
+    for(unsigned key:{82u,79u,80u,81u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u}) {
         Check(!FavoritesKeyMatches(-1,16,key,"Favorites"),"quick slots cannot impersonate the physical Favorites binding");
         Check(KeyboardOpening(key,0,16,0,16,1)==Opening::None,"quick slots cannot open either default wheel");
         InputGate shortcuts;
@@ -78,6 +80,23 @@ int main() {
     Check(sx==0 && sy==-1,"controller Y axis points up on screen");
     AimStick(sx,sy,.1f,.1f);Check(sx==0 && sy==-1,"releasing stick preserves selection for confirmation");
     Check(StickAxis(.19f)==0 && StickAxis(1)==1 && StickAxis(-1)==-1,"settings pointer deadzone and full range");
+    for(unsigned key=2;key<=9;++key)Check(QuickSlotFromKey(key,"")==static_cast<int>(key)-2,"1..8 map to native quick slots, not radial sectors");
+    Check(QuickSlotFromKey(10,"")==-1 && QuickSlotFromKey(11,"")==-1 && QuickSlotFromKey(82,"")==-1,"9/0 and unmapped Numpad are not invented native slots");
+    Check(QuickSlotFromKey(79,"Hotkey1")==0 && QuickSlotFromKey(80,"Hotkey8")==7 && QuickSlotFromKey(2,"Hotkey3")==2,"explicit game slot remaps take priority");
+    Check(QuickSlotFromKey(79,"Hotkey9")==-1 && QuickSlotFromKey(81,"Hotkey10")==-1,"extension events are not coerced to native slots");
+    Check(QuickSlotFromKey(2,"Hotkey9")==-1 && QuickSlotFromKey(3,"Hotkey10")==-1,"extension slot remaps override the physical number fallback");
+    Check(AssignedQuickSlot(-1,3)==3 && AssignedQuickSlot(2,3)==3 && AssignedQuickSlot(3,3)==-1,"assign, move and toggle the same native slot");
+    for(int invalid:{-1,8,255})Check(ReassignedQuickSlot(2,true,invalid,-1)==2,"invalid slot request preserves existing data");
+    // A single native slot namespace spans exact armor/weapon instances and spells.
+    // Replacing armor with a spell clears just that slot; moving/toggling the
+    // selected item leaves every unrelated slot and extension slot intact.
+    std::array<int,5> assignments{0,3,7,-1,9};
+    auto assign=[&](int selected,int requested){const int next=AssignedQuickSlot(assignments[selected],requested);
+        for(int i=0;i<static_cast<int>(assignments.size());++i)assignments[i]=ReassignedQuickSlot(assignments[i],i==selected,requested,next);};
+    assign(3,3);Check(assignments==std::array<int,5>{0,-1,7,3,9},"spell replacement clears the old item in the requested slot");
+    assign(3,7);Check(assignments==std::array<int,5>{0,-1,-1,7,9},"moving a spell releases its old slot and the new slot occupant");
+    assign(1,7);Check(assignments==std::array<int,5>{0,7,-1,-1,9},"item replacement clears the old spell without touching extensions");
+    assign(1,7);Check(assignments==std::array<int,5>{0,-1,-1,-1,9},"same-key toggle keeps unrelated native and extension bindings");
     std::cout << "Wheel logic tests passed\n";
     using A = ActionDecision;
     Check(DecideAction(1,1,true,true,false,false,false)==A::Wait, "wait for queued hide");

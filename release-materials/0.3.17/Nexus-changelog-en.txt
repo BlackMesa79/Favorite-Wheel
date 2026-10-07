@@ -1,0 +1,5 @@
+0.3.17
+- Added native favorites quick-slot assignment: hover an entry and press 1-8 to bind or unbind it.
+- Assigned favorites display their native slot number, including existing save bindings.
+- Reassigning a slot replaces its previous occupant; clearing a slot keeps the item favorited.
+- Gameplay shortcuts use Skyrim's normal handler; 9/0 and other extended shortcuts remain untouched outside the wheel.

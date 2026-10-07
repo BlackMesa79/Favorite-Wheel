@@ -71,6 +71,7 @@ int main(int argc, char** argv) {
         const char* names[]={"乌木铠甲（传奇）","龙鳞头盔","附魔龙骨重甲靴","夜莺手套","阿祖拉的守护护符","银制蓝宝石戒指","魔抗乌木盾","龙鳞护腕","法术消耗降低的精致法袍","铁制头盔"};
         constexpr Wheel::IconKind icons[]={Wheel::IconKind::Armor,Wheel::IconKind::Helmet,Wheel::IconKind::Boots,Wheel::IconKind::Gloves,Wheel::IconKind::Amulet,Wheel::IconKind::Ring,Wheel::IconKind::Shield,Wheel::IconKind::Gloves,Wheel::IconKind::Robe,Wheel::IconKind::Helmet};
         for(int i=0;i<23;++i) Wheel::preview.items.push_back({{},Wheel::Category::Armor,names[i%10],1,i==2,false,true,Wheel::ActionKind::Favorite,0,icons[i%10]});
+        for(int i=0;i<8;++i)Wheel::preview.items[i].quickSlot=i;
     }
     if(argc>4 && (std::string(argv[4])=="functions" || std::string(argv[4])=="functions-no-light" || std::string(argv[4])=="manage" || std::string(argv[4])=="name" || std::string(argv[4])=="name-long" || std::string(argv[4])=="confirm-delete" || std::string(argv[4])=="confirm-overwrite")) {
         Wheel::preview.functions=true;

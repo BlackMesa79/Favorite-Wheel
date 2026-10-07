@@ -5,6 +5,7 @@
 #include "UILayout.h"
 #include "UIResources.h"
 #include "Wheel.h"
+#include "QuickSlots.h"
 #include "WheelFonts.h"
 #include "WheelIcons.h"
 #include <algorithm>
@@ -683,10 +684,17 @@ namespace Wheel
                     Text(d, {at.x, at.y + 36 * s}, Fit(state, 12 * s, 112 * s), 12 * s,
                          Alpha(item.equipped ? t.accent : t.muted, pageFade), 0, t.textShadow * pageFade);
                     if (item.equipped)
-                        Diamond(d, At(c, bladeOuter - 17 * s, bladeAngle), 3 * s, Alpha(t.accent, pageFade));
+                        Diamond(d, At(c, bladeOuter - 17 * s, bladeAngle+(ValidQuickSlot(item.quickSlot)?.07f:0.f)), 3 * s, Alpha(t.accent, pageFade));
+                    if(ValidQuickSlot(item.quickSlot)) {
+                        const auto badge=At(c,bladeOuter-18*s,bladeAngle);
+                        const float radius=9*s;
+                        d->AddCircleFilled(badge,radius,t.panel|0xFF000000u,24);
+                        d->AddCircle(badge,radius,Alpha(t.accent,pageFade),24,s);
+                        Text(d,badge,std::to_string(item.quickSlot+1),12*s,Alpha(t.accent,pageFade));
+                    }
                     if (!item.usable)
                     {
-                        const auto mark = At(c, bladeOuter - 17 * s, bladeAngle);
+                        const auto mark = At(c, bladeOuter - 17 * s, bladeAngle-(ValidQuickSlot(item.quickSlot)?.07f:0.f));
                         d->AddLine({mark.x - 3 * s, mark.y}, {mark.x + 3 * s, mark.y}, Alpha(t.muted, pageFade),
                                    1.5f * s);
                     }
@@ -740,7 +748,8 @@ namespace Wheel
             if (config.showHints)
             {
                 const float left = c.x - 282 * s, right = c.x + 282 * s, top = c.y + 328 * s;
-                d->AddRectFilled({left, top}, {right, top + 48 * s}, Alpha(t.panel, .85f), 6 * s);
+                const bool quickHint=!v.functions && !v.gamepad;
+                d->AddRectFilled({left, top}, {right, top + (quickHint?68:48) * s}, Alpha(t.panel, .85f), 6 * s);
                 d->AddLine({left + 12 * s, top}, {right - 12 * s, top}, Alpha(t.border, .45f), s);
                 Text(
                     d, {c.x, top + 14 * s},
@@ -759,6 +768,7 @@ namespace Wheel
                                                                                                   : "dualWheelHint"),
                          12 * s, 535 * s),
                      12 * s, t.muted, 0, t.textShadow);
+                if(quickHint)Text(d,{c.x,top+56*s},Fit(tr("quickSlotHint"),12*s,535*s),12*s,t.muted,0,t.textShadow);
             }
             Reveal(d, footerStart, frameReveal, {0, -8 * s * (1 - frameReveal)});
         }
