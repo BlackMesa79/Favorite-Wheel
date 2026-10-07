@@ -7,6 +7,8 @@
 #include "InputBindings.h"
 #include "QuickSlots.h"
 #include "InventoryPages.h"
+#include "TimeControl.h"
+#include "TimePolicy.h"
 #include "ActorRuntime.h"
 #include "ActionPolicy.h"
 #include "UIResources.h"
@@ -27,6 +29,9 @@ namespace Wheel {
         bool inventoryLoaded=false,inventoryScope=false;
         std::atomic<std::uint64_t> directoryRevision{0};
         std::atomic<bool> directoryTaskQueued{false},detailTaskQueued{false};
+        std::atomic<std::uint64_t> inventoryChanges{0};
+        std::uint64_t inventoryStamp=0; // viewMutex held.
+        std::chrono::steady_clock::time_point nextInventoryRefresh{};
         std::optional<ItemKey> hoverKey;
         std::chrono::steady_clock::time_point hoverStarted;
         int favoritePage=0,functionPage=0;
@@ -53,6 +58,8 @@ namespace Wheel {
         std::atomic<bool> updateLogged{false};
         std::atomic<float> viewportWidth{1280}, viewportHeight{900};
         InputGate inputGate;
+        std::mutex pauseMutex;
+        bool pauseRequested=false;
         using Dispatch = void(RE::BSTEventSource<RE::InputEvent*>*, RE::InputEvent**);
         REL::Relocation<Dispatch> previousDispatch;
         std::atomic<std::uint64_t> dispatchCount{0};
@@ -116,6 +123,26 @@ namespace Wheel {
             if (controls->GetRuntimeData().textEntryCount > 0) return "text input active";
             return nullptr;
         }
+        void RequestPause(bool pause) {
+            std::lock_guard lock(pauseMutex);
+            if(pauseRequested==pause)return;
+            if(auto queue=RE::UIMessageQueue::GetSingleton()) {
+                pauseRequested=pause;
+                queue->AddMessage(pauseMenuName,pause?RE::UI_MESSAGE_TYPE::kShow:RE::UI_MESSAGE_TYPE::kHide,nullptr);
+            }
+        }
+        void SyncWheelTime() {
+            bool open,settings;int dialog;
+            {std::lock_guard lock(viewMutex);open=view.open;settings=view.settingsOpen;dialog=view.outfitDialog;}
+            if(!open){TimeControl::EndSession();RequestPause(false);return;}
+            if(!RendererReady() || !Focused() || !ValidPlayer() || BlockedMenu()){Cancel();return;}
+            const auto config=Config();
+            const bool pause=PauseForWheel(config.timeMode,settings,dialog);
+            if(!TimeControl::Update(!pause && config.timeMode==1,config.slowPercent)) {
+                SKSE::log::warn("Wheel canceled: time state could not be safely maintained");Cancel();return;
+            }
+            RequestPause(pause);
+        }
         void PublishPage(ItemPage page) { // viewMutex held
             view.items=std::move(page.items);view.itemOffset=page.offset;view.totalItems=page.total;
         }
@@ -123,7 +150,11 @@ namespace Wheel {
             if(view.functions)PublishPage(SlicePage(functionItems,0,functionItems.size(),view.page));
             else PublishPage(inventoryPages.Page(view.category,view.page));
         }
-        void PublishDirectory(std::vector<Item> items,bool scope) { // viewMutex held
+        void PublishDirectory(std::vector<Item> items,bool scope,bool preserveSelection=false) { // viewMutex held
+            const int oldSlot=WheelSlot(view.x,view.y),oldIndex=PageItemIndex(view,oldSlot);
+            const auto oldKey=oldSlot>=0 && oldIndex>=0 && oldIndex<int(view.items.size())?
+                std::optional<ItemKey>{view.items[oldIndex].key}:std::optional<ItemKey>{};
+            ++directoryRevision; // Invalidates details for the replaced catalog.
             inventoryPages.Set(std::move(items));inventoryLoaded=true;inventoryScope=scope;view.inventoryLoading=false;
             view.inventoryWide=scope;
             if(!view.functions) {
@@ -131,25 +162,43 @@ namespace Wheel {
                     inventoryPages.boundaries[int(view.category)]==inventoryPages.boundaries[int(view.category)+1])
                     view.category=inventoryPages.items.front().category;
                 favoriteCategoryChosen=true;FilterItems();
+                const int newIndex=PageItemIndex(view,oldSlot);
+                const auto newKey=oldSlot>=0 && newIndex>=0 && newIndex<int(view.items.size())?
+                    std::optional<ItemKey>{view.items[newIndex].key}:std::optional<ItemKey>{};
+                if(preserveSelection && oldSlot>=0 && oldKey!=newKey)
+                    view.x=view.y=0; // A changing live inventory must never silently replace the selected item.
             }
         }
-        void RequestDirectory() {
+        void RequestDirectory(bool refresh=false) {
             // Clear a previous wheel/page even when an older request is still queued.
             // The input pump retries after that stale task releases the queue flag.
-            {std::lock_guard lock(viewMutex);view.inventoryLoading=true;if(!view.functions)PublishPage({});}
+            if(!refresh){std::lock_guard lock(viewMutex);view.inventoryLoading=true;if(!view.functions)PublishPage({});}
             if(directoryTaskQueued.exchange(true))return;
             const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
+            const auto stamp=inventoryChanges.load();
             const bool scope=Config().allInventory;
-            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,serial,revision,scope] {
+            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,serial,revision,scope,stamp,refresh] {
                 if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
                     IsOpen() && Focused() && ValidPlayer() && !BlockedMenu()) {
                     auto items=CollectInventory(scope);
                     std::lock_guard lock(viewMutex);
-                    if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() && view.open)
-                        PublishDirectory(std::move(items),scope);
+                    if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() && view.open) {
+                        PublishDirectory(std::move(items),scope,refresh);inventoryStamp=stamp;
+                    }
                 }
                 directoryTaskQueued=false;
             });else directoryTaskQueued=false;
+        }
+        void PumpLiveInventory() {
+            const auto now=std::chrono::steady_clock::now();
+            bool refresh=false;
+            {std::lock_guard lock(viewMutex);
+                if(view.open && !view.functions && !view.settingsOpen && !view.outfitDialog && inventoryLoaded &&
+                    Config().timeMode!=0 && inventoryStamp!=inventoryChanges.load() && now>=nextInventoryRefresh && !directoryTaskQueued) {
+                    nextInventoryRefresh=now+std::chrono::milliseconds(250);refresh=true;
+                }
+            }
+            if(refresh)RequestDirectory(true);
         }
         void RefreshFunctions() {
             const auto section=Snapshot().functionSection;
@@ -175,12 +224,14 @@ namespace Wheel {
         void Open(bool functions) {
             FaceLight::Capture(); // After the previous player-update hook, before pause.
             const bool scope=Config().allInventory;
+            const auto stamp=inventoryChanges.load();
             auto items=functions?std::vector<Item>{}:CollectInventory(scope);
             {
                 std::lock_guard lock(viewMutex);
                 view.faceLightAvailable=FaceLight::Available();
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
                 ++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
+                inventoryStamp=stamp;nextInventoryRefresh=std::chrono::steady_clock::now();
                 PublishPage({});
                 view.inventoryGlyphs.clear();view.inventoryWide=scope;view.inventoryLoading=false;
                 view.open = true; view.animateClose=false; view.functions=functions;view.functionSection=functionCategory;view.outfitDialog=0; view.settingsOpen = view.capturingKey = view.saveError = false;
@@ -189,9 +240,11 @@ namespace Wheel {
                 if(!functions)PublishDirectory(std::move(items),scope);
             }
             if(functions)RefreshFunctions();
+            TimeControl::BeginSession();SyncWheelTime();
+            if(!IsOpen())return;
             RE::UIMessageQueue::GetSingleton()->AddMessage(menuName, RE::UI_MESSAGE_TYPE::kShow, nullptr);
             if(Config().sounds) RE::PlaySound("UIMenuOK");
-            SKSE::log::info("Wheel opened: mode={} scope={} entries={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size());
+            SKSE::log::info("Wheel opened: mode={} scope={} entries={} timeMode={} slowPercent={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size(),Config().timeMode,Config().slowPercent);
         }
         void RequestOpen(bool functions) {
             std::lock_guard lock(openMutex);
@@ -244,12 +297,13 @@ namespace Wheel {
             FilterItems();
         }
         void OutfitDialog(int mode,std::uint32_t id,const std::string& name) {
-            std::lock_guard lock(viewMutex);view.outfitDialog=mode;view.outfitId=id;view.outfitName.Set(name);view.x=view.y=0;
+            {std::lock_guard lock(viewMutex);view.outfitDialog=mode;view.outfitId=id;view.outfitName.Set(name);view.x=view.y=0;}
+            SyncWheelTime();
         }
         void EndOutfitDialog() {
             if(Snapshot().outfitDialog==1 || Snapshot().outfitDialog==2)TextBridge::Reset();
             {std::lock_guard lock(viewMutex);view.outfitDialog=0;view.x=view.y=0;}
-            RefreshFunctions();
+            SyncWheelTime();RefreshFunctions();
         }
         void Activate(bool left) {
             const auto current = Snapshot();
@@ -310,8 +364,9 @@ namespace Wheel {
             if(!current.open || current.functions || current.settingsOpen || current.outfitDialog || current.inventoryLoading ||
                 radial<0 || index<0 || index>=static_cast<int>(current.items.size())){hoverKey.reset();return;}
             const auto& item=current.items[index];
-            if(item.infoReady)return;
             const auto now=std::chrono::steady_clock::now();
+            const auto tick=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+            if(item.infoReady && (current.config.timeMode==0 || tick-item.infoReadAt<500))return;
             if(!hoverKey || *hoverKey!=item.key){hoverKey=item.key;hoverStarted=now;return;}
             if(now-hoverStarted<std::chrono::milliseconds(80) || detailTaskQueued.exchange(true))return;
             const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
@@ -333,6 +388,8 @@ namespace Wheel {
                     if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
                         view.open && catalogIndex<inventoryPages.items.size() && inventoryPages.items[catalogIndex].key==selected.key) {
                         auto& cached=inventoryPages.items[catalogIndex];cached.info=std::move(info);cached.infoReady=true;
+                        cached.infoReadAt=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count());
                         if(!valid)cached.detail=Tr(Config(),"changed");
                         if(!view.functions)for(auto& visible:view.items)if(visible.key==cached.key)visible=cached;
                     }
@@ -347,8 +404,8 @@ namespace Wheel {
             const auto decision=DecideActionOn(executor,
                 ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand),
                 pendingAction->generation,epoch.load(),
-                ui && ValidPlayer() && Focused() && !BlockedMenu(),closing,
-                ui && ui->IsMenuOpen(menuName),ui && ui->GameIsPaused(),
+                ui && ValidPlayer() && Focused() && !BlockedMenu(),closing || TimeControl::Active(),
+                ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)),ui && ui->GameIsPaused(),
                 std::chrono::steady_clock::now()>=pendingAction->deadline);
             if(decision==ActionDecision::Wait)return {};
             auto submit=decision==ActionDecision::Submit?std::move(pendingAction):std::optional<PendingAction>{};
@@ -380,6 +437,7 @@ namespace Wheel {
             previousPlayerUpdate(player,delta);
             if(!updateLogged.exchange(true))SKSE::log::info("Wheel player-update callback active: thread={}",GetCurrentThreadId());
             if(auto submit=TakeAction(ActionExecutor::PlayerUpdate))FaceLight::Execute(submit->item);
+            if(IsOpen())SyncWheelTime();
             PumpOpen();
         }
         void InstallPlayerUpdate() {
@@ -436,9 +494,10 @@ namespace Wheel {
 
         void EnterSettings() {
             BeginSettings();
-            std::lock_guard lock(viewMutex);
-            view.settingsOpen=true; view.capturingKey=false; view.settingsControls=false; view.saveError=false;
-            view.x=view.y=0;
+            {std::lock_guard lock(viewMutex);
+                view.settingsOpen=true; view.capturingKey=false; view.settingsTab=0; view.saveError=false;
+                view.x=view.y=0;}
+            SyncWheelTime();
         }
         void LeaveSettings(bool save) {
             if (save && !SaveSettings()) { std::lock_guard lock(viewMutex); view.saveError=true; return; }
@@ -455,6 +514,7 @@ namespace Wheel {
                 }
             }
             if(reload)RequestDirectory();
+            SyncWheelTime();
         }
         void AdjustSetting(int row,int direction) {
             auto config=Config();
@@ -478,6 +538,8 @@ namespace Wheel {
             case 16: config.gamepadModifier=Wrap((config.gamepadModifier<0?0:config.gamepadModifier-265)+direction,17);config.gamepadModifier=config.gamepadModifier?config.gamepadModifier+265:-1; break;
             case 17: config.gamepadActionModifier=Wrap((config.gamepadActionModifier<0?0:config.gamepadActionModifier-265)+direction,17);config.gamepadActionModifier=config.gamepadActionModifier?config.gamepadActionModifier+265:-1; break;
             case 18: config.allInventory=!config.allInventory; break;
+            case 19: config.timeMode=Wrap(config.timeMode+direction,3); break;
+            case 20: config.slowPercent+=direction*5; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -486,14 +548,14 @@ namespace Wheel {
             const auto current=Snapshot();
             const float x=current.x*224, y=current.y*224;
             if (current.capturingKey) return;
-            if(generalTab.Contains(x,y) || controlsTab.Contains(x,y)) {
-                std::lock_guard lock(viewMutex);view.settingsControls=controlsTab.Contains(x,y);return;
+            if(generalTab.Contains(x,y) || controlsTab.Contains(x,y) || gameplayTab.Contains(x,y)) {
+                std::lock_guard lock(viewMutex);view.settingsTab=gameplayTab.Contains(x,y)?2:controlsTab.Contains(x,y)?1:0;return;
             }
             if (applyButton.Contains(x,y) && !right) { LeaveSettings(true); return; }
             if (cancelButton.Contains(x,y) && !right) { LeaveSettings(false); return; }
             if (defaultsButton.Contains(x,y) && !right) { DefaultSettings(); return; }
-            for (int slot=0;slot<SettingCount(current.settingsControls);++slot) {
-                const int row=SettingRow(current.settingsControls,slot);
+            for (int slot=0;slot<SettingCount(current.settingsTab);++slot) {
+                const int row=SettingRow(current.settingsTab,slot);
                 if(!BindingRow(row) && MinusButton(slot).Contains(x,y)) { AdjustSetting(row,-1); return; }
                 if(!BindingRow(row) && PlusButton(slot).Contains(x,y)) { AdjustSetting(row,1); return; }
                 if(ValueButton(slot).Contains(x,y)) {
@@ -687,7 +749,7 @@ namespace Wheel {
                         } else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse && code<2) SettingsClick(code==1);
                         else if(pad==276 || pad==278)SettingsClick(pad==278);
                         else if(pad==277)LeaveSettings(false);
-                        else if(pad==274 || pad==275){std::lock_guard lock(viewMutex);view.settingsControls=pad==275;}
+                        else if(pad==274 || pad==275){std::lock_guard lock(viewMutex);view.settingsTab=Wrap(view.settingsTab+(pad==275?1:-1),3);}
                     } else if (down && current.open && !inputGate.Swallowed(identity) &&
                         ((button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==60) || pad==270)) {
                         EnterSettings(); // Remains reachable even if Favorites itself is bound to F2.
@@ -776,35 +838,89 @@ namespace Wheel {
                 std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
+            if(IsOpen())SyncWheelTime();
             PumpAction();
             {const auto current=Snapshot();if(current.open && !current.functions && !current.settingsOpen && !current.outfitDialog) {
                 bool needed;{std::lock_guard lock(viewMutex);needed=!inventoryLoaded;}
                 if(needed)RequestDirectory();
             }}
+            PumpLiveInventory();
             PumpDetails();
         }
 
-        class PauseMenu final : public RE::IMenu {
+        class WheelMenu final : public RE::IMenu {
         public:
-            PauseMenu() {
+            WheelMenu() {
                 depthPriority = 3;
-                menuFlags.set(Flag::kPausesGame, Flag::kDisablePauseMenu, Flag::kUsesMenuContext);
+                menuFlags.set(Flag::kDisablePauseMenu, Flag::kUsesMenuContext,Flag::kRequiresUpdate);
                 inputContext = Context::kMenuMode;
             }
-            static RE::IMenu* Create() { return new PauseMenu; }
+            static RE::IMenu* Create() { return new WheelMenu; }
             RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
                 if (message.type == RE::UI_MESSAGE_TYPE::kHide || message.type == RE::UI_MESSAGE_TYPE::kForceHide) {
+                    const auto old=Snapshot();
+                    if(old.outfitDialog==1 || old.outfitDialog==2)TextBridge::Reset();
+                    TimeControl::EndSession();RequestPause(false);
                     RevertSettings();
                     std::lock_guard lock(viewMutex);
                     if(view.open) view.animateClose=false;
                     view.open = false;view.outfitDialog=0; view.settingsOpen=view.capturingKey=false; closing = false;
                     return RE::UI_MESSAGE_RESULTS::kHandled;
                 }
-                if (message.type == RE::UI_MESSAGE_TYPE::kShow) return RE::UI_MESSAGE_RESULTS::kHandled;
+                if (message.type == RE::UI_MESSAGE_TYPE::kShow) {
+                    if(IsOpen())SyncWheelTime();
+                    else if(auto q=RE::UIMessageQueue::GetSingleton())q->AddMessage(menuName,RE::UI_MESSAGE_TYPE::kHide,nullptr);
+                    return RE::UI_MESSAGE_RESULTS::kHandled;
+                }
                 return RE::UI_MESSAGE_RESULTS::kPassOn;
             }
-            void AdvanceMovie(float, std::uint32_t) override {}
+            void AdvanceMovie(float, std::uint32_t) override {SyncWheelTime();}
             void PostDisplay() override {}
+        };
+
+        class MenuObserver final : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
+            RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* event,RE::BSTEventSource<RE::MenuOpenCloseEvent>*)override {
+                if(event && event->opening && event->menuName!=menuName && event->menuName!=pauseMenuName && IsOpen()) {
+                    auto ui=RE::UI::GetSingleton();auto menu=ui?ui->GetMenu(event->menuName.c_str()):nullptr;
+                    if(BlockedMenu() || (menu && (menu->PausesGame() || menu->Modal() || menu->ApplicationMenu())))Cancel();
+                }
+                return RE::BSEventNotifyControl::kContinue;
+            }
+        };
+
+        // A separate fixed-flag menu lets the engine balance its pause counters.
+        // Never toggle kPausesGame on an existing menu or modify UI pause counts.
+        class PauseGuardMenu final : public RE::IMenu {
+        public:
+            PauseGuardMenu(){depthPriority=2;menuFlags.set(Flag::kPausesGame,Flag::kDisablePauseMenu);}
+            static RE::IMenu* Create(){return new PauseGuardMenu;}
+            RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
+                if(message.type==RE::UI_MESSAGE_TYPE::kShow) {
+                    bool wanted;{std::lock_guard lock(pauseMutex);wanted=pauseRequested;}
+                    if(!wanted)if(auto q=RE::UIMessageQueue::GetSingleton())q->AddMessage(pauseMenuName,RE::UI_MESSAGE_TYPE::kHide,nullptr);
+                }else if(message.type==RE::UI_MESSAGE_TYPE::kHide || message.type==RE::UI_MESSAGE_TYPE::kForceHide) {
+                    bool wanted;{std::lock_guard lock(pauseMutex);wanted=pauseRequested;}
+                    if(wanted && IsOpen()) {
+                        if(message.type==RE::UI_MESSAGE_TYPE::kForceHide)Cancel();
+                        else if(auto q=RE::UIMessageQueue::GetSingleton())q->AddMessage(pauseMenuName,RE::UI_MESSAGE_TYPE::kShow,nullptr);
+                    }
+                }
+                return RE::UI_MESSAGE_RESULTS::kHandled;
+            }
+            void AdvanceMovie(float,std::uint32_t)override{}
+            void PostDisplay()override{}
+        };
+
+        // Event callbacks only invalidate a stamp; scans are coalesced by the input pump.
+        class InventoryObserver final : public RE::BSTEventSink<RE::TESContainerChangedEvent>,public RE::BSTEventSink<RE::TESEquipEvent> {
+            RE::BSEventNotifyControl ProcessEvent(const RE::TESContainerChangedEvent* event,RE::BSTEventSource<RE::TESContainerChangedEvent>*)override {
+                if(event && (event->oldContainer==0x14 || event->newContainer==0x14))++inventoryChanges;
+                return RE::BSEventNotifyControl::kContinue;
+            }
+            RE::BSEventNotifyControl ProcessEvent(const RE::TESEquipEvent* event,RE::BSTEventSource<RE::TESEquipEvent>*)override {
+                if(event && event->actor.get()==RE::PlayerCharacter::GetSingleton())++inventoryChanges;
+                return RE::BSEventNotifyControl::kContinue;
+            }
         };
 
         // Receives the final event chain, including characters injected by inner hooks.
@@ -842,6 +958,7 @@ namespace Wheel {
         const auto current=Snapshot();
         if(current.outfitDialog==1 || current.outfitDialog==2)TextBridge::Reset();
         RevertSettings();
+        TimeControl::EndSession();RequestPause(false);
         bool wasOpen;
         { std::lock_guard lock(viewMutex); wasOpen = view.open;if(view.functions){if(view.functionSection==FaceLight::Section::Outfits)functionPage=view.page;}else favoritePage=view.page; view.open = false;view.outfitDialog=0; view.animateClose=effects; view.settingsOpen=view.capturingKey=false; }
         if (wasOpen) {
@@ -874,7 +991,15 @@ namespace Wheel {
             SKSE::log::error("Input dispatch call signature is unsupported; vanilla favorites retained");
             return false;
         }
-        ui->Register(menuName, PauseMenu::Create);
+        ui->Register(menuName, WheelMenu::Create);
+        ui->Register(pauseMenuName,PauseGuardMenu::Create);
+        static MenuObserver menuObserver;
+        ui->AddEventSink<RE::MenuOpenCloseEvent>(&menuObserver);
+        if(auto events=RE::ScriptEventSourceHolder::GetSingleton()) {
+            static InventoryObserver observer;
+            events->AddEventSink<RE::TESContainerChangedEvent>(&observer);
+            events->AddEventSink<RE::TESEquipEvent>(&observer);
+        }
         SKSE::AllocTrampoline(32);
         previousDispatch = SKSE::GetTrampoline().write_call<5>(address, InputHook);
         if (auto input = RE::BSInputDeviceManager::GetSingleton()) {

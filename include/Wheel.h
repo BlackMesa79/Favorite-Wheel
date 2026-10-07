@@ -6,6 +6,7 @@
 #include <vector>
 namespace Wheel {
     inline constexpr const char* menuName = "FavoriteWheelMenu";
+    inline constexpr const char* pauseMenuName = "FavoriteWheelPauseMenu";
     struct View {
         bool functions=false;
         bool faceLightAvailable=false;
@@ -16,7 +17,8 @@ namespace Wheel {
         std::string inventoryGlyphs;
         bool open = false;
         bool animateClose = false;
-        bool settingsOpen = false, capturingKey = false, settingsControls=false, gamepad=false, saveError = false;
+        bool settingsOpen = false, capturingKey = false, gamepad=false, saveError = false;
+        int settingsTab=0; // 0 appearance, 1 controls, 2 gameplay.
         int captureBinding=0; // favorites, actions, switch, controller favorites
         Settings config;
         Category category = Category::Weapons;

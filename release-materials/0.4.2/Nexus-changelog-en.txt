@@ -1,0 +1,7 @@
+0.4.2 test build
+- Added Pause (default), Slow time, and Normal speed modes. Relative slow-time speed defaults to 20%, adjustable from 5–100%.
+- Added Gameplay settings for item source and time behavior; LB/RB cycle all three tabs.
+- Settings and outfit dialogs temporarily pause in every mode.
+- Release wheel slowdown on close; yield and close when an external multiplier change is detected.
+- Coalesce live inventory changes and clear selection if a refresh replaces the selected entry.
+- Local logic, UI, and five runtime address-library checks passed. In-game slow-time testing is pending.

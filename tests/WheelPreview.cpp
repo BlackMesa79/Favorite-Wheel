@@ -34,12 +34,13 @@ int main(int argc, char** argv) {
     if(argc>8)config.overlayOpacity=std::atoi(argv[8]);
     if(argc>9)config.positionX=std::atoi(argv[9]);
     if(argc>10)config.positionY=std::atoi(argv[10]);
-    if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls"))config.allInventory=true;
+    if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay"))config.allInventory=true;
+    if(argc>4 && std::string(argv[4])=="gameplay"){config.timeMode=1;config.slowPercent=20;}
     Wheel::EditSettings(config);
     Wheel::preview.config=config;
     Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";
-    if(argc>4 && (std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad" || std::string(argv[4])=="inventory-controls")) {
-        Wheel::preview.settingsOpen=true;Wheel::preview.settingsControls=true;
+    if(argc>4 && (std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")) {
+        Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=(std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")?2:1;
     }
     Wheel::preview.gamepad=argc>4 && (std::string(argv[4])=="pad" || std::string(argv[4])=="controls-pad");
     ComPtr<ID3D11Device> device;

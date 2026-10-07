@@ -33,6 +33,7 @@ namespace Wheel {
         int quickSlot=-1; // Native 1..8 index; unrelated to the radial sector index.
         bool favorited=true;
         bool infoReady=false;
+        std::uint64_t infoReadAt=0; // Steady-clock milliseconds; live modes refresh hovered details at most twice/second.
         bool inventoryWide=false;
     };
     std::vector<Item> CollectFavorites(bool includeInfo=true); // Game thread only; never dereference engine data in Draw.

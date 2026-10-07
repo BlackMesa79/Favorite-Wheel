@@ -52,11 +52,16 @@ Translation guide: https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/
 Outfit edits require a game save. Preserve matching .skse co-saves.
 Weapons, shields, and ammunition are excluded from outfit presets.
 Item source defaults to Favorites only (General / AllInventory=0).
-Q -> F2 -> Controls -> Item source -> All inventory -> Apply shows carried items.
+Q -> F2 -> Gameplay -> Item source -> All inventory -> Apply shows carried items.
 Spells/shouts remain favorites only; native 1-8 assignment requires a favorite.
 Books, ingredients, miscellaneous items and poisons cannot be directly used.
 Pages carry at most ten entries and hover details load on demand; initial
 inventory scanning/sorting and new font glyphs can still cost time in large saves.
+F2 -> Gameplay -> Time behavior offers Pause (default), Slow time and Normal speed.
+SlowTimePercent defaults to 20 (5..100), relative to the existing game speed.
+Settings and outfit dialogs pause in every mode; UI animation timing is unchanged.
+The world keeps running in live modes. Detected external time changes close the
+wheel without overwriting the other source. Slow-time coexistence needs testing.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT

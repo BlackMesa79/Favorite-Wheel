@@ -1,6 +1,6 @@
 # 轮盘减速与全部背包模式：可行性评估
 
-日期：2026-10-07（Asia/Hong_Kong）。历史评估基线0.4.0；评估当时未改变代码或部署。后续用户授权全部背包开关，0.4.1已实现，见[INVENTORY_MODE.md](INVENTORY_MODE.md)。减速模式仍仅评估，未实现。
+日期：2026-10-07（Asia/Hong_Kong）。历史评估基线0.4.0；评估当时未改变代码或部署。后续用户授权全部背包开关，0.4.1已实现，见[INVENTORY_MODE.md](INVENTORY_MODE.md)。0.4.2后续已实现时间模式测试版，见[TIME_MODE.md](TIME_MODE.md)。本文保留实施前评估记录。
 
 ## 结论
 

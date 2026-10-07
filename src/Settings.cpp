@@ -22,6 +22,8 @@ namespace Wheel {
             result.pop_back(); return result;
         }
         void Clamp(Settings& v) {
+            v.timeMode=std::clamp(v.timeMode,0,2);
+            v.slowPercent=std::clamp(v.slowPercent,5,100);
             v.scale = std::clamp(v.scale,.6f,1.5f);
             v.wheelScale = std::clamp(v.wheelScale,.6f,1.5f);
             v.positionX=std::clamp(v.positionX,0,100);
@@ -49,6 +51,8 @@ namespace Wheel {
         settings = Settings{};
         settings.enabled = number(L"General",L"Enabled",1) != 0;
         settings.allInventory = number(L"General",L"AllInventory",0) != 0;
+        settings.timeMode=number(L"General",L"TimeMode",0);
+        settings.slowPercent=number(L"General",L"SlowTimePercent",20);
         const auto legacyLanguage = Read(L"General",L"Chinese","");
         settings.language = Read(L"General",L"Language",legacyLanguage.empty() ? "auto" :
             (number(L"General",L"Chinese",1) ? "zh_CN" : "en"));
@@ -106,6 +110,8 @@ namespace Wheel {
         };
         const bool ok = write(L"General",L"Language",settings.language) &&
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
+            write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&
+            write(L"General",L"SlowTimePercent",std::to_string(settings.slowPercent)) &&
             write(L"Display",L"Theme",settings.theme) &&
             write(L"Display",L"ShowHints",settings.showHints?"1":"0") &&
             write(L"Display",L"WheelScalePercent",std::to_string(static_cast<int>(settings.wheelScale*100+.5f))) &&

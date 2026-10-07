@@ -18,11 +18,19 @@ int main() {
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
     Check(!Config().allInventory,"Fresh installs show only favorites");
+    Check(Config().timeMode==0 && Config().slowPercent==20,"Fresh installs retain pause and a 20% optional slowdown");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     SetSettingsPath(path.string()); LoadSettings();
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
+    Check(Config().timeMode==0 && Config().slowPercent==20,"Old INIs retain pause without new time keys");
+    BeginSettings();auto timeSettings=Config();timeSettings.timeMode=1;timeSettings.slowPercent=30;
+    EditSettings(timeSettings);RevertSettings();Check(Config().timeMode==0,"Cancel restores time mode");
+    BeginSettings();EditSettings(timeSettings);Check(SaveSettings(),"Save slow-time settings");LoadSettings();
+    Check(Config().timeMode==1 && Config().slowPercent==30,"Time mode and factor survive reload");
+    BeginSettings();DefaultSettings();Check(Config().timeMode==0 && Config().slowPercent==20,"Defaults restore pause and 20% factor");RevertSettings();
+    Check(Config().timeMode==1 && Config().slowPercent==30,"Canceling defaults retains slow time");
     BeginSettings();auto inventorySettings=Config();inventorySettings.allInventory=true;
     EditSettings(inventorySettings);RevertSettings();Check(!Config().allInventory,"Cancelled item-source edit restores favorites");
     BeginSettings();EditSettings(inventorySettings);Check(SaveSettings(),"Save all-inventory source");LoadSettings();
@@ -86,7 +94,8 @@ int main() {
     GetPrivateProfileStringW(L"Custom",L"Keep",L"",value,32,std::filesystem::absolute(path).c_str());
     Check(std::wstring(value)==L"123","Unrelated INI keys survive");
     BeginSettings(); DefaultSettings(); RevertSettings(); Check(Config()==edited,"Defaults can be canceled");
-    BeginSettings(); auto clamped=Config();clamped.wheelScale=99;clamped.positionX=-10;clamped.positionY=999;clamped.overlayOpacity=999;clamped.scale=99;clamped.sensitivity=-5; EditSettings(clamped);
+    BeginSettings(); auto clamped=Config();clamped.wheelScale=99;clamped.positionX=-10;clamped.positionY=999;clamped.overlayOpacity=999;clamped.scale=99;clamped.sensitivity=-5;clamped.timeMode=99;clamped.slowPercent=-1; EditSettings(clamped);
+    Check(Config().timeMode==2 && Config().slowPercent==5,"Time bounds enforced");
     Check(Config().scale==1.5f && Config().sensitivity==.2f,"Bounds enforced");
     Check(Config().wheelScale==1.5f && Config().positionX==0 && Config().positionY==100 && Config().overlayOpacity==80,"Layout and dimming bounds enforced");
     SetSettingsPath(root.string()); Check(!SaveSettings(),"Save failure reported");
@@ -135,10 +144,12 @@ int main() {
         Tr(edited,"quickSlotHint")=="HOVER + 1-8 BIND / UNBIND QUICK SLOT","Incomplete automatic catalog has complete English fallbacks");
     Check(WheelSlot(2,0)==-1 && WheelSlot(0,-1)==0 && WheelSlot(0,0)==-1,"Free pointer cannot use outside wheel or in center");
     Check(!applyButton.Contains(cancelButton.x+10,cancelButton.y+10),"Apply and cancel do not overlap");
-    for(bool controls:{false,true})for(int slot=0;slot<SettingCount(controls);++slot) {
+    for(int tab:{0,1,2})for(int slot=0;slot<SettingCount(tab);++slot) {
         const auto valueRect=ValueButton(slot);
         Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
-        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
+        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
     }
+    Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
+    Check(SettingCount(2)==3 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20,"Gameplay tab groups source, time mode and speed");
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
 }

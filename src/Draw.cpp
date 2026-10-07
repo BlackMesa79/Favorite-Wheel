@@ -365,13 +365,14 @@ namespace Wheel
             const auto &config = v.config;
             const auto &t = Style(config);
             auto tr = [&](const char *key) { return Tr(config, key); };
-            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.gamepad?"padSettingsHelp":v.settingsControls?"keyboardControlsHelp":"layoutSettingsHelp"));
-            Button(d,c,s,v,generalTab,tr("settingsGeneral"),!v.settingsControls);
-            Button(d,c,s,v,controlsTab,tr("settingsControls"),v.settingsControls);
+            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.gamepad?"padSettingsHelp":v.settingsTab==2?"gameplaySettingsHelp":v.settingsTab==1?"keyboardControlsHelp":"layoutSettingsHelp"));
+            Button(d,c,s,v,generalTab,tr("settingsGeneral"),v.settingsTab==0);
+            Button(d,c,s,v,controlsTab,tr("settingsControls"),v.settingsTab==1);
+            Button(d,c,s,v,gameplayTab,tr("settingsGameplay"),v.settingsTab==2);
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -388,10 +389,11 @@ namespace Wheel
                                           key(config.switchKey),ModifierLabel(config,config.hotkeyModifier),
                                           config.actionHotkey<0?tr("followFavorite"):key(config.actionHotkey),ModifierLabel(config,config.actionModifier),
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
-                                          tr(config.allInventory?"scopeAll":"scopeFavorites")};
-            for (int slot = 0; slot < SettingCount(v.settingsControls); ++slot)
+                                          tr(config.allInventory?"scopeAll":"scopeFavorites"),
+                                          tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%"};
+            for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
-                const int row=SettingRow(v.settingsControls,slot);
+                const int row=SettingRow(v.settingsTab,slot);
                 const float top = -173.f + slot * 31;
                 const float size = 16 * s * t.labelScale;
                 if (slot % 2 == 0)
@@ -406,12 +408,13 @@ namespace Wheel
                 }
                 Button(d, c, s, v, ValueButton(slot),v.capturingKey && v.captureBinding==row?"...":values[row]);
             }
-            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsControls?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
+            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==2?"timeSettingsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
-            if(v.settingsControls) {
+            if(v.settingsTab==1) {
                 const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
                 Text(d,{c.x,c.y+145*s},Fit(tr(conflict?"bindingConflict":"controlsBindHint"),14*s,610*s),14*s,conflict?t.accent:t.muted);
             }
+            if(v.settingsTab==2)Text(d,{c.x,c.y+10*s},Wrapped(tr("slowTimeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             Button(d, c, s, v, defaultsButton, tr("defaults"));
             Button(d, c, s, v, cancelButton, tr("cancel"));
             Button(d, c, s, v, applyButton, tr("apply"), true);

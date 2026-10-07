@@ -40,7 +40,12 @@ namespace
         REL::RelocationID(515124, 401263), // menu controls singleton
         REL::RelocationID(516858, 403337), // magic favorites singleton
         REL::RelocationID(37939, 38895),   // EquipSpell
-        REL::RelocationID(37941, 38897)    // EquipShout
+        REL::RelocationID(37941, 38897),   // EquipShout
+        REL::RelocationID(523657, 410196), // BSTimer singleton
+        REL::RelocationID(511882, 388442), // current global multiplier
+        REL::RelocationID(511883, 388443), // target global multiplier
+        REL::RelocationID(66988, 68245),   // SetGlobalTimeMultiplier
+        REL::RelocationID(14108, 14298)   // ScriptEventSourceHolder for live inventory dirty events
     };
     void AddressLibrary(const wchar_t *path)
     {
@@ -99,7 +104,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 4, 1, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{0, 4, 2, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,
@@ -155,6 +160,10 @@ int wmain(int argc, wchar_t **argv)
         const auto actorOffset = layout.state == 0xB8 ? 0xE0 : 0xE8;
         Check(reinterpret_cast<std::byte *>(&character->GetActorRuntimeData()) == player.data() + actorOffset,
               "versioned actor runtime block");
+        alignas(RE::BSTimer) std::array<std::byte,0x40> timerBytes{};
+        Write(timerBytes,0x34,static_cast<std::uint32_t>(2));Write(timerBytes,0x3A,true);
+        auto timer=reinterpret_cast<RE::BSTimer*>(timerBytes.data());
+        Check(timer->pauseCount==2 && timer->useGlobalTimeMultiplierTarget,"Native timer nested-pause/target fields keep their offsets");
         alignas(RE::ButtonEvent) std::array<std::byte, 0x38> button{};
         Write(button, 0x28, 1.f);
         Write(button, 0x2C, 0.f);

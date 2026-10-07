@@ -10,11 +10,12 @@ namespace Wheel {
     inline constexpr Rect outfitNameButton{-270,-180,540,48};
     inline constexpr Rect outfitOverwriteButton{-270,-95,260,44}, outfitDeleteButton{10,-95,260,44};
     inline constexpr Rect outfitExportButton{-270,-30,540,44};
-    inline constexpr Rect generalTab{-285,-210,275,28}, controlsTab{10,-210,275,28};
+    inline constexpr Rect generalTab{-285,-210,180,28}, controlsTab{-90,-210,180,28}, gameplayTab{105,-210,180,28};
     inline constexpr int GeneralRows[]{0,1,2,3,4,6,7,8,9,10};
-    inline constexpr int ControlRows[]{5,12,13,14,11,15,16,17,18};
-    inline int SettingRow(bool controls,int slot){return controls?ControlRows[slot]:GeneralRows[slot];}
-    inline int SettingCount(bool controls){return controls?9:10;}
+    inline constexpr int ControlRows[]{5,12,13,14,11,15,16,17};
+    inline constexpr int GameplayRows[]{18,19,20};
+    inline int SettingRow(int tab,int slot){return tab==2?GameplayRows[slot]:tab==1?ControlRows[slot]:GeneralRows[slot];}
+    inline int SettingCount(int tab){return tab==2?3:tab==1?8:10;}
     inline bool BindingRow(int row){return row==5 || row==11 || row==13 || row==15;}
     inline Rect MinusButton(int row){return {40,-173.f+row*31,34,28};}
     inline Rect PlusButton(int row){return {252,-173.f+row*31,34,28};}

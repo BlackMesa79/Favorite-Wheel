@@ -4,6 +4,8 @@ namespace Wheel {
     struct Settings {
         bool enabled = true;
         bool allInventory = false;
+        int timeMode = 0; // 0 pause, 1 slow, 2 unchanged game speed.
+        int slowPercent = 20; // Relative to the pre-wheel current/target multipliers.
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
         std::string theme = "classic";
         bool showHints = true;
