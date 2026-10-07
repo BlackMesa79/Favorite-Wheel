@@ -23,7 +23,12 @@ namespace Wheel {
         int page = 0;
         float x = 0, y = 0;
         std::vector<Item> items;
+        // Runtime views carry only the visible page. Legacy/synthetic previews may carry a full list.
+        int itemOffset=0, totalItems=-1;
+        bool inventoryWide=false,inventoryLoading=false;
     };
+    inline std::size_t ItemCount(const View& v){return v.totalItems<0?v.items.size():static_cast<std::size_t>(v.totalItems);}
+    inline int PageItemIndex(const View& v,int slot){return v.page*slots+slot-v.itemOffset;}
     View Snapshot();
     bool IsOpen();
     bool InstallWheel();

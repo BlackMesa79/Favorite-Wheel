@@ -6,6 +6,7 @@
 #include "OpenPolicy.h"
 #include "InputBindings.h"
 #include "QuickSlots.h"
+#include "InventoryPages.h"
 #include "ActorRuntime.h"
 #include "ActionPolicy.h"
 #include "UIResources.h"
@@ -21,7 +22,13 @@ namespace Wheel {
     namespace {
         std::mutex viewMutex;
         View view;
-        std::vector<Item> allItems;
+        InventoryPages inventoryPages;
+        std::vector<Item> functionItems;
+        bool inventoryLoaded=false,inventoryScope=false;
+        std::atomic<std::uint64_t> directoryRevision{0};
+        std::atomic<bool> directoryTaskQueued{false},detailTaskQueued{false};
+        std::optional<ItemKey> hoverKey;
+        std::chrono::steady_clock::time_point hoverStarted;
         int favoritePage=0,functionPage=0;
         bool favoriteCategoryChosen=false; // Session-local navigation, independent of wheel mode.
         FaceLight::Section functionCategory=FaceLight::Section::Outfits; // Remember the top-level type, not a child list.
@@ -109,52 +116,82 @@ namespace Wheel {
             if (controls->GetRuntimeData().textEntryCount > 0) return "text input active";
             return nullptr;
         }
-        void FilterItems() { // viewMutex held
-            if(view.functions)return;
-            view.items.clear();
-            for (const auto& item : allItems) if (item.category == view.category) view.items.push_back(item);
-            view.page = std::clamp(view.page, 0, PageCount(view.items.size()) - 1);
+        void PublishPage(ItemPage page) { // viewMutex held
+            view.items=std::move(page.items);view.itemOffset=page.offset;view.totalItems=page.total;
+        }
+        void FilterItems() { // viewMutex held; O(10), independent of category size.
+            if(view.functions)PublishPage(SlicePage(functionItems,0,functionItems.size(),view.page));
+            else PublishPage(inventoryPages.Page(view.category,view.page));
+        }
+        void PublishDirectory(std::vector<Item> items,bool scope) { // viewMutex held
+            inventoryPages.Set(std::move(items));inventoryLoaded=true;inventoryScope=scope;view.inventoryLoading=false;
+            view.inventoryWide=scope;
+            if(!view.functions) {
+                if(!favoriteCategoryChosen && !inventoryPages.items.empty() &&
+                    inventoryPages.boundaries[int(view.category)]==inventoryPages.boundaries[int(view.category)+1])
+                    view.category=inventoryPages.items.front().category;
+                favoriteCategoryChosen=true;FilterItems();
+            }
+        }
+        void RequestDirectory() {
+            // Clear a previous wheel/page even when an older request is still queued.
+            // The input pump retries after that stale task releases the queue flag.
+            {std::lock_guard lock(viewMutex);view.inventoryLoading=true;if(!view.functions)PublishPage({});}
+            if(directoryTaskQueued.exchange(true))return;
+            const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
+            const bool scope=Config().allInventory;
+            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,serial,revision,scope] {
+                if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
+                    IsOpen() && Focused() && ValidPlayer() && !BlockedMenu()) {
+                    auto items=CollectInventory(scope);
+                    std::lock_guard lock(viewMutex);
+                    if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() && view.open)
+                        PublishDirectory(std::move(items),scope);
+                }
+                directoryTaskQueued=false;
+            });else directoryTaskQueued=false;
         }
         void RefreshFunctions() {
             const auto section=Snapshot().functionSection;
             auto entries=section==FaceLight::Section::Outfits?Outfits::Entries():FaceLight::Entries(section);
             std::lock_guard lock(viewMutex);
-            view.items=std::move(entries);view.page=std::clamp(view.page,0,PageCount(view.items.size())-1);
+            functionItems=std::move(entries);FilterItems();
         }
         void SwitchWheel() {
-            bool functions;
+            bool functions,needsDirectory=false;
             {std::lock_guard lock(viewMutex);
                 if(view.functions){if(view.functionSection==FaceLight::Section::Outfits)functionPage=view.page;}else favoritePage=view.page;
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
                 functions=view.functions=!view.functions;view.functionSection=functionCategory;
                 view.page=functions?(functionCategory==FaceLight::Section::Outfits?functionPage:0):favoritePage;view.x=view.y=0;
-                if(!functions){favoriteCategoryChosen=true;FilterItems();}
+                if(!functions) {
+                    needsDirectory=!inventoryLoaded || inventoryScope!=Config().allInventory;
+                    if(!needsDirectory)FilterItems();
+                }
             }
             if(functions)RefreshFunctions();
+            else if(needsDirectory)RequestDirectory();
         }
         void Open(bool functions) {
             FaceLight::Capture(); // After the previous player-update hook, before pause.
-            allItems = CollectFavorites();
-            auto names=Outfits::Names()+FaceLight::Names();for(const auto& item:allItems)names+=item.name+ItemInfoGlyphs(item.info);
+            const bool scope=Config().allInventory;
+            auto items=functions?std::vector<Item>{}:CollectInventory(scope);
             {
                 std::lock_guard lock(viewMutex);
                 view.faceLightAvailable=FaceLight::Available();
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
-                view.inventoryGlyphs=std::move(names);view.open = true; view.animateClose=false; view.functions=functions;view.functionSection=functionCategory;view.outfitDialog=0; view.settingsOpen = view.capturingKey = view.saveError = false;
+                ++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
+                PublishPage({});
+                view.inventoryGlyphs.clear();view.inventoryWide=scope;view.inventoryLoading=false;
+                view.open = true; view.animateClose=false; view.functions=functions;view.functionSection=functionCategory;view.outfitDialog=0; view.settingsOpen = view.capturingKey = view.saveError = false;
                 view.page = functions?(functionCategory==FaceLight::Section::Outfits?functionPage:0):favoritePage; view.x = view.y = 0;
                 padX=padY=0;
-                FilterItems();
-                if (!functions && !favoriteCategoryChosen) {
-                    // Pick a populated category only on the first favorites opening.
-                    // Later openings retain even an empty category (e.g. last potion consumed).
-                    if (view.items.empty() && !allItems.empty()) { view.category = allItems.front().category; FilterItems(); }
-                    favoriteCategoryChosen=true;
-                }
+                if(!functions)PublishDirectory(std::move(items),scope);
             }
             if(functions)RefreshFunctions();
             RE::UIMessageQueue::GetSingleton()->AddMessage(menuName, RE::UI_MESSAGE_TYPE::kShow, nullptr);
             if(Config().sounds) RE::PlaySound("UIMenuOK");
-            SKSE::log::info("Wheel opened: mode={} favorites={}",functions?"functions":"favorites",allItems.size());
+            SKSE::log::info("Wheel opened: mode={} scope={} entries={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size());
         }
         void RequestOpen(bool functions) {
             std::lock_guard lock(openMutex);
@@ -202,8 +239,9 @@ namespace Wheel {
         }
         void ChangePage(int direction) {
             std::lock_guard lock(viewMutex);
-            view.page = Wrap(view.page + direction, PageCount(view.items.size()));
+            view.page = Wrap(view.page + direction, PageCount(ItemCount(view)));
             view.x = view.y = 0;
+            FilterItems();
         }
         void OutfitDialog(int mode,std::uint32_t id,const std::string& name) {
             std::lock_guard lock(viewMutex);view.outfitDialog=mode;view.outfitId=id;view.outfitName.Set(name);view.x=view.y=0;
@@ -216,7 +254,8 @@ namespace Wheel {
         void Activate(bool left) {
             const auto current = Snapshot();
             const int slot = WheelSlot(current.x, current.y);
-            const int index = current.page * slots + slot;
+            const int index = PageItemIndex(current,slot);
+            if(current.inventoryLoading && !current.functions)return;
             if (slot < 0 || index < 0 || index >= static_cast<int>(current.items.size())) {
                 if(current.functions)SKSE::log::info("Function click ignored: neutral/empty slot={} x={:.3f} y={:.3f}",slot,current.x,current.y);
                 return;
@@ -244,26 +283,62 @@ namespace Wheel {
         }
         void BindQuickSlot(int slot) {
             const auto current=Snapshot();
-            const int radial=WheelSlot(current.x,current.y),index=current.page*slots+radial;
+            const int radial=WheelSlot(current.x,current.y),index=PageItemIndex(current,radial);
             if(current.functions || current.settingsOpen || current.outfitDialog || radial<0 || index<0 ||
-                index>=static_cast<int>(current.items.size()) || !ValidQuickSlot(slot))return;
+                index>=static_cast<int>(current.items.size()) || current.inventoryLoading || !ValidQuickSlot(slot))return;
             const auto selected=current.items[index];
+            if(!selected.favorited){RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),"quickSlotNeedsFavorite").c_str());return;}
             const auto generation=epoch.load(),serial=openSerial.load();
             if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected,slot,generation,serial] {
                 const auto now=Snapshot();
                 if(generation!=epoch.load() || serial!=openSerial.load() || !now.open || now.functions ||
                     now.settingsOpen || now.outfitDialog || !Focused() || !ValidPlayer() || BlockedMenu())return;
-                if(!BindFavoriteQuickSlot(selected,slot))return;
-                const auto assigned=CollectFavorites(false);
+                int next=-1;
+                if(!BindFavoriteQuickSlot(selected,slot,&next))return;
                 std::lock_guard lock(viewMutex);
                 if(generation!=epoch.load() || serial!=openSerial.load() || !view.open || view.functions)return;
                 // Preserve expensive item-info snapshots and cursor/category state.
-                for(auto& item:allItems) {
-                    item.quickSlot=-1;
-                    for(const auto& fresh:assigned)if(item.key==fresh.key){item.quickSlot=fresh.quickSlot;break;}
+                for(auto& item:inventoryPages.items) {
+                    item.quickSlot=ReassignedQuickSlot(item.quickSlot,item.key==selected.key,slot,next);
                 }
                 FilterItems();
             });
+        }
+        void PumpDetails() {
+            const auto current=Snapshot();
+            const int radial=WheelSlot(current.x,current.y),index=PageItemIndex(current,radial);
+            if(!current.open || current.functions || current.settingsOpen || current.outfitDialog || current.inventoryLoading ||
+                radial<0 || index<0 || index>=static_cast<int>(current.items.size())){hoverKey.reset();return;}
+            const auto& item=current.items[index];
+            if(item.infoReady)return;
+            const auto now=std::chrono::steady_clock::now();
+            if(!hoverKey || *hoverKey!=item.key){hoverKey=item.key;hoverStarted=now;return;}
+            if(now-hoverStarted<std::chrono::milliseconds(80) || detailTaskQueued.exchange(true))return;
+            const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
+            std::size_t catalogIndex;
+            {std::lock_guard lock(viewMutex);catalogIndex=inventoryPages.Index(current.category,current.page,radial);}
+            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected=item,catalogIndex,generation,serial,revision] {
+                auto stillSelected=[&] {
+                    const auto v=Snapshot();const int slot=WheelSlot(v.x,v.y),i=PageItemIndex(v,slot);
+                    return generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
+                        v.open && !v.functions && !v.settingsOpen && !v.outfitDialog && slot>=0 &&
+                        i>=0 && i<static_cast<int>(v.items.size()) && v.items[i].key==selected.key;
+                };
+                if(stillSelected() && Focused() && ValidPlayer() && !BlockedMenu()) {
+                    const auto started=std::chrono::steady_clock::now();
+                    ItemInfo info;const bool valid=ReadItemInfo(selected,info);
+                    const auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+                    if(elapsed>8)SKSE::log::info("Inventory detail: form={:08X} total_ms={:.2f}",selected.key.form,elapsed);
+                    std::lock_guard lock(viewMutex);
+                    if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
+                        view.open && catalogIndex<inventoryPages.items.size() && inventoryPages.items[catalogIndex].key==selected.key) {
+                        auto& cached=inventoryPages.items[catalogIndex];cached.info=std::move(info);cached.infoReady=true;
+                        if(!valid)cached.detail=Tr(Config(),"changed");
+                        if(!view.functions)for(auto& visible:view.items)if(visible.key==cached.key)visible=cached;
+                    }
+                }
+                detailTaskQueued=false;
+            });else detailTaskQueued=false;
         }
         std::optional<PendingAction> TakeAction(ActionExecutor executor) {
             std::lock_guard lock(actionMutex);
@@ -372,9 +447,14 @@ namespace Wheel {
                 SKSE::log::info("Settings saved: language={} theme={} scale={} hotkey={}",config.language,config.theme,config.scale,config.hotkey);
             }
             if (!save) RevertSettings();
-            std::lock_guard lock(viewMutex);
-            view.settingsOpen=view.capturingKey=view.saveError=false;
-            view.x=view.y=0;
+            bool reload=false;
+            {std::lock_guard lock(viewMutex);
+                view.settingsOpen=view.capturingKey=view.saveError=false;view.x=view.y=0;
+                if(save && Config().allInventory!=inventoryScope) {
+                    inventoryLoaded=false;++directoryRevision;reload=!view.functions;
+                }
+            }
+            if(reload)RequestDirectory();
         }
         void AdjustSetting(int row,int direction) {
             auto config=Config();
@@ -397,6 +477,7 @@ namespace Wheel {
             case 15: config.gamepadHotkey=-1; break;
             case 16: config.gamepadModifier=Wrap((config.gamepadModifier<0?0:config.gamepadModifier-265)+direction,17);config.gamepadModifier=config.gamepadModifier?config.gamepadModifier+265:-1; break;
             case 17: config.gamepadActionModifier=Wrap((config.gamepadActionModifier<0?0:config.gamepadActionModifier-265)+direction,17);config.gamepadActionModifier=config.gamepadActionModifier?config.gamepadActionModifier+265:-1; break;
+            case 18: config.allInventory=!config.allInventory; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -696,6 +777,11 @@ namespace Wheel {
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
             PumpAction();
+            {const auto current=Snapshot();if(current.open && !current.functions && !current.settingsOpen && !current.outfitDialog) {
+                bool needed;{std::lock_guard lock(viewMutex);needed=!inventoryLoaded;}
+                if(needed)RequestDirectory();
+            }}
+            PumpDetails();
         }
 
         class PauseMenu final : public RE::IMenu {
@@ -774,8 +860,8 @@ namespace Wheel {
         Cancel();
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
         inputGate.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
-        allItems.clear();
-        { std::lock_guard lock(viewMutex); view.items.clear();padX=padY=0; }
+        { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
+            view.items.clear();view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);
         if (active) SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={}", dispatchCount.load(), FavoritesScanCode(), Config().hotkey);
     }

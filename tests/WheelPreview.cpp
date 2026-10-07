@@ -34,10 +34,11 @@ int main(int argc, char** argv) {
     if(argc>8)config.overlayOpacity=std::atoi(argv[8]);
     if(argc>9)config.positionX=std::atoi(argv[9]);
     if(argc>10)config.positionY=std::atoi(argv[10]);
+    if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls"))config.allInventory=true;
     Wheel::EditSettings(config);
     Wheel::preview.config=config;
     Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";
-    if(argc>4 && (std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad")) {
+    if(argc>4 && (std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad" || std::string(argv[4])=="inventory-controls")) {
         Wheel::preview.settingsOpen=true;Wheel::preview.settingsControls=true;
     }
     Wheel::preview.gamepad=argc>4 && (std::string(argv[4])=="pad" || std::string(argv[4])=="controls-pad");
@@ -117,6 +118,11 @@ int main(int argc, char** argv) {
         Wheel::preview.items.resize(103,sample);Wheel::preview.page=5;
     }
     if(argc>4 && std::string(argv[4])=="sparse" && !Wheel::preview.items.empty())Wheel::preview.items.resize(1);
+    if(argc>4 && std::string(argv[4])=="inventory") {
+        Wheel::preview.inventoryWide=true;Wheel::preview.items.resize(10);
+        Wheel::preview.totalItems=10003;Wheel::preview.page=523;Wheel::preview.itemOffset=5230;
+        for(auto& item:Wheel::preview.items){item.quickSlot=-1;item.favorited=false;item.inventoryWide=true;}
+    }
     if(argc>4 && std::string(argv[4])=="no-hints") {
         config.showHints=false;Wheel::preview.config.showHints=false;
     }

@@ -1,0 +1,7 @@
+0.4.1 test build
+- Optional All inventory source in Settings / Controls; Favorites only remains the default.
+- Page snapshots contain at most ten entries; hover details load on demand and cache for the current opening.
+- Opening actions directly skips item-directory collection until switching to items.
+- Ordinary inventory stacks are included; item identity and counts are revalidated before use.
+- Spells/shouts remain favorites only; native 1-8 assignment requires an existing favorite.
+- Large real inventories need in-game performance testing. Slow-time mode is not included.

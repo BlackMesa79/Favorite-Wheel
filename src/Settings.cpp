@@ -48,6 +48,7 @@ namespace Wheel {
         };
         settings = Settings{};
         settings.enabled = number(L"General",L"Enabled",1) != 0;
+        settings.allInventory = number(L"General",L"AllInventory",0) != 0;
         const auto legacyLanguage = Read(L"General",L"Chinese","");
         settings.language = Read(L"General",L"Language",legacyLanguage.empty() ? "auto" :
             (number(L"General",L"Chinese",1) ? "zh_CN" : "en"));
@@ -104,6 +105,7 @@ namespace Wheel {
             return WritePrivateProfileStringW(section,key,wide.c_str(),temporary.c_str()) != 0;
         };
         const bool ok = write(L"General",L"Language",settings.language) &&
+            write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
             write(L"Display",L"Theme",settings.theme) &&
             write(L"Display",L"ShowHints",settings.showHints?"1":"0") &&
             write(L"Display",L"WheelScalePercent",std::to_string(static_cast<int>(settings.wheelScale*100+.5f))) &&

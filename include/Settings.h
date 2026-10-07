@@ -3,6 +3,7 @@
 namespace Wheel {
     struct Settings {
         bool enabled = true;
+        bool allInventory = false;
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
         std::string theme = "classic";
         bool showHints = true;

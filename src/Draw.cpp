@@ -209,7 +209,7 @@ namespace Wheel
         void PageRail(ImDrawList *d, ImVec2 c, float s, const View &v)
         {
             const auto &t = Style(v.config);
-            const int total = PageCount(v.items.size()), current = std::clamp(v.page, 0, total - 1);
+            const int total = PageCount(ItemCount(v)), current = std::clamp(v.page, 0, total - 1);
             const auto pages = VisiblePages(total, current);
             const float x = c.x + 302 * s, top = c.y - (pages.size - 1) * 17 * s,
                         bottom = top + (pages.size - 1) * 34 * s;
@@ -371,7 +371,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -387,7 +387,8 @@ namespace Wheel
                                           tr(config.animations ? "on" : "off"),
                                           key(config.switchKey),ModifierLabel(config,config.hotkeyModifier),
                                           config.actionHotkey<0?tr("followFavorite"):key(config.actionHotkey),ModifierLabel(config,config.actionModifier),
-                                          PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier)};
+                                          PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
+                                          tr(config.allInventory?"scopeAll":"scopeFavorites")};
             for (int slot = 0; slot < SettingCount(v.settingsControls); ++slot)
             {
                 const int row=SettingRow(v.settingsControls,slot);
@@ -622,8 +623,8 @@ namespace Wheel
                 }
             for (int slot = 0; slot < slots; ++slot)
             {
-                const int index = v.page * slots + slot;
-                const bool occupied = index < int(v.items.size()), hover = occupied && slot == selected;
+                const int index = PageItemIndex(v,slot);
+                const bool occupied = index>=0 && index < int(v.items.size()), hover = occupied && slot == selected;
                 auto &weight = feedback.hover[slot];
                 if (!config.animations || t.hoverDuration <= 0)
                     weight = hover ? 1.f : 0.f;
@@ -708,8 +709,8 @@ namespace Wheel
             d->AddCircle(c, inner - 6 * s, Alpha(t.border, .8f), 128, t.borderWidth * s);
             Arc(d, c, inner - 10 * s, -.7f, .7f, Alpha(t.accent, .3f * t.ornament), s);
             const int centreStart = d->VtxBuffer.Size;
-            const int index = v.page * slots + selected;
-            if (selected >= 0 && index < int(v.items.size()))
+            const int index = PageItemIndex(v,selected);
+            if (selected >= 0 && index>=0 && index < int(v.items.size()))
             {
                 const auto &item = v.items[index];
                 const auto state = State(v, item);
@@ -735,7 +736,8 @@ namespace Wheel
             {
                 Diamond(d, {c.x, c.y - 43 * s}, 7 * s, Alpha(t.accent, .75f));
                 Text(d, {c.x, c.y}, Fit(typeTitle, 20 * s, 188 * s), 20 * s, t.text, 0, t.textShadow);
-                Text(d, {c.x, c.y + 34 * s}, Fit(tr(v.items.empty() ? "empty" : "move"), 14 * s, 185 * s), 14 * s,
+                Text(d, {c.x, c.y + 34 * s}, Fit(tr(v.inventoryLoading && !v.functions?"inventoryLoading":v.items.empty() ?
+                    (v.inventoryWide && !v.functions?"inventoryEmpty":"empty") : "move"), 14 * s, 185 * s), 14 * s,
                      t.muted, 0, t.textShadow);
             }
             // Includes the card; its later reveal remains relative to this fade.
@@ -743,7 +745,7 @@ namespace Wheel
             const int footerStart = d->VtxBuffer.Size;
             Rule(d, {c.x, c.y + 283 * s}, 160 * s, t, s);
             Text(d, {c.x, c.y + 304 * s},
-                 std::to_string(v.items.size()) + " " + tr(v.functions ? "functionCount" : "count"), 16 * s, t.accent,
+                 std::to_string(ItemCount(v)) + " " + tr(v.functions ? "functionCount" : v.inventoryWide?"inventoryCount":"count"), 16 * s, t.accent,
                  0, t.textShadow);
             if (config.showHints)
             {
@@ -768,7 +770,7 @@ namespace Wheel
                                                                                                   : "dualWheelHint"),
                          12 * s, 535 * s),
                      12 * s, t.muted, 0, t.textShadow);
-                if(quickHint)Text(d,{c.x,top+56*s},Fit(tr("quickSlotHint"),12*s,535*s),12*s,t.muted,0,t.textShadow);
+                if(quickHint)Text(d,{c.x,top+56*s},Fit(tr(v.inventoryWide?"allQuickSlotHint":"quickSlotHint"),12*s,535*s),12*s,t.muted,0,t.textShadow);
             }
             Reveal(d, footerStart, frameReveal, {0, -8 * s * (1 - frameReveal)});
         }

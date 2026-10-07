@@ -91,11 +91,13 @@ namespace Wheel {
             auto& io = ImGui::GetIO();
             io.DisplaySize = ImVec2(static_cast<float>(desc.Width), static_cast<float>(desc.Height));
             SetViewport(io.DisplaySize.x,io.DisplaySize.y);
+            const auto fontStarted=std::chrono::steady_clock::now();
             if (PrepareFonts(view, ViewScale(io.DisplaySize.x, io.DisplaySize.y, view))) {
                 ImGui_ImplDX11_InvalidateDeviceObjects();
                 if (!ImGui_ImplDX11_CreateDeviceObjects()) throw std::runtime_error("Unable to upload wheel font atlas");
-                SKSE::log::info("Native-size font atlas: output={}x{}, scale={}, atlas={}x{}",
-                    desc.Width, desc.Height, Config().scale, io.Fonts->TexWidth, io.Fonts->TexHeight);
+                SKSE::log::info("Native-size font atlas: output={}x{}, scale={}, atlas={}x{}, visible_items={}, build_upload_ms={:.2f}",
+                    desc.Width, desc.Height, Config().scale, io.Fonts->TexWidth, io.Fonts->TexHeight,view.items.size(),
+                    std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-fontStarted).count());
             }
             const auto now = std::chrono::steady_clock::now();
             io.DeltaTime = std::clamp(std::chrono::duration<float>(now - lastFrame).count(), .001f, .1f);

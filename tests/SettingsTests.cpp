@@ -17,10 +17,18 @@ int main() {
     const auto newPath=root/"Fresh.ini";
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
+    Check(!Config().allInventory,"Fresh installs show only favorites");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     SetSettingsPath(path.string()); LoadSettings();
+    Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
+    BeginSettings();auto inventorySettings=Config();inventorySettings.allInventory=true;
+    EditSettings(inventorySettings);RevertSettings();Check(!Config().allInventory,"Cancelled item-source edit restores favorites");
+    BeginSettings();EditSettings(inventorySettings);Check(SaveSettings(),"Save all-inventory source");LoadSettings();
+    Check(Config().allInventory,"Item source survives reload");
+    BeginSettings();DefaultSettings();Check(!Config().allInventory,"Defaults restore favorites-only source");RevertSettings();
+    Check(Config().allInventory,"Cancelled defaults retain all-inventory source");
     Check(Config().language=="en","Legacy Chinese=0 migration");
     Check(Config().hotkeyModifier==0 && Config().actionHotkey==-1 && Config().actionModifier==1 &&
         Config().gamepadHotkey==-1 && Config().gamepadActionModifier==274,"Old INIs preserve Q / Shift+Q and controller defaults");

@@ -51,6 +51,12 @@ Existing manual language choices stay unchanged; select System to opt in.
 Translation guide: https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md
 Outfit edits require a game save. Preserve matching .skse co-saves.
 Weapons, shields, and ammunition are excluded from outfit presets.
+Item source defaults to Favorites only (General / AllInventory=0).
+Q -> F2 -> Controls -> Item source -> All inventory -> Apply shows carried items.
+Spells/shouts remain favorites only; native 1-8 assignment requires a favorite.
+Books, ingredients, miscellaneous items and poisons cannot be directly used.
+Pages carry at most ten entries and hover details load on demand; initial
+inventory scanning/sorting and new font glyphs can still cost time in large saves.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT
