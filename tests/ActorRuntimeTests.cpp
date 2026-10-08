@@ -56,7 +56,7 @@ int main()
     // Each pass switches CommonLib's actual runtime selector, then exercises
     // the engine-shaped fixture. No Skyrim process or real actor required.
     for (const auto version : {REL::Version{1, 5, 97, 0}, REL::Version{1, 6, 640, 0}, REL::Version{1, 6, 1170, 0}, REL::Version{1, 7, 99, 0},
-                               REL::Version{1, 7, 104, 0}})
+                               REL::Version{1, 7, 104, 0}, REL::Version{1, 6, 1179, 0}})
     {
         Check(REL::Module::mock(version), "mock runtime initialization");
         dead = wrongSlot = drank = updated = false;
@@ -88,5 +88,5 @@ int main()
         InvokeUpdate(actor);
         Check(updated && !wrongSlot, "Player update hook no longer matches upstream Actor::Update slot");
     }
-    std::cout << "1.5.97/1.6.640/1.6.1170/1.7.99/1.7.104 actor dispatch passed: IsDead=0x99, DrinkPotion=0x10F, Update=0xAD\n";
+    std::cout << "1.5.97/1.6.640/1.6.1170/1.7.99/1.7.104/GOG 1.6.1179 actor dispatch passed: IsDead=0x99, DrinkPotion=0x10F, Update=0xAD\n";
 }

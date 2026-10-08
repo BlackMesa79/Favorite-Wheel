@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current development build: **0.5.1 (test)**. Latest public release: **0.5.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current development build: **0.5.2 (test)**. Latest public release: **0.5.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -29,9 +29,10 @@ Current development build: **0.5.1 (test)**. Latest public release: **0.5.0**. T
 | SE 1.5.97 | Tested in-game by a user on an earlier test build |
 | AE 1.6.640 | Supported by this build; in-game testing pending |
 | AE 1.6.1170 | Tested in-game, including the CommonLib dependency update |
+| GOG 1.6.1179 | Supported by this build; not yet tested in-game |
 | 1.7.99 / 1.7.104 | Supported by this build; not yet tested in-game |
 
-The plugin accepts these five exact Steam runtimes. Other versions, GOG runtimes, and VR are not supported by this build. Support for these two 1.7 releases does not automatically cover future 1.7.x updates.
+The plugin accepts the five exact Steam runtimes above and GOG 1.6.1179. Other versions, including older GOG runtimes, and VR are not supported by this build. Support for these two 1.7 releases does not automatically cover future 1.7.x updates.
 
 Required:
 
@@ -122,6 +123,10 @@ Missing or ambiguous items, protected quest equipment, and shield-slot conflicts
 
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
 
+## Version 0.5.2 test build
+
+The same DLL now accepts GOG 1.6.1179. Use **GOG SKSE64 2.2.6** and Address Library containing `versionlib-1-6-1179-0.bin`; do not substitute the Steam SKSE or 1170 database. Local runtime-layout, actor-dispatch and real address-library checks cover this version, but in-game testing is pending. Other GOG runtimes remain unsupported. Optional integration plugins must support GOG independently. See [GOG setup and test notes](docs/GOG_1.6.1179.md).
+
 ## Version 0.5.1 test build
 
 The entrance now respects disabled native control groups so contextual interactions can retain conflicting keys. This addresses a confirmed code-level gap affecting QuickLoot-style search; confirmation with the original reporting setup is pending. Loading logs effective keys/modifiers. The supplied 0.4.0 no-response log showed Favorites rebound to scan 51 (comma), so Q correctly did not match. Use the game Favorites binding, or set `[Controls] Hotkey=16` in the active INI and restart to force physical Q. See [entry context investigation](docs/ENTRY_CONTEXT_0.5.1.md).
@@ -204,13 +209,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.1.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.2.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.5.1 test materials](release-materials/0.5.1) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.5.2 test materials](release-materials/0.5.2) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

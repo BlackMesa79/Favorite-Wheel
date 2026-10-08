@@ -113,7 +113,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 5, 1, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{0, 5, 2, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,
@@ -125,14 +125,15 @@ namespace
 int wmain(int argc, wchar_t **argv)
 {
     using namespace Wheel::RuntimeSupport;
-    Check(argc == 1 || argc == 3 || argc == 5 || argc == 6,
-          "optional args: 1.5.97, 1.6.1170, then 1.7.99, 1.7.104, then 1.6.640 address libraries");
+    Check(argc == 1 || argc == 3 || argc == 5 || argc == 6 || argc == 7,
+          "optional args: 1.5.97, 1.6.1170, then 1.7.99, 1.7.104, then 1.6.640, then GOG 1.6.1179 address libraries");
     Check(Supported({1, 5, 97, 0}) && Supported({1, 6, 640, 0}) && Supported({1, 6, 1170, 0}) && Supported({1, 7, 99, 0}) &&
-              Supported({1, 7, 104, 0}),
+              Supported({1, 7, 104, 0}) && Supported({1, 6, 1179, 0}),
           "target runtimes accepted");
     for (const auto version :
          {REL::Version{1, 5, 80, 0}, REL::Version{1, 6, 659, 0}, REL::Version{1, 6, 1130, 0}, REL::Version{1, 4, 15, 0},
-          REL::Version{1, 7, 98, 0}, REL::Version{1, 7, 105, 0}, REL::Version{1, 7, 104, 1}})
+          REL::Version{1, 7, 98, 0}, REL::Version{1, 7, 105, 0}, REL::Version{1, 7, 104, 1},
+          REL::Version{1, 6, 1178, 0}, REL::Version{1, 6, 1180, 0}, REL::Version{1, 6, 1179, 1}})
         Check(!Supported(version), "unaudited releases and VR stay rejected");
     struct Layout
     {
@@ -144,12 +145,13 @@ int wmain(int argc, wchar_t **argv)
         Layout{{1, 5, 97, 0}, 0xE8, 0x3D8, 0xB8, 67315}, Layout{{1, 6, 1170, 0}, 0xF0, 0x3E0, 0xC0, 68617},
         Layout{{1, 7, 99, 0}, 0xF0, 0x3E8, 0xC0, 68617}, Layout{{1, 7, 104, 0}, 0xF0, 0x3E8, 0xC0, 68617},
         // Preserve the existing optional-library argument order; append 1.6.640.
-        Layout{{1, 6, 640, 0}, 0xE8, 0x3E0, 0xC0, 68617}};
+        Layout{{1, 6, 640, 0}, 0xE8, 0x3E0, 0xC0, 68617},
+        Layout{{1, 6, 1179, 0}, 0xF0, 0x3E0, 0xC0, 68617}};
     unsigned index = 0;
     for (const auto &layout : layouts)
     {
         Check(REL::Module::mock(layout.version), "mock runtime initialization");
-        Check(REL::Module::IsAE() == (layout.version.minor() >= 6), "1.7 selects AE family");
+        Check(REL::Module::IsAE() == (layout.version.minor() >= 6), "Steam and GOG 1.6/1.7 select AE family");
         Check(REL::RelocationID(inputDispatchSE, inputDispatchAE).id() == layout.input, "SE/AE input ID selection");
         // Native byte offsets are independent of the accessors under test.
         // Poison the alternate version so a fixed layout cannot pass both.

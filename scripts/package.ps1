@@ -90,6 +90,10 @@ Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT
 Skyrim 1.5.97 and 1.6.1170 have been tested in-game.
+Skyrim GOG 1.6.1179 is supported but has not yet been tested in-game. Use the
+GOG SKSE64 2.2.6 build and versionlib-1-6-1179-0.bin from Address Library.
+Steam SKSE and the 1170 address database are not substitutes. Optional
+integration plugins need their own compatible GOG builds.
 Skyrim 1.6.640 is supported. Local runtime layout and
 address-library checks passed; in-game testing on 1.6.640 is pending.
 Skyrim 1.7.x is supported but has not yet been tested in-game; the exact
