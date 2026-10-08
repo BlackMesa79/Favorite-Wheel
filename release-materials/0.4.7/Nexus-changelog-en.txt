@@ -1,0 +1,5 @@
+0.4.7 test build
+- Track physical D-Pad Up/Down presses for wheel paging, including nonzero-duration first presses.
+- Clear captured controller buttons on a physical release, including zero-duration release events.
+- Keep held opening buttons from paging; single-page navigation preserves selection.
+- Add paging input and before/after page diagnostics. In-game confirmation with the reporting controller is pending.

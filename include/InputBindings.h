@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <array>
 namespace Wheel {
 // DirectInput codes. Modifier bits: Shift=1, Ctrl=2, Alt=4.
 inline int ModifierBit(std::uint32_t code) {
@@ -42,6 +43,22 @@ inline Opening GamepadOpening(std::uint32_t code, int favoriteKey,
     return Opening::Actions;
   return favoriteModifier ? Opening::Favorites : Opening::None;
 }
+// D-pad navigation follows physical edges, independent of HeldDuration().
+// Observe outside the wheel too, so the held opening key cannot also page.
+class ControllerPageButtons {
+  std::array<bool, 2> held{}, blocked{};
+public:
+  bool Observe(std::uint32_t code, bool pressed, bool nativeDown) {
+    if (code < 266 || code > 267) return false;
+    const auto at = code - 266;
+    if (!pressed || nativeDown) blocked[at] = false;
+    const bool down = pressed && !held[at] && !blocked[at];
+    held[at] = pressed;
+    return down;
+  }
+  // A held key after focus/load/device reset needs release or a new native down.
+  void Reset() { held.fill(false); blocked.fill(true); }
+};
 inline float StickAxis(float value) {
   constexpr float deadzone = .2f;
   return std::abs(value) <= deadzone

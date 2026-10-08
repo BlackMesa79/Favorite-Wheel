@@ -64,6 +64,7 @@ namespace Wheel {
         std::atomic<bool> updateLogged{false};
         std::atomic<float> viewportWidth{1280}, viewportHeight{900};
         InputGate inputGate;
+        ControllerPageButtons controllerPages;
         MovementStickGate movementStick;
         std::mutex pauseMutex;
         bool pauseRequested=false;
@@ -317,9 +318,16 @@ namespace Wheel {
             view.page = 0; // Keep the pointer on the same sector when changing type.
             FilterItems();
         }
-        void ChangePage(int direction) {
+        void ChangePage(int direction,const char* source=nullptr) {
             std::lock_guard lock(viewMutex);
-            view.page = Wrap(view.page + direction, PageCount(ItemCount(view)));
+            const auto previous=view.page;
+            const auto pages=PageCount(ItemCount(view));
+            const auto next=Wrap(previous+direction,pages);
+            if(source)SKSE::log::info("Controller page: key={} wheel={} category={} section={} items={} pages={} previous={} next={}",
+                source,view.functions?"functions":"favorites",static_cast<int>(view.category),static_cast<int>(view.functionSection),
+                ItemCount(view),pages,previous+1,next+1);
+            if(next==previous)return;
+            view.page = next;
             view.x = view.y = 0;
             FilterItems();
         }
@@ -693,7 +701,7 @@ namespace Wheel {
                         const auto at=buttons.find(SKSE::InputMap::GamepadKeycodeToMask(i+266));
                         padHeld[i]=at!=buttons.end() && at->second && at->second->heldDownSecs>0;
                     }
-                } else {movementStick.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
+                } else {movementStick.Reset();controllerPages.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
             }
             for(auto event=events?*events:nullptr;event;event=event->next) {
                 if(auto c=event->AsCharEvent();c && c->keyCode>=32)characterBatch=true;
@@ -717,9 +725,15 @@ namespace Wheel {
                 if (auto button = event->AsButtonEvent()) {
                     const auto code = button->GetIDCode();
                     const auto identity = (static_cast<std::uint64_t>(button->GetDevice()) << 32) | code;
-                    const bool up = button->IsUp();
-                    const bool down = button->IsDown();
                     const bool pressed = button->IsPressed();
+                    const bool gamepad=button->GetDevice()==RE::INPUT_DEVICE::kGamepad;
+                    const auto pad=gamepad?SKSE::InputMap::GamepadMaskToKeycode(code):0u;
+                    const bool pageDown=gamepad && controllerPages.Observe(pad,pressed,button->IsDown());
+                    // Some controller event sources omit the native zero-duration
+                    // down or emit release with zero duration. Do not retain the
+                    // UI's swallowed state after an observed physical release.
+                    const bool up = gamepad?!pressed:button->IsUp();
+                    const bool down = gamepad && (pad==266 || pad==267) && IsOpen()?pageDown:button->IsDown();
                     bool nameRepeat=false;
                     if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code<256) {
                         if(up)nameRepeatAt[code]=0;
@@ -730,8 +744,6 @@ namespace Wheel {
                     }
                     const auto opening=ToggleKey(button);
                     const bool toggle = opening!=Opening::None;
-                    const auto pad=button->GetDevice()==RE::INPUT_DEVICE::kGamepad?
-                        SKSE::InputMap::GamepadMaskToKeycode(code):0u;
                     if(down && (button->GetDevice()==RE::INPUT_DEVICE::kGamepad || button->GetDevice()==RE::INPUT_DEVICE::kKeyboard || button->GetDevice()==RE::INPUT_DEVICE::kMouse)) {
                         std::lock_guard lock(viewMutex);view.gamepad=pad!=0;
                     }
@@ -751,6 +763,8 @@ namespace Wheel {
                     }
                     bool consume = captureBatch || inputGate.Swallowed(identity);
                     const auto current=Snapshot();
+                    if(pageDown && current.open)SKSE::log::info("Controller page input: raw={} key={} nativeDown={} swallowed={} settings={} dialog={}",
+                        code,pad,button->IsDown(),inputGate.Swallowed(identity),current.settingsOpen,current.outfitDialog);
                     const bool naming=current.open && (current.outfitDialog==1 || current.outfitDialog==2);
                     if(naming && nameRepeat && (code==14 || code==211 || code==203 || code==205) && !bridge.composing)NameKey(code,false);
                     const bool bridgeKey=naming && bridge.available && bridge.enabled && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
@@ -826,8 +840,8 @@ namespace Wheel {
                             case 277:if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true);break;
                             case 274: case 268:ChangeCategory(-1);break;
                             case 275: case 269:ChangeCategory(1);break;
-                            case 266:ChangePage(-1);break;
-                            case 267:ChangePage(1);break;
+                            case 266:ChangePage(-1,"up");break;
+                            case 267:ChangePage(1,"down");break;
                             default:break;
                             }
                         }
@@ -891,7 +905,7 @@ namespace Wheel {
             }
             previousDispatch(source, events);
             if (!Focused()) {
-                inputGate.Reset();movementStick.Reset();shiftHeld[0]=shiftHeld[1]=false;
+                inputGate.Reset();movementStick.Reset();controllerPages.Reset();shiftHeld[0]=shiftHeld[1]=false;
                 std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
@@ -1038,7 +1052,7 @@ namespace Wheel {
         gameActive = active;
         Cancel();
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
-        inputGate.Reset();movementStick.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
+        inputGate.Reset();movementStick.Reset();controllerPages.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
         { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
             view.items.clear();view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);

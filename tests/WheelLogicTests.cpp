@@ -115,6 +115,38 @@ int main() {
     Check(KeyboardOpening(16,0,16,0,16,0)==Opening::Actions,"identical bindings use deterministic actions priority");
     Check(GamepadOpening(266,266,true,false)==Opening::Favorites && GamepadOpening(266,266,true,true)==Opening::Actions && GamepadOpening(267,266,true,true)==Opening::None,"controller opening key and modifier priority");
     Check(GamepadOpening(266,-1,true,true)==Opening::None && GamepadOpening(282,282,true,true)==Opening::None,"unmapped controller does not open");
+    {
+        ControllerPageButtons buttons;
+        InputGate capture;
+        int page=0;
+        auto event=[&](unsigned key,bool pressed,float duration,bool open) {
+            const auto identity=(std::uint64_t{2}<<32)|key;
+            const bool nativeDown=pressed && duration==0;
+            const bool edge=buttons.Observe(key,pressed,nativeDown);
+            if(open && edge && !capture.Swallowed(identity))page=Wrap(page+(key==266?-1:1),3);
+            capture.Filter(identity,pressed,!pressed,open);
+        };
+        event(266,true,0,false); // Opening key observed before the wheel opens.
+        event(266,true,.016f,true);
+        Check(page==0,"Held controller entrance cannot also turn the wheel page");
+        event(266,false,0,true); // Native IsUp is false, but physically released.
+        event(266,true,.016f,true); // First press need not have zero duration.
+        Check(page==2,"D-pad up wraps from first to last page with a nonzero-duration first press");
+        event(266,true,0,true);event(266,true,.1f,true);
+        Check(page==2,"Repeated or zero-duration held events never turn multiple pages");
+        event(266,false,0,true);event(267,true,.02f,true);
+        Check(page==0,"D-pad down wraps to the first page and works on its first observed press");
+        event(267,false,0,true);event(267,true,0,true);
+        Check(page==1,"A zero-duration release clears swallowing for the next controller page press");
+        event(267,false,.1f,true);event(267,true,0,true);
+        Check(page==2,"Normal duration-based controller events keep working");
+        buttons.Reset();
+        Check(!buttons.Observe(266,true,false),"Reset cannot turn an already held controller button into paging");
+        Check(!buttons.Observe(266,false,false)&&buttons.Observe(266,true,false),"Releasing after reset re-arms a nonzero-duration first press");
+        buttons.Reset();
+        Check(buttons.Observe(267,true,true)&&!buttons.Observe(267,true,true),"A fresh native down after reset pages once even if zero duration repeats");
+        Check(!buttons.Observe(274,true,true),"Category buttons do not become page events");
+    }
     float sx=.3f,sy=.4f;AimStick(sx,sy,0,1);
     Check(sx==0 && sy==-1,"controller Y axis points up on screen");
     AimStick(sx,sy,.1f,.1f);Check(sx==0 && sy==-1,"releasing stick preserves selection for confirmation");

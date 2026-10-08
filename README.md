@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.4.6**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.4.7**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -120,6 +120,8 @@ Exports use `Data/SKSE/Plugins/FavoriteWheel/Outfits/Exports/*.fwo`. Place files
 
 Missing or ambiguous items, protected quest equipment, and shield-slot conflicts can prevent a change. Improving, enchanting, or renaming equipment may require recapturing the preset. Other mods can alter or block individual equipment steps; incomplete changes are reported rather than forced or rolled back.
 
+Version 0.4.7 tracks physical D-Pad Up/Down presses for paging inside the wheel, including nonzero-duration first presses and zero-duration releases. Holding the opening key does not turn a page; release and press again. Single-page navigation keeps the selection. The log records paging input and before/after page numbers. Confirmation with the reporting controller is pending; see [controller paging review](docs/CONTROLLER_PAGING_0.4.7.md).
+
 Version 0.4.6 shows an outfit as equipped whenever all its saved instances are worn, including manual equipment changes. Additional apparel or hidden armor accessories no longer suppress the badge. Transaction rules remain unchanged: if extra managed apparel is worn, selecting the preset replaces the complete outfit; an exact set toggles off. See [equipped badge review](docs/OUTFIT_WEAR_BADGE_0.4.6.md).
 
 Version 0.4.5 accepts equivalent spare copies without a unique instance ID when their complete saved signatures match, including tempering, enchantment, and custom name. Unique-ID collisions still fail validation. An unavailable preset's detail card now names the first failing piece and distinguishes absence, changed identity, ambiguity, and a duplicate recipe entry; the log records comparison details. This addresses a reproducible matching failure, but the reported Shattered Royal Armor case still needs confirmation with the affected inventory. See [outfit matching review](docs/OUTFIT_MATCHING_0.4.5.md).
@@ -198,13 +200,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.6.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.7.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.4.6 release materials](release-materials/0.4.6) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.4.7 release materials](release-materials/0.4.7) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

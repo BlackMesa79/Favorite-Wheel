@@ -39,6 +39,10 @@ Hover a favorite and press 1-8 to bind/unbind a native quick slot. Assigned
 entries show their number. Close the wheel and use the normal gameplay shortcut.
 Save the game after changing bindings. Native slots are 1-8; this does not add
 9/0 slots. Other mods' extended shortcuts pass through outside the wheel.
+D-Pad paging follows physical press edges. Release the opening key before
+paging; a category needs more than ten entries for multiple pages. Paging
+diagnostics are recorded in FavoriteWheel.log. The 0.4.7 input fix still needs
+confirmation with the reporting controller.
 Controller main key and modifiers are configurable. In settings, the left stick
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 

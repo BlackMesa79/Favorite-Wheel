@@ -1,0 +1,146 @@
+[center][size=6][b]Favorite Wheel - Radial Actions[/b][/size]
+[color=#C9AA72]Your favorites and actions, at your fingertips.[/color]
+
+A categorized favorites wheel and a separate home for quick actions.
+[size=2]Version 0.4.7[/size][/center]
+
+Replace Skyrim's Favorites menu with a radial interface with keyboard, mouse, and controller controls. Browse your favorite items and spells by category, check useful item information, and use a separate action wheel to change outfits or control optional Face Lighting features. Favorites and actions have their own pages, giving additional functions room to grow without crowding your item list.
+
+[size=4][color=#C9AA72][b]Your favorites. Your actions.[/b][/color][/size]
+[list]
+[*][b]Categorized favorites[/b] — Weapons, equipment, potions, food, magic, and other items. Each page holds ten entries, with extra pages for larger collections. The wheel uses the favorites you already mark in your inventory and magic menus.
+[*][b]Optional full inventory[/b] — Choose All inventory under Settings / Gameplay / Item source. Favorites only remains the default. Pages contain ten entries and hover details are read on demand.
+[*][b]Time behavior[/b] — Pause (default), slow time with an adjustable relative speed, or normal speed. Settings and outfit dialogs always pause.
+[*][b]Native quick slots[/b] — Hover a favorite and press 1–8 to assign or clear its gameplay shortcut. The wheel displays existing and newly assigned slot numbers.
+[*][b]Flexible controls[/b] — Keyboard, mouse, and controller support, with configurable opening keys and independent favorites/actions modifiers.
+[*][b]A separate action wheel[/b] — Switch between favorites and functions inside the wheel, or open the action wheel directly. Outfit presets and optional Face Lighting controls occupy separate categories.
+[*][b]Useful item details[/b] — Inspect available damage, armor, weight, value, spell cost, and effect or enchantment information while hovering an entry. Information depends on the item type and available game records.
+[*][b]Outfit presets[/b] — Save your currently worn armor, clothing, and jewelry, then select a preset to change outfits. Rename, overwrite, delete, import, or export presets from the wheel.
+[*][b]Optional Face Lighting controls[/b] — Toggle player lighting, control the NPC targeted before opening the wheel, and manage follower lighting through a compatible Face Lighting SKSE installation.
+[*][b]A customizable interface[/b] — Original line icons, a compact category ribbon, diamond page indicators, hover details, and staggered fan-style opening and closing animations. Adjust wheel size, position, background dimming, sounds, and animations.
+[*][b]Built-in settings[/b] — Configure the wheel in-game without SKSE Menu Framework. Automatically follows your Windows display language, with English fallback and manual language selection. Includes English and Simplified Chinese, four themes, and editable language and theme files.
+[*][b]Remembered categories[/b] — Favorites and actions independently remember their last category during the current game session. Changing categories keeps the wheel cursor in place.
+[/list]
+
+The action wheel is intended to accommodate additional functions as development continues. The current release includes outfit presets and the optional Face Lighting integration described below.
+
+[size=4][color=#C9AA72][b]Keyboard & mouse[/b][/color][/size]
+These are the default controls. The Favorites shortcut follows your game's binding unless overridden in the wheel settings.
+[list]
+[*][b]Q[/b] — Open or close the favorites wheel.
+[*][b]Shift + Q[/b] — Open the action wheel directly. Both keyboard main keys and modifiers can be changed in Settings / Controls.
+[*][b]R[/b] — Switch between favorites and actions while the wheel is open. Configurable in settings.
+[*][b]A / D[/b] or [b]Left / Right[/b] — Change categories.
+[*][b]W / S[/b], [b]Up / Down[/b], or the [b]mouse wheel[/b] — Change pages within the current category.
+[*][b]1–8 while hovering a favorite[/b] — Assign a native quick slot; press the same number again to unbind. Entries show their assigned number. Save after changing bindings, then use the number in gameplay. 9/0 extension keys are not added as native slots.
+[*][b]Mouse movement[/b] — Select an entry. The cursor stays inside the wheel; moving to the center clears the selection.
+[*][b]Left click[/b] or [b]Enter[/b] — Use an item, equip to the right hand where applicable, or execute an action.
+[*][b]Right click[/b] — Equip supported weapons, spells, or scrolls to the left hand; manage an outfit preset on the outfit page.
+[*][b]Esc / Tab[/b] — Close the wheel. In the follower list, return to the Face Lighting page.
+[*][b]F2[/b] — Open the built-in settings while the wheel is open.
+[/list]
+
+Opening the wheel pauses the game by default. Under F2 / Gameplay / Time behavior, choose Slow time or Normal speed and Apply. Optional slow time defaults to 20%, adjustable from 5–100% of the existing game speed. Settings and outfit dialogs pause in all modes. The world continues running in live modes and you can still take damage; UI animations retain real-time timing. Detected external multiplier changes close the wheel without overwriting that source. Version 0.4.2 received positive in-game feedback; subsequent recovery and movement fixes need further in-game checks. A successful item or action selection closes it, then executes after gameplay resumes. Opening and closing animations are visual transitions and do not delay the actual action. Selecting a spell or shout equips it; cast or shout using the normal game controls.
+
+In live modes, a movement direction held before opening is retained until you release it. New movement-key presses inside the wheel only operate the UI; keys still held when both wheel menus close resume movement immediately. Gameplay movement remaps are respected. The left stick retains its opening movement vector until centered while aiming the wheel. Attack clicks and opening keys retain their release protection. These movement changes need an in-game regression check.
+
+Selecting an already equipped weapon in the corresponding hand, or an equipped armor item, unequips it.
+
+[size=4][color=#C9AA72][b]Controller[/b][/color][/size]
+
+Uses your game's controller Favorites binding (normally D-Pad Up); LB + Favorites opens actions. Left stick selects; A uses/right hand; X equips left hand or manages a preset; LB/RB change categories; D-Pad Up/Down change pages; Y switches wheels; B closes/returns; Start opens settings. Controller main key and modifiers are configurable. In settings/dialogs the left stick moves the pointer and A clicks; preset names need keyboard/IME input. With the default game bindings, D-Pad Down still opens the original Favorites menu while the wheel is closed.
+
+D-Pad Up/Down turns one page per physical press while the wheel is open. Release the opening button before using it to page; holding it does not also navigate. A category needs more than ten entries to have multiple pages. Version 0.4.7 handles irregular press/release durations and adds paging diagnostics; confirmation with the reporting controller is pending.
+
+[size=4][color=#C9AA72][b]Outfit presets[/b][/color][/size]
+Wear the equipment you want to save, open the action wheel with [b]Shift + Q[/b], and choose [b]SAVE CURRENT[/b] on the outfit page. Enter a name and confirm.
+
+[b]Left-click a preset[/b] to remove your currently worn managed equipment and then equip the saved outfit. If your current managed equipment exactly matches the preset, selecting it again removes that outfit instead.
+
+The [b]equipped[/b] badge appears whenever all saved outfit instances are worn, including manually equipped items. Extra apparel does not suppress the badge. Selecting an outfit still follows the rules above: an exact set is removed; extra managed apparel triggers replacement with the preset.
+
+[b]Weapons, shields, and ammunition are excluded.[/b] Presets manage armor, clothing, jewelry, and other non-shield armor items in your own inventory. Items do not need to be favorited. Presets do not create equipment or retrieve it from followers or containers.
+
+[b]Right-click a preset[/b] to rename it, replace it with your current outfit, delete it, or export it. Overwrite and delete require confirmation. Deleting a preset does not delete its items.
+
+[b]Save the game after editing presets.[/b] Presets are stored per character in the SKSE co-save. Loading an older save restores the presets from that save. Keep the matching [b].skse[/b] co-save when transferring saved games.
+
+Exported [b].fwo[/b] files are written to [b]Data/SKSE/Plugins/FavoriteWheel/Outfits/Exports/[/b]. Place files in [b]Data/SKSE/Plugins/FavoriteWheel/Outfits/Imports/[/b] and select [b]IMPORT OUTFITS[/b] to import them. With Mod Organizer 2, new files may appear in Overwrite or your configured output mod.
+
+Importing requires matching equipment in the destination character's inventory. It does not copy items. Presets containing dynamic forms or player-created dynamic enchantments cannot currently be exported. These files are specific to Favorite Wheel and are not Outfit Wheeler files.
+
+Outfits support up to 64 worn pieces. Copies without a unique instance ID are interchangeable only when all saved signature fields match, including tempering, enchantment, and custom name. Unique IDs still require exact identity; duplicate IDs are rejected. A new preset is checked before saving. An unavailable preset's detail card identifies the first failing piece and reason, with comparison details in FavoriteWheel.log. These matching changes fix a reproducible equivalent-copy failure; confirmation with the reported affected inventory is pending.
+
+Missing or ambiguous equipment prevents a change from starting. Improving, enchanting, or renaming saved items may require overwriting the preset. Protected quest equipment and shield-slot conflicts are checked. Equipment changes run in steps; another mod can block or alter a step, leaving a partial outfit change. The wheel reports incomplete changes rather than forcing restricted equipment off.
+
+[size=4][color=#C9AA72][b]Optional integrations[/b][/color][/size]
+[b]Face Lighting SKSE[/b]
+Requires a build providing a compatible [b]public API V1[/b]. Compatibility is based on that interface, rather than an exact mod release number.
+
+The Face Lighting category appears only when a compatible interface is detected. [b]Without Face Lighting, the category is hidden[/b] and favorites and outfits remain available. A detected interface that is temporarily not ready retains its category with a status message.
+
+Aim at an NPC before opening the wheel to use the targeted-actor control. Follower lighting includes a group switch and an individual follower list. An enabled preference does not guarantee visible light: the lighting mod's perspective, sneaking, dialogue, and environment rules still apply. Detailed lighting configuration remains in Face Lighting's own settings.
+
+[b]Skyrim Text Bridge[/b]
+Compatible versions can provide IME input when naming presets. Use the input-method shortcut configured in Text Bridge. Without it, normal keyboard input and Unicode clipboard paste remain available. Neither integration is required for the core wheel.
+
+[size=4][color=#C9AA72][b]Get started[/b][/color][/size]
+Install with your mod manager, enable the mod, and launch through SKSE. No ESP, Papyrus scripts, or SWF files are required.
+
+[b]Required[/b]
+[list]
+[*][url=https://skse.silverlock.org/]SKSE64[/url], matching your installed game version.
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/32444]Address Library for SKSE Plugins[/url], matching your installed game version.
+[*]Microsoft Visual C++ 2015–2022 x64 Redistributable.
+[/list]
+
+Mark items and spells as favorites in your usual inventory or magic menu, return to gameplay, and press [b]Q[/b]. By default, the wheel lists only favorites. Choose F2 → Gameplay → Item source → All inventory → Apply to show carried inventory without marking everything as a favorite. Spells and shouts remain favorites only; native 1–8 assignment requires a favorite. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version.
+
+Open the wheel and press [b]F2[/b] (controller: Start) to configure it. Appearance, Controls, and Gameplay have separate tabs. Configure favorites/actions opening keys and Shift/Ctrl/Alt modifiers independently; old configurations retain Q/Shift+Q. Chords match modifiers exactly. Changes preview in-game; [b]APPLY[/b] saves them and returns to the wheel, while canceling discards unsaved changes. You can also edit [b]Data/SKSE/Plugins/FavoriteWheel.ini[/b] and restart the game. Set [b]Enabled=0[/b] to restore the original Favorites menu.
+
+Keep your existing INI and custom language/theme files when upgrading. Mod Organizer users should also check Overwrite for settings written by the game. The supplied configuration uses [b]Language=auto[/b] to follow your Windows display language, falling back to English if no translation matches. Choose [b]System[/b] in settings to use automatic selection, or select a language manually. Existing manual choices are preserved when upgrading.
+
+[size=4][color=#C9AA72][b]Compatibility[/b][/color][/size]
+[list]
+[*][b]Skyrim SE 1.5.97 — Tested in-game.[/b]
+[*][b]Skyrim AE 1.6.640 — Supported; in-game testing pending.[/b] Use matching SKSE64 and the AE Address Library for 1.6.640.
+[*][b]Skyrim AE 1.6.1170 — Tested in-game.[/b]
+[*][b]Skyrim 1.7.x — Supported, but not yet tested in-game.[/b] This build specifically supports [b]1.7.99 and 1.7.104[/b]; support does not automatically extend to every future 1.7.x update. Use the matching SKSE64 and Address Library, including the version-5 address database for these runtimes.
+[/list]
+
+Other runtimes are not supported by this build. Skyrim VR is not supported. Testing on the versions above does not certify every third-party mod combination.
+
+[b]SkyUI[/b] is not required. Entries come from the player's inventory and favorites data. Disable overlapping Favorites-menu replacement features in other mods when using this wheel.
+
+[b][url=https://www.nexusmods.com/skyrimspecialedition/mods/97674]Ultimate Animated Potions NG[/url][/b] and [b][url=https://www.nexusmods.com/skyrimspecialedition/mods/42602]Eating Animations and Sounds SE[/url][/b] worked in user testing. Consumables use the game's equipment path so those mods can receive their normal triggers. This is not a guarantee for every animation-mod setup.
+
+[b]Item details[/b] are practical information from game records and supported calculations, rather than a complete copy of the vanilla or SkyUI description card. Trading prices, conditional/scripted effects, and special mod-specific corrections may differ. Poison application is not implemented; use poisons through the inventory instead. Beast-form controls return to the original Favorites menu.
+
+The full-inventory directory is collected once per opening. Page snapshots carry at most ten entries; details are read after stable hover and cached for that opening. Initial scanning/sorting and new font glyphs still have a cost with large inventories. Full inventory received positive user testing with a large inventory. Version 0.4.2 received positive in-game feedback. The 0.4.4 movement fixes and specific third-party combinations still need testing.
+
+[size=4][color=#C9AA72][b]Themes & translations[/b][/color][/size]
+Includes [b]Classic Gold, Frost, Engraved Gold, and Quiet Slate[/b], plus [b]English and Simplified Chinese[/b]. Select them in the built-in settings. System mode detects the Windows display language, independently of the game's language or your current input method.
+
+To create a translation, copy [b]SKSE/Plugins/FavoriteWheel/Languages/en.ini[/b] to a locale filename such as [b]fr.ini[/b] or [b]pt-BR.ini[/b], keep the keys unchanged, and translate their values. Set [b]Name[/b] to the language's display name and save as UTF-8. Missing or empty text falls back to English; item and spell names continue to come from the game. No recompilation required.
+
+Restart after adding a file. Automatic selection tries the full locale first, then a generic language file, then English. For example, Windows fr-FR can use fr.ini. Share only your language file under its original folder structure, without the DLL or main configuration.
+
+[url=https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md][b]Translation guide on GitHub[/b][/url]
+
+To make a theme, copy an existing file in [b]SKSE/Plugins/FavoriteWheel/Themes/[/b] to a new filename. Themes support colors, font settings, ornament and relief strength, line widths, and local transition settings. Restart after adding files, then select them in settings. Use a font that supports your language. Theme image replacement and arbitrary layouts are not included.
+
+[size=4][color=#C9AA72][b]Open source & permissions[/b][/color][/size]
+Favorite Wheel's own code is distributed under [b]GPL-3.0[/b]. Modification and redistribution are permitted under the terms of that license. The matching source archive accompanies the release; retain applicable copyright and license notices. Third-party components keep their own licenses and notices.
+
+[url=https://github.com/BlackMesa79/Favorite-Wheel][b]View the source on GitHub[/b][/url]
+
+[url=https://www.gnu.org/licenses/gpl-3.0.html]Read the full GPL-3.0 license[/url]
+
+The software is provided [b]without any warranty[/b], including implied warranties of merchantability or fitness for a particular purpose.
+
+[size=4][color=#C9AA72][b]Feedback & credits[/b][/color][/size]
+When reporting an issue, include your Skyrim and SKSE versions, the mod version, reproduction steps, relevant integrations or UI/animation mods, and [b]FavoriteWheel.log[/b]. The log is in your game's Documents folder under [b]My Games/Skyrim Special Edition/SKSE/[/b]. Add a crash log for crashes.
+
+Thanks to the SKSE, CommonLibSSE-NG, Address Library, Dear ImGui, spdlog, and Microsoft DirectX library contributors. Thanks to the testers helping validate the wheel across game versions.
+
+[size=2]Developed with AI assistance and refined through hands-on testing. The cover is original vector promotional artwork, not an in-game screenshot.[/size]
