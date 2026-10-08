@@ -41,8 +41,7 @@ Save the game after changing bindings. Native slots are 1-8; this does not add
 9/0 slots. Other mods' extended shortcuts pass through outside the wheel.
 D-Pad paging follows physical press edges. Release the opening key before
 paging; a category needs more than ten entries for multiple pages. Paging
-diagnostics are recorded in FavoriteWheel.log. The 0.4.7 input fix still needs
-confirmation with the reporting controller.
+diagnostics are recorded in FavoriteWheel.log.
 Controller main key and modifiers are configurable. In settings, the left stick
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 
@@ -58,13 +57,11 @@ Weapons, shields, and ammunition are excluded from outfit presets.
 The equipped badge checks that every saved outfit instance is worn, including
 manual equipment changes; additional apparel does not hide the badge.
 Selecting a preset still removes an exact outfit, or replaces the complete
-managed outfit when additional apparel is worn. The 0.4.6 badge fix needs
-in-game confirmation.
+managed outfit when additional apparel is worn.
 Outfits allow up to 64 worn pieces. Equivalent spare copies without a unique ID
 are accepted only when all saved signature fields match. Unique-ID collisions
 remain invalid. Unavailable preset details name the failing piece and reason;
-comparison diagnostics are written to FavoriteWheel.log. Outfit matching fixes
-in 0.4.5 still need in-game testing with the affected inventory.
+comparison diagnostics are written to FavoriteWheel.log.
 Item source defaults to Favorites only (General / AllInventory=0).
 Q -> F2 -> Gameplay -> Item source -> All inventory -> Apply shows carried items.
 Spells, shouts and active powers have separate top-level categories and remain
@@ -83,7 +80,10 @@ New movement presses inside the wheel only operate its UI. Movement keys still
 held when both wheel menus close resume immediately; gameplay remaps are respected.
 Left-stick movement keeps the opening vector until centered; new aim from rest
 only selects entries. Attacks and opening keys retain release protection.
-Movement input changes in 0.4.4 need in-game testing, including other input hooks.
+Captured buttons are removed from downstream dispatch, including RB voice-power
+input. Required gameplay releases, movement and IME input retain their own policies.
+The merged 0.4.3-0.4.8 changes received broadly positive user feedback.
+The new 0.4.9 Horde/RB input isolation fix awaits in-game confirmation.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT

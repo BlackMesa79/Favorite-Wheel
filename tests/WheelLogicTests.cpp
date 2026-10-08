@@ -1,6 +1,7 @@
 #include "WheelLogic.h"
 #include "FunctionNavigation.h"
 #include "InputGate.h"
+#include "InputDispatchChain.h"
 #include "OpenPolicy.h"
 #include "InputBindings.h"
 #include "QuickSlots.h"
@@ -12,7 +13,89 @@
 #include <iostream>
 #include <array>
 void Check(bool ok, const char* message) { if (!ok) { std::cerr << message << '\n'; std::exit(1); } }
+void CheckInputDispatch() {
+    using namespace Wheel;
+    struct Event { unsigned key; bool pressed; Event* next=nullptr; };
+    using R=InputGate::Result;
+    InputGate gate;
+    int voiceActions=0,seenButtons=0;
+    // A handler that considers a zero-valued voice button a release would cast
+    // the selected lesser power with the former neutralized-event approach.
+    auto sink=[&](Event* head) {
+        for(auto e=head;e;e=e->next) {
+            ++seenButtons;
+            if(e->key==275 && !e->pressed)++voiceActions;
+        }
+    };
+    auto dispatch=[&](bool pressed,bool capture) {
+        Event rb{275,pressed};
+        const auto decision=gate.Filter(275,pressed,!pressed,capture);
+        if(decision==R::Suppress || decision==R::Release)rb.pressed=false;
+        InputDispatchChain<Event> chain(&rb);
+        chain.Append(&rb,decision!=R::Suppress);chain.Finish();sink(*chain.Events());
+    };
+    dispatch(true,true);dispatch(true,true);dispatch(false,true);
+    Check(seenButtons==0 && voiceActions==0,"Wheel RB down/hold/up are absent even for release-driven power handlers");
+    dispatch(true,true);dispatch(true,false);dispatch(false,false);
+    Check(seenButtons==0 && voiceActions==0,"Closing while holding RB cannot leak a held event or orphan release");
+    dispatch(true,false);dispatch(false,false);
+    Check(seenButtons==2 && voiceActions==1,"Fresh RB outside the wheel still activates the equipped power");
+    seenButtons=voiceActions=0;gate.Reset();
+    dispatch(true,false);dispatch(true,true);dispatch(true,true);dispatch(false,true);
+    Check(seenButtons==2 && voiceActions==1,"A gameplay button held before opening receives its necessary release exactly once");
+    // Mixed batches retain order and the engine's original head/next pointers.
+    Event lead{274,true},move{17,true},middle{275,true},text{1000,true},tail{276,true};
+    lead.next=&move;move.next=&middle;middle.next=&text;text.next=&tail;
+    Event* original=&lead;
+    {
+        InputDispatchChain<Event> chain(original);
+        for(auto e=original;e;e=e->next)chain.Append(e,e==&move || e==&text);
+        chain.Finish();
+        Check(*chain.Events()==&move && move.next==&text && text.next==nullptr,
+            "Leading, middle and trailing captured events are removed without dropping allowed movement or text");
+        // Simulate an inner IME hook: inject text, dispatch it synchronously,
+        // then restore its own temporary links before returning to the wheel.
+        Event injected{2000,true};
+        text.next=&injected;
+        auto cursor=*chain.Events();int seen=0;
+        for(;cursor;cursor=cursor->next)++seen;
+        Check(seen==3,"Text injected by an inner hook reaches the same downstream dispatch");
+        text.next=nullptr;
+    }
+    Check(original==&lead && lead.next==&move && move.next==&middle && middle.next==&text && text.next==&tail && !tail.next,
+        "Original engine queue is restored after nested input hooks");
+    // The inverse hook order places the injected character in our input chain.
+    Event injected{2000,true};tail.next=&injected;
+    {
+        InputDispatchChain<Event> chain(original);
+        for(auto e=original;e;e=e->next)chain.Append(e,e==&move || e==&text || e==&injected);
+        chain.Finish();
+        Check(move.next==&text && text.next==&injected && !injected.next,
+            "Text already injected by an outer hook remains visible");
+    }
+    Check(text.next==&tail && tail.next==&injected,"Outer-hook injected queue links are also restored");
+    tail.next=nullptr;
+    try {
+        InputDispatchChain<Event> chain(original);
+        for(auto e=original;e;e=e->next)chain.Append(e,e==&move);
+        chain.Finish();throw 1;
+    } catch(int) {}
+    Check(move.next==&middle && text.next==&tail,"Exception unwinding restores engine-owned links");
+    {
+        InputDispatchChain<Event> chain(original);
+        for(auto e=original;e;e=e->next)chain.Append(e,false);
+        chain.Finish();Check(!*chain.Events(),"Fully captured batches still dispatch an empty chain");
+    }
+    Check(lead.next==&move && move.next==&middle,"Fully captured batches leave the engine queue intact");
+    {
+        InputDispatchChain<Event> chain(original);
+        for(auto e=original;e;e=e->next)chain.Append(e,true);
+        chain.Finish();Check(*chain.Events()==original && text.next==&tail,"Idle dispatch keeps every event intact");
+    }
+    InputDispatchChain<Event> empty(nullptr);empty.Finish();Check(!*empty.Events(),"Empty input polls remain valid");
+}
 int main() {
+    CheckInputDispatch();
     using namespace Wheel;
     Check(PageCount(0) == 1 && PageCount(10) == 1 && PageCount(11) == 2 && PageCount(23) == 3, "page boundaries");
     for(int count=1;count<=categoryCount;++count)for(int current=0;current<count;++current) {

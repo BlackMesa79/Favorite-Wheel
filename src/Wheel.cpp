@@ -3,6 +3,7 @@
 #include "Outfits.h"
 #include "Settings.h"
 #include "InputGate.h"
+#include "InputDispatchChain.h"
 #include "OpenPolicy.h"
 #include "InputBindings.h"
 #include "QuickSlots.h"
@@ -721,7 +722,9 @@ namespace Wheel {
                 }
             }
             shiftHeld[0]=keyboardHeld[42];shiftHeld[1]=keyboardHeld[54];
+            InputDispatchChain<RE::InputEvent> dispatch(events?*events:nullptr);
             for (auto event = events ? *events : nullptr; event; event = event->next) {
+                bool suppress=false;
                 if (auto button = event->AsButtonEvent()) {
                     const auto code = button->GetIDCode();
                     const auto identity = (static_cast<std::uint64_t>(button->GetDevice()) << 32) | code;
@@ -866,6 +869,10 @@ namespace Wheel {
                             code,button->GetUserEvent().c_str(),current.open,openQueued.load(),closing.load(),
                             decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":
                             decision==InputGate::Result::Resume?"resume":"suppress");
+                    if(down && (pad==274 || pad==275) && consume)
+                        SKSE::log::info("Controller category input: raw={} key={} event='{}' filter={}",code,pad,
+                            button->GetUserEvent().c_str(),decision==InputGate::Result::Suppress?"removed":
+                            decision==InputGate::Result::Release?"release":"pass");
                     if(decision==InputGate::Result::Resume) {
                         // A held UI movement key needs a fresh down when gameplay
                         // resumes, rather than waiting for a physical re-press.
@@ -876,6 +883,7 @@ namespace Wheel {
                         auto& data = button->GetRuntimeData();
                         data.value = 0;
                         data.heldDownSecs = decision == InputGate::Result::Release ? std::max(.001f, data.heldDownSecs) : 0;
+                        suppress=decision==InputGate::Result::Suppress;
                     }
                 } else if (auto mouse = event->AsMouseMoveEvent(); mouse && captureBatch) {
                     if (IsOpen()) {
@@ -902,8 +910,14 @@ namespace Wheel {
                     if(stick->IsLeft())movementStick.Filter(stick->xValue,stick->yValue);
                     else if(captureBatch)stick->xValue=stick->yValue=0;
                 }
+                dispatch.Append(event,!suppress);
             }
-            previousDispatch(source, events);
+            // Keep genuine gameplay releases and allowed movement/IME events.
+            // Restore original queue links after every chained hook has returned;
+            // injected character events are consumed during that same dispatch.
+            dispatch.Finish();
+            previousDispatch(source, dispatch.Events());
+            dispatch.Restore();
             if (!Focused()) {
                 inputGate.Reset();movementStick.Reset();controllerPages.Reset();shiftHeld[0]=shiftHeld[1]=false;
                 std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);

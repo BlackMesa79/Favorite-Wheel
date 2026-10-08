@@ -1,0 +1,4 @@
+0.4.9 test build
+- Remove captured buttons from downstream dispatch instead of forwarding zero-valued events, addressing the RB/voice-power leak reported with Horde.
+- Preserve required gameplay releases, movement recovery, and IME input routing.
+- Add LB/RB category-input diagnostics. The merged 0.4.3–0.4.8 changes received broadly positive feedback; this new isolation fix awaits in-game testing.
