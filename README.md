@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.4.9**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.5.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -56,7 +56,7 @@ Mark items and spells as favorites in your normal inventory and magic menus, ret
 
 For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the supplied default is `0`. Switching the source does not add or remove favorites. Spells, shouts, and active powers occupy three separate top-level categories and remain favorites only. Passive abilities are excluded; physical scrolls stay under Other. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
 
-The directory collects lightweight item identities once per opening; category/page changes and rendering copy at most ten entries. Details are requested after about 80 ms of stable hover and cached for that opening; live modes refresh the hovered details at most twice per second. Inventory/equipment events trigger coalesced directory refreshes in live modes. Opening the action wheel directly skips inventory collection until you switch to items. Initial collection and sorting still scale with inventory size, and new font glyphs may require an atlas upload. Large real inventories need in-game testing; see [inventory mode notes](docs/INVENTORY_MODE.md).
+The directory collects lightweight item identities once per opening; category/page changes and rendering copy at most ten entries. Details are requested after about 80 ms of stable hover and cached for that opening; live modes refresh the hovered details at most twice per second. Inventory/equipment events trigger coalesced directory refreshes in live modes. Opening the action wheel directly skips inventory collection until you switch to items. Initial collection and sorting still scale with inventory size, and new font glyphs may require an atlas upload. Large-inventory use received positive user feedback; see [inventory mode notes](docs/INVENTORY_MODE.md).
 
 The supplied INI uses `Language=auto`: follow the Windows display language, then fall back to English if no translation matches. F2 settings also offer explicit language selection. Existing manual choices are preserved on upgrade; choose System to enable automatic selection. Fonts are loaded from your own system; no Windows fonts are distributed.
 
@@ -96,7 +96,7 @@ The opening button acts as navigation while the controller wheel is open; use B 
 
 Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. Item use and actions execute after the menu closes and its time control is released. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
 
-Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. Version 0.4.2 received positive in-game feedback; the merged 0.4.3–0.4.8 changes also received broadly positive user feedback. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
+Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
 
 In live modes, a movement direction held before opening is retained until you release that key. New movement-key presses inside the wheel only operate its UI; a key still held when both wheel menus close resumes movement immediately. Gameplay remaps are respected. The left stick retains its opening movement vector until centered, while still aiming the wheel; new stick movement from rest does not move the character until closing. Pause mode and settings/dialogs still pause the world. Attack clicks, opening keys, and other actions remain suppressed until release.
 
@@ -120,17 +120,13 @@ Exports use `Data/SKSE/Plugins/FavoriteWheel/Outfits/Exports/*.fwo`. Place files
 
 Missing or ambiguous items, protected quest equipment, and shield-slot conflicts can prevent a change. Improving, enchanting, or renaming equipment may require recapturing the preset. Other mods can alter or block individual equipment steps; incomplete changes are reported rather than forced or rolled back.
 
-Version 0.4.8 separates Spells, Shouts, and Powers into adjacent top-level categories. Powers includes active greater, lesser, and voice powers; passive abilities and internal effects are excluded. Keyboard/controller navigation, native quick slots, session category memory, and on-demand details are shared with the existing categories. See [magic categories](docs/MAGIC_CATEGORIES_0.4.8.md).
-
-Version 0.4.7 tracks physical D-Pad Up/Down presses for paging inside the wheel, including nonzero-duration first presses and zero-duration releases. Holding the opening key does not turn a page; release and press again. Single-page navigation keeps the selection. The log records paging input and before/after page numbers. See [controller paging review](docs/CONTROLLER_PAGING_0.4.7.md).
-
-Version 0.4.6 shows an outfit as equipped whenever all its saved instances are worn, including manual equipment changes. Additional apparel or hidden armor accessories no longer suppress the badge. Transaction rules remain unchanged: if extra managed apparel is worn, selecting the preset replaces the complete outfit; an exact set toggles off. See [equipped badge review](docs/OUTFIT_WEAR_BADGE_0.4.6.md).
-
-Version 0.4.5 accepts equivalent spare copies without a unique instance ID when their complete saved signatures match, including tempering, enchantment, and custom name. Unique-ID collisions still fail validation. An unavailable preset's detail card now names the first failing piece and distinguishes absence, changed identity, ambiguity, and a duplicate recipe entry; the log records comparison details. This addresses a reproducible matching failure, but the reported Shattered Royal Armor case still needs confirmation with the affected inventory. See [outfit matching review](docs/OUTFIT_MATCHING_0.4.5.md).
-
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
 
-Version 0.4.9 removes captured button events from downstream input dispatch instead of forwarding zero-valued buttons. This addresses the RB/voice-power input leak reported with Horde. Required gameplay releases, existing movement and IME input retain their separate policies. The merged 0.4.3–0.4.8 changes received broadly positive user feedback; the new Horde/input isolation fix awaits in-game confirmation. See [input isolation review](docs/INPUT_ISOLATION_0.4.9.md).
+## Version 0.5.0
+
+This release combines the 0.4.1–0.4.9 updates since the public 0.4.0 release: optional full inventory, Pause/Slow time/Normal speed, separate Spells/Shouts/Powers categories, improved outfit matching and equipped badges, controller paging and input isolation, and movement/time recovery fixes. The merged updates and the Horde/RB fix received successful user testing before release. Keep your existing configuration and matching SKSE co-saves when upgrading.
+
+See the [merged changelog](release-materials/0.5.0/Nexus-changelog-en.txt) and [release notes](docs/RELEASE_0.5.0.md). Historical implementation reviews remain in docs; their original pending-test notes describe the development stage, not the current release status. Runtime coverage remains as listed above.
 
 ## Optional integrations
 
@@ -204,13 +200,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.9.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.0.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.4.9 release materials](release-materials/0.4.9) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.5.0 release materials](release-materials/0.5.0) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

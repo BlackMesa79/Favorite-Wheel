@@ -74,16 +74,14 @@ F2 -> Gameplay -> Time behavior offers Pause (default), Slow time and Normal spe
 SlowTimePercent defaults to 20 (5..100), relative to the existing game speed.
 Settings and outfit dialogs pause in every mode; UI animation timing is unchanged.
 The world keeps running in live modes. Detected external time changes close the
-wheel without overwriting the other source. Slow-time coexistence needs testing.
+wheel without overwriting the other source.
 In live modes, a direction held before opening remains active until released.
 New movement presses inside the wheel only operate its UI. Movement keys still
 held when both wheel menus close resume immediately; gameplay remaps are respected.
 Left-stick movement keeps the opening vector until centered; new aim from rest
 only selects entries. Attacks and opening keys retain release protection.
-Captured buttons are removed from downstream dispatch, including RB voice-power
-input. Required gameplay releases, movement and IME input retain their own policies.
-The merged 0.4.3-0.4.8 changes received broadly positive user feedback.
-The new 0.4.9 Horde/RB input isolation fix awaits in-game confirmation.
+Wheel buttons do not activate gameplay actions while the wheel is open,
+including RB voice-slot powers. Normal controls remain available outside it.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT

@@ -1,0 +1,8 @@
+0.5.0 — Changes since the public 0.4.0 release
+- Added optional All inventory mode. Favorites only remains the default; spells, shouts, and powers still require favorites.
+- Added Slow time and Normal speed modes alongside the default Pause mode. Slowdown is adjustable; settings and outfit dialogs always pause.
+- Improved paging and on-demand details for large inventories, live inventory refreshes, time restoration, and rapid open/close stability.
+- Fixed movement stopping when opening the wheel, delayed movement recovery after closing, and unreliable controller D-Pad paging.
+- Improved outfit instance matching and missing-piece diagnostics. Manually equipping every saved piece now shows the equipped badge, even with additional apparel.
+- Split magic into Spells, Shouts, and Powers categories, with updated localization.
+- Fixed captured RB input activating voice-slot powers such as Horde's management ability; normal controls remain available outside the wheel.
