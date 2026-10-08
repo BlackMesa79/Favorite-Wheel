@@ -30,6 +30,8 @@ A/D change categories; W/S or the mouse wheel change pages. Left click uses
 an entry; right click equips to the left hand where supported or manages an
 outfit preset. F2 opens settings; Esc/Tab closes or returns from a sub-list.
 Q follows your game's Favorites binding unless overridden in settings.
+If Favorites is rebound, default actions follow that key with Shift. Set
+Controls / Hotkey=16 in the active INI and restart to force physical Q.
 Settings / Controls configures independent keyboard main keys and Shift/Ctrl/Alt
 modifiers. Old configuration files retain Q and Shift+Q defaults.
 Controller: Favorites binding opens; LB + Favorites opens actions; left stick
@@ -82,6 +84,8 @@ Left-stick movement keeps the opening vector until centered; new aim from rest
 only selects entries. Attacks and opening keys retain release protection.
 Wheel buttons do not activate gameplay actions while the wheel is open,
 including RB voice-slot powers. Normal controls remain available outside it.
+An entrance disabled by native control groups yields to contextual interactions.
+The 0.5.1 contextual-entry change needs confirmation with the reporting setup.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT

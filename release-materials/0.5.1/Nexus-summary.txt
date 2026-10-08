@@ -1,0 +1,1 @@
+Replace Skyrim's Favorites menu with a categorized wheel for favorites or your full inventory. Access outfits and optional Face Lighting through a separate action wheel, with configurable time behavior, controller support, themes, and localization.

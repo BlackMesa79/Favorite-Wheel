@@ -1,0 +1,4 @@
+0.5.1 test build
+- Respect disabled native control groups when opening the wheel, yielding conflicting entrances to contextual interactions such as QuickLoot search. Reporting-user confirmation is pending.
+- Log effective favorites/actions keys and modifiers after loading to diagnose remapped Favorites bindings.
+- Continue following the game Favorites binding by default; Hotkey=16 explicitly selects physical Q.

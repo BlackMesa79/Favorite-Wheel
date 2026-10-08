@@ -55,6 +55,8 @@ namespace Wheel {
         std::atomic<std::uint64_t> openSerial{0};
         struct PendingOpen {
             bool functions;
+            RE::INPUT_DEVICE device;
+            std::uint32_t code;
             std::uint64_t generation, serial;
             std::chrono::steady_clock::time_point deadline;
         };
@@ -106,6 +108,17 @@ namespace Wheel {
             auto menus = RE::MenuControls::GetSingleton();
             return menus && PlayerEligible(gameActive, player != nullptr, player && player->Get3D(),
                 ActorRuntime::IsDead(player), menus->InBeastForm());
+        }
+        bool EntryControlsEnabled(RE::INPUT_DEVICE device,std::uint32_t code) {
+            auto controls=RE::ControlMap::GetSingleton();
+            if(!controls)return false;
+            if(device!=RE::INPUT_DEVICE::kKeyboard && device!=RE::INPUT_DEVICE::kMouse && device!=RE::INPUT_DEVICE::kGamepad)return false;
+            const auto context=controls->controlMap[RE::UserEvents::INPUT_CONTEXT_ID::kGameplay];
+            if(!context)return true; // A custom wheel key need not have a native mapping.
+            const auto enabled=controls->GetRuntimeData().enabledControls.underlying();
+            for(const auto& mapping:context->deviceMappings[static_cast<unsigned>(device)])
+                if(mapping.inputKey==code && !EntryControlGroupEnabled(mapping.userEventGroupFlag.underlying(),enabled))return false;
+            return true;
         }
         const char* OpenBlockReason() {
             auto ui = RE::UI::GetSingleton();
@@ -272,11 +285,11 @@ namespace Wheel {
             if(Config().sounds) RE::PlaySound("UIMenuOK");
             SKSE::log::info("Wheel opened: mode={} scope={} entries={} timeMode={} slowPercent={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size(),Config().timeMode,Config().slowPercent);
         }
-        void RequestOpen(bool functions) {
+        void RequestOpen(bool functions,RE::INPUT_DEVICE device,std::uint32_t code) {
             std::lock_guard lifecycle(lifecycleMutex);
             std::lock_guard lock(openMutex);
             if(openQueued.exchange(true))return;
-            pendingOpen=PendingOpen{functions,epoch.load(),++openSerial,
+            pendingOpen=PendingOpen{functions,device,code,epoch.load(),++openSerial,
                 std::chrono::steady_clock::now()+std::chrono::seconds(2)};
         }
         void PumpOpen() {
@@ -286,7 +299,7 @@ namespace Wheel {
             {std::lock_guard lock(openMutex);request=std::move(pendingOpen);pendingOpen.reset();}
             if(!request || request->serial!=openSerial.load())return;
             RunQueuedTask(openQueued,[&] {
-                const auto reason=OpenBlockReason();
+                const auto reason=!EntryControlsEnabled(request->device,request->code)?"entry control group disabled":OpenBlockReason();
                 if(request->generation==epoch.load() && !IsOpen() && !reason &&
                     std::chrono::steady_clock::now()<request->deadline)Open(request->functions);
                 else SKSE::log::info("Wheel opening canceled on player update: {}",reason?reason:"state changed or expired");
@@ -747,11 +760,17 @@ namespace Wheel {
                     }
                     const auto opening=ToggleKey(button);
                     const bool toggle = opening!=Opening::None;
+                    // Native contextual actions can disable a physical entrance
+                    // through custom control groups without disabling all menus.
+                    // Yield its whole cycle unchanged while idle; open/closing
+                    // wheels still own captured buttons until physical release.
+                    const bool yieldEntry=!captureBatch && !inputGate.Swallowed(identity) &&
+                        (toggle || ReplacedEntrance(button)) && !EntryControlsEnabled(button->GetDevice(),code);
                     if(down && (button->GetDevice()==RE::INPUT_DEVICE::kGamepad || button->GetDevice()==RE::INPUT_DEVICE::kKeyboard || button->GetDevice()==RE::INPUT_DEVICE::kMouse)) {
                         std::lock_guard lock(viewMutex);view.gamepad=pad!=0;
                     }
                     if (down && button->GetDevice() == RE::INPUT_DEVICE::kKeyboard && (code == 16 || toggle)) {
-                        const auto reason = OpenBlockReason();
+                        const auto reason = yieldEntry?"entry control group disabled":OpenBlockReason();
                         const auto player = RE::PlayerCharacter::GetSingleton();
                         const auto race = player ? player->GetRace() : nullptr;
                         SKSE::log::info("Favorites key: scan={} mapped={} event='{}' match={} open={} blocked='{}' race={:08X} racePlayable={}",
@@ -759,7 +778,7 @@ namespace Wheel {
                             race ? race->GetFormID() : 0, race && race->GetPlayable());
                     }
                     if(down && pad && (toggle || pad==266 || static_cast<int>(pad)==EffectiveGamepadKey(Config()))) {
-                        const auto reason=OpenBlockReason();
+                        const auto reason=yieldEntry?"entry control group disabled":OpenBlockReason();
                         SKSE::log::info("Controller entrance: raw={} key={} mapped={} effective={} mode={} open={} blocked='{}'",
                             code,pad,FavoritesScanCode(RE::INPUT_DEVICE::kGamepad),EffectiveGamepadKey(Config()),
                             opening==Opening::Actions?"actions":opening==Opening::Favorites?"favorites":"none",IsOpen(),reason?reason:"none");
@@ -772,7 +791,9 @@ namespace Wheel {
                     if(naming && nameRepeat && (code==14 || code==211 || code==203 || code==205) && !bridge.composing)NameKey(code,false);
                     const bool bridgeKey=naming && bridge.available && bridge.enabled && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
                         (code==bridge.hotkey || code==29 || code==157 || code==42 || code==54 || (bridge.active && code==57 && (GetAsyncKeyState(VK_CONTROL)&0x8000)));
-                    if(down && openQueued && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && (code==1 || code==15)) {
+                    if(yieldEntry) {
+                        // Leave the event for the contextual action's handler.
+                    } else if(down && openQueued && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && (code==1 || code==15)) {
                         Cancel();
                     } else if(bridgeKey) {
                         // Keep toggle/modifier values intact for Text Bridge regardless of hook order.
@@ -818,7 +839,7 @@ namespace Wheel {
                     } else if (down && !inputGate.Swallowed(identity) && toggle && (!pad || !current.open)) {
                         if (IsOpen() || openQueued) { Cancel(true); consume = captureBatch = true; }
                         else if (closing || HasPendingAction() || Outfits::Busy()) { consume = true;if(Outfits::Busy())RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),"outfitWorking").c_str()); }
-                        else if (!OpenBlockReason()) { RequestOpen(opening==Opening::Actions); consume = captureBatch = true; }
+                        else if (!OpenBlockReason()) { RequestOpen(opening==Opening::Actions,button->GetDevice(),code); consume = captureBatch = true; }
                     } else if (down && IsOpen() && !inputGate.Swallowed(identity)) {
                         if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
                             const int quickSlot=QuickSlotFromKey(code,button->GetUserEvent().c_str());
@@ -1070,7 +1091,13 @@ namespace Wheel {
         { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
             view.items.clear();view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);
-        if (active) SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={}", dispatchCount.load(), FavoritesScanCode(), Config().hotkey);
+        if (active) {
+            const auto config=Config();const auto favorite=EffectiveKeyboardKey(config);
+            SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={} effectiveFavorite={} favoriteModifiers={} effectiveAction={} actionModifiers={}",
+                dispatchCount.load(),FavoritesScanCode(),config.hotkey,favorite,config.hotkeyModifier,
+                config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier);
+            if(config.hotkey<0 && favorite!=16)SKSE::log::info("Wheel follows the game's remapped Favorites key (scan={}); set Controls/Hotkey=16 to use physical Q",favorite);
+        }
     }
     bool InstallWheel() {
         auto ui = RE::UI::GetSingleton();

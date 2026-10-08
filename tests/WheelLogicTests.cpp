@@ -195,6 +195,30 @@ int main() {
     Check(!PlayerEligible(true,true,true,false,true), "beast form yields to vanilla");
     Check(!PlayerEligible(false,true,true,false,false) && !PlayerEligible(true,true,true,true,false), "loading and dead player cannot open");
     Check(FavoritesKeyMatches(-1,16,16,"") && FavoritesKeyMatches(-1,33,33,""), "default and rebound physical favorites key");
+    Check(ResolveFavoritesKey(-1,51)==51 && !FavoritesKeyMatches(-1,51,16,""),"Reported mapped=51 follows comma, not physical Q");
+    Check(KeyboardOpening(51,0,51,0,51,1)==Opening::Favorites && KeyboardOpening(51,1,51,0,51,1)==Opening::Actions,
+        "Both default wheel chords follow the game's remapped Favorites key");
+    Check(KeyboardOpening(16,0,ResolveFavoritesKey(16,51),0,16,1)==Opening::Favorites &&
+        KeyboardOpening(16,1,16,0,16,1)==Opening::Actions,"Explicit Hotkey=16 restores Q and Shift+Q without altering game controls");
+    {
+        constexpr std::uint32_t menu=1u<<3,contextual=1u<<13,invalid=1u<<31;
+        Check(EntryControlGroupEnabled(menu,menu) && EntryControlGroupEnabled(0,0),"Ordinary and ungrouped entrances remain available");
+        Check(EntryControlGroupEnabled(invalid,0) && EntryControlGroupEnabled(0xFFFFFFFF,0),"Invalid group sentinel is not a disabled control");
+        Check(!EntryControlGroupEnabled(menu|contextual,menu),"A contextual mod can disable Favorites without disabling menu controls");
+        Check(EntryControlGroupEnabled(menu|contextual,menu|contextual),"Leaving the looting context re-enables the same Favorites mapping");
+        Check(!EntryControlGroupEnabled(menu,contextual),"Native disabled control groups also retain priority");
+        InputGate contextualGate;
+        using Result=InputGate::Result;
+        for(bool pressed:{true,true,false}) {
+            const bool shouldCapture=EntryControlGroupEnabled(menu|contextual,menu);
+            Check(contextualGate.Filter(16,pressed,!pressed,shouldCapture)==Result::Pass,
+                "Yielded Q down/hold/up reach a contextual looting handler unchanged");
+        }
+        Check(contextualGate.Filter(16,true,false,EntryControlGroupEnabled(menu|contextual,menu|contextual))==Result::Suppress,
+            "A fresh enabled entrance can open and capture normally after looting");
+        Check(contextualGate.Filter(16,true,false,true)==Result::Suppress && contextualGate.Filter(16,false,true,true)==Result::Suppress,
+            "An already captured entrance remains protected if control groups change while the wheel is open");
+    }
     Check(!FavoritesKeyMatches(-1,0xFFFFFFFF,33,"Favorites"), "unmapped semantic events are not wheel entry keys");
     Check(!FavoritesKeyMatches(-1,0xFFFFFFFF,16,"") && !FavoritesKeyMatches(-1,255,16,"ToggleFavorite"), "unbound key and inventory ToggleFavorite do not open wheel");
     Check(!FavoritesKeyMatches(44,16,16,"Favorites") && FavoritesKeyMatches(44,16,44,""), "explicit override takes priority");

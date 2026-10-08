@@ -2,6 +2,11 @@
 #include <cstdint>
 #include <string_view>
 namespace Wheel {
+    // Invalid is the engine's sentinel for an ungrouped mapping. Valid custom
+    // groups (e.g. contextual looting) must be enabled alongside native groups.
+    inline bool EntryControlGroupEnabled(std::uint32_t group, std::uint32_t enabled) {
+        return (group & (std::uint32_t{1}<<31)) || (enabled & group)==group;
+    }
     // Race "playable" is a character-creation flag, not a test for beast form.
     // Vampire/custom human races may lack it and still use the normal favorites menu.
     inline bool PlayerEligible(bool active, bool present, bool has3D, bool dead, bool beast) {
