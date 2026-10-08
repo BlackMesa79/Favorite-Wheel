@@ -6,11 +6,11 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current version: **0.4.7**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current version: **0.4.8**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
-- **Categorized favorites:** weapons, equipment, potions, food, magic, and other items. Ten entries per page, with additional pages as needed.
+- **Categorized favorites:** weapons, equipment, potions, food, spells, shouts, powers, and other items. Ten entries per page, with additional pages as needed.
 - **Optional full inventory:** switch Item source to All inventory in Settings / Gameplay. Favorites only remains the default, including when upgrading an old INI.
 - **Time behavior:** choose Pause (default), Slow time, or Normal speed; adjust slow time from 5% to 100% of the existing game speed. Settings and outfit dialogs always pause.
 - **Separate action wheel:** outfit presets and optional Face Lighting controls occupy independent categories.
@@ -54,7 +54,7 @@ SKSE/Plugins/FavoriteWheel/Themes/*.ini
 
 Mark items and spells as favorites in your normal inventory and magic menus, return to gameplay, and press the Favorites key. SkyUI is optional. Disable competing Favorites-menu replacement features in other mods.
 
-For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the supplied default is `0`. Switching the source does not add or remove favorites. The magic category still contains only favorited spells and shouts. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
+For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the supplied default is `0`. Switching the source does not add or remove favorites. Spells, shouts, and active powers occupy three separate top-level categories and remain favorites only. Passive abilities are excluded; physical scrolls stay under Other. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
 
 The directory collects lightweight item identities once per opening; category/page changes and rendering copy at most ten entries. Details are requested after about 80 ms of stable hover and cached for that opening; live modes refresh the hovered details at most twice per second. Inventory/equipment events trigger coalesced directory refreshes in live modes. Opening the action wheel directly skips inventory collection until you switch to items. Initial collection and sorting still scale with inventory size, and new font glyphs may require an atlas upload. Large real inventories need in-game testing; see [inventory mode notes](docs/INVENTORY_MODE.md).
 
@@ -94,7 +94,7 @@ Controller controls (Xbox names; equivalent PlayStation buttons use the same pos
 
 The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the left stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB cycle appearance, controls, and gameplay tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
 
-Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. Item use and actions execute after the menu closes and its time control is released. Animations do not delay those actions. Spells and shouts are equipped for normal casting, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
+Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. Item use and actions execute after the menu closes and its time control is released. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
 
 Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. Version 0.4.2 received positive in-game feedback; subsequent recovery and movement fixes need further in-game checks. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
 
@@ -119,6 +119,8 @@ Right-click a preset to rename, overwrite, delete, or export it. **Save the game
 Exports use `Data/SKSE/Plugins/FavoriteWheel/Outfits/Exports/*.fwo`. Place files in the sibling `Imports` folder and select **IMPORT OUTFITS**. The destination character must own matching equipment; imports do not copy items. Dynamic forms and player-created dynamic enchantments cannot currently be exported. The format is not compatible with Outfit Wheeler exports.
 
 Missing or ambiguous items, protected quest equipment, and shield-slot conflicts can prevent a change. Improving, enchanting, or renaming equipment may require recapturing the preset. Other mods can alter or block individual equipment steps; incomplete changes are reported rather than forced or rolled back.
+
+Version 0.4.8 separates Spells, Shouts, and Powers into adjacent top-level categories. Powers includes active greater, lesser, and voice powers; passive abilities and internal effects are excluded. Keyboard/controller navigation, native quick slots, session category memory, and on-demand details are shared with the existing categories. See [magic categories](docs/MAGIC_CATEGORIES_0.4.8.md).
 
 Version 0.4.7 tracks physical D-Pad Up/Down presses for paging inside the wheel, including nonzero-duration first presses and zero-duration releases. Holding the opening key does not turn a page; release and press again. Single-page navigation keeps the selection. The log records paging input and before/after page numbers. Confirmation with the reporting controller is pending; see [controller paging review](docs/CONTROLLER_PAGING_0.4.7.md).
 
@@ -200,13 +202,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.7.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.4.8.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.4.7 release materials](release-materials/0.4.7) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.4.8 release materials](release-materials/0.4.8) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

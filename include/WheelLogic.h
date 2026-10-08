@@ -6,7 +6,7 @@
 
 namespace Wheel {
     constexpr int slots = 10;
-    enum class Category { Weapons, Armor, Potions, Food, Magic, Other, Count };
+    enum class Category { Weapons, Armor, Potions, Food, Spells, Shouts, Powers, Other, Count };
     constexpr int categoryCount = static_cast<int>(Category::Count);
     inline int Wrap(int value, int count) { return count > 0 ? (value % count + count) % count : 0; }
     inline int PageCount(std::size_t count) { return std::max(1, static_cast<int>((count + slots - 1) / slots)); }

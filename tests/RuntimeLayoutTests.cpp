@@ -1,4 +1,5 @@
 #include "RuntimeSupport.h"
+#include "MagicCategories.h"
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <Windows.h>
@@ -9,6 +10,14 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+
+static_assert(Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kSpell)==Wheel::Category::Spells);
+static_assert(Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kPower)==Wheel::Category::Powers);
+static_assert(Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kLesserPower)==Wheel::Category::Powers);
+static_assert(Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kVoicePower)==Wheel::Category::Powers);
+static_assert(Wheel::MagicCategory(true,RE::MagicSystem::SpellType::kVoicePower)==Wheel::Category::Shouts);
+static_assert(!Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kAbility));
+static_assert(!Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kDisease));
 
 namespace
 {
@@ -104,7 +113,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 4, 7, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{0, 4, 8, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,

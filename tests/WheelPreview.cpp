@@ -118,6 +118,14 @@ int main(int argc, char** argv) {
             item("旅行伙伴 · 未加载",IconKind::LightTarget,true,false,Tr(config,"lightUnloaded")),
             item(Tr(config,"lightBack"),IconKind::Back,false,true,"",ActionKind::FunctionBack)};
     }
+    if(argc>4 && (std::string(argv[4])=="spells" || std::string(argv[4])=="shouts" || std::string(argv[4])=="powers")) {
+        const std::string mode=argv[4];
+        Wheel::preview.category=mode=="spells"?Wheel::Category::Spells:mode=="shouts"?Wheel::Category::Shouts:Wheel::Category::Powers;
+        const bool chinese=config.language=="zh_CN";
+        const char* names=mode=="spells"?(chinese?"火焰术":"Flames"):mode=="shouts"?(chinese?"不卸之力":"Unrelenting Force"):(chinese?"夜视":"Night Eye");
+        for(auto& item:Wheel::preview.items){item.category=Wheel::preview.category;item.name=names;item.magic=true;item.icon=Wheel::IconKind::Auto;item.count=1;}
+        Wheel::preview.gamepad=mode=="shouts";
+    }
     if(argc>4 && std::string(argv[4])=="pages" && !Wheel::preview.items.empty()) {
         const auto sample=Wheel::preview.items[0];
         Wheel::preview.items.resize(103,sample);Wheel::preview.page=5;
@@ -147,7 +155,7 @@ int main(int argc, char** argv) {
                 Wheel::AddEffect(item.info,"提高生命上限",35,0,0,false,false,false,false);
                 Wheel::AddEffect(item.info,"抵抗冰霜",25,0,0,false,false,false,false);
             } else if(mode=="info-spell") {
-                Wheel::preview.category=Wheel::Category::Magic;item.name="火焰术";item.magic=true;item.icon=Wheel::IconKind::Magic;
+                Wheel::preview.category=Wheel::Category::Spells;item.name="火焰术";item.magic=true;item.icon=Wheel::IconKind::Magic;
                 item.info={};item.info.magicka=6.5f;item.info.costPerSecond=true;
                 Wheel::AddEffect(item.info,"火焰伤害",8,1,0,false,false,false,false);
             } else {

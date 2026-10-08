@@ -19,7 +19,8 @@ namespace Wheel
 {
     namespace
     {
-        constexpr const char *categoryKeys[] = {"weapons", "armor", "potions", "food", "magic", "other"};
+        constexpr const char *categoryKeys[] = {"weapons", "armor", "potions", "food", "spells", "shouts", "powers", "other"};
+        static_assert(std::size(categoryKeys)==categoryCount);
         struct Feedback
         {
             std::array<float, slots> hover{};

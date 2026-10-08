@@ -66,3 +66,7 @@ SKSE/Plugins/FavoriteWheel/Languages/fr.ini
 Do not bundle the plugin DLL, main INI, saves, or unrelated themes. Translation-only downloads are additive; the original mod must also be installed. Users can select the language manually, or use automatic selection with a matching Windows display language.
 
 For a GitHub contribution, submit the language file under `assets/Languages/`. Include the locale and a brief description of which UI pages you tested. No recompilation is required to install or test a translation.
+
+## 0.4.8 category labels
+
+Translate `spells`, `shouts`, and `powers` for the new top-level magic categories. `powers` means active greater/lesser/voice powers, not passive abilities. The old `magic` key is retained but no longer labels a current category. Missing new keys fall back to English.

@@ -7,6 +7,7 @@
 #include "ActionPolicy.h"
 #include "EquipPolicy.h"
 #include "NavigationPresentation.h"
+#include "MagicCategories.h"
 #include <cstdlib>
 #include <iostream>
 #include <array>
@@ -14,7 +15,7 @@ void Check(bool ok, const char* message) { if (!ok) { std::cerr << message << '\
 int main() {
     using namespace Wheel;
     Check(PageCount(0) == 1 && PageCount(10) == 1 && PageCount(11) == 2 && PageCount(23) == 3, "page boundaries");
-    for(int count=1;count<=6;++count)for(int current=0;current<count;++current) {
+    for(int count=1;count<=categoryCount;++count)for(int current=0;current<count;++current) {
         const auto ribbon=RibbonLabels(current,count);
         bool centred=false;int seen=0;
         Check(ribbon.size==std::min(count,5),"Ribbon limits category count");
@@ -31,6 +32,18 @@ int main() {
         Check(window.size<=7 && window.first>=0 && window.first+window.size<=total && current>=window.first && current<window.first+window.size,"Page rail remains bounded and includes the selected page");
     }
     Check(Wrap(-1, 6) == 5 && Wrap(6, 6) == 0 && Wrap(1, 0) == 0, "wrap");
+    {
+        enum class Type {kSpell,kPower,kLesserPower,kVoicePower,kAbility,kDisease,kEnchantment,kScroll};
+        Check(categoryCount==8,"Spells, shouts and powers are independent top-level categories");
+        Check(MagicCategory(false,Type::kSpell)==Category::Spells,"Ordinary spells are separated from voice-slot actions");
+        for(auto type:{Type::kPower,Type::kLesserPower,Type::kVoicePower})
+            Check(MagicCategory(false,type)==Category::Powers,"Active greater, lesser and voice powers share the powers category");
+        for(auto type:{Type::kAbility,Type::kDisease,Type::kEnchantment,Type::kScroll})
+            Check(!MagicCategory(false,type),"Passive/internal magic types are never equip actions");
+        Check(MagicCategory(true,Type::kVoicePower)==Category::Shouts,"A shout record takes precedence over its spell-type placeholder");
+        Check(Wrap(static_cast<int>(Category::Spells)+1,categoryCount)==static_cast<int>(Category::Shouts) &&
+            Wrap(static_cast<int>(Category::Shouts)+1,categoryCount)==static_cast<int>(Category::Powers),"Magic categories remain adjacent in navigation");
+    }
     Check(HitTest(0, 0) == -1 && HitTest(.1f, .1f) == -1, "neutral centre");
     for (int i = 0; i < slots; ++i) {
         const float a = i * 2 * std::numbers::pi_v<float> / slots;

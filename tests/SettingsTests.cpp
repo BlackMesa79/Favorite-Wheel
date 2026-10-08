@@ -103,6 +103,7 @@ int main() {
     LoadResources("assets");
     Check(Languages().size()>=2 && Themes().size()>=2,"Bundled resources load");
     Check(Tr(edited,"settings")=="设置","UTF-8 language");
+    Check(Tr(edited,"spells")=="法术" && Tr(edited,"shouts")=="龙吼" && Tr(edited,"powers")=="能力","Separated magic categories use localized labels");
     Check(ResolveLanguage("auto","ZH-cn")=="zh_CN" && ResolveLanguage("zh-CN","en-US")=="zh_CN","Case/hyphen normalization and explicit override");
     Check(ResolveLanguage("auto","en-GB")=="en" && ResolveLanguage("auto","de-DE")=="en","English variants and unavailable locales fall back to English");
     Check(ResolveLanguage("auto","zh-TW")=="en","No unrelated regional translation is silently selected");
@@ -126,6 +127,7 @@ int main() {
     edited.language="fr_FR";
     Check(Tr(edited,"settings")=="Parametres" && FontPath(edited)=="French.ttf","Resolved translation and font use the same locale");
     edited.language="partial";Check(Tr(edited,"settings")=="Custom" && Tr(edited,"apply")=="APPLY" && Tr(edited,"cancel")=="CANCEL","Partial/empty translation fallback");
+    Check(Tr(edited,"spells")=="SPELLS" && Tr(edited,"shouts")=="SHOUTS" && Tr(edited,"powers")=="POWERS","Older partial translations fall back for the new magic categories");
     edited.theme="custom";Check(Style(edited).accent==0xFF34AB12 && Style(edited).panel==Theme{}.panel,"RGBA color parsing and invalid color fallback");
     const auto& visual=Style(edited);
     Check(visual.borderWidth==2 && visual.ornament==0 && visual.iconScale==1 && visual.titleScale==1.1f && visual.labelScale==1 && visual.hoverDuration==.1f && visual.pageDuration==0,"Visual theme bounds, invalid/nonfinite fallback and zero-duration transitions");

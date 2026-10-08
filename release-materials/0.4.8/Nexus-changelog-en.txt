@@ -1,0 +1,5 @@
+0.4.8 test build
+- Split the mixed magic page into Spells, Shouts, and Powers top-level categories.
+- Group active greater/lesser/voice powers together; exclude passive abilities and internal effects.
+- Keep existing paging, category memory, native quick slots, equipment and item details. Magic remains favorites only in All inventory mode.
+- Add spells/shouts/powers translation keys with English fallback. In-game confirmation is pending.

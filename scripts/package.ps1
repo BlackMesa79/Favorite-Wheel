@@ -67,7 +67,9 @@ comparison diagnostics are written to FavoriteWheel.log. Outfit matching fixes
 in 0.4.5 still need in-game testing with the affected inventory.
 Item source defaults to Favorites only (General / AllInventory=0).
 Q -> F2 -> Gameplay -> Item source -> All inventory -> Apply shows carried items.
-Spells/shouts remain favorites only; native 1-8 assignment requires a favorite.
+Spells, shouts and active powers have separate top-level categories and remain
+favorites only, including All inventory mode. Passive abilities are excluded;
+physical scrolls remain under Other. Native 1-8 assignment requires a favorite.
 Books, ingredients, miscellaneous items and poisons cannot be directly used.
 Pages carry at most ten entries and hover details load on demand; initial
 inventory scanning/sorting and new font glyphs can still cost time in large saves.

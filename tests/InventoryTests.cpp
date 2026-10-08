@@ -29,8 +29,8 @@ int main() {
         Check(view.items[PageItemIndex(view,2)].key==catalog.items[catalog.Index(static_cast<Category>(category),page,2)].key,"Hover detail cache resolves the exact selected catalog instance");
     }
     const auto start=std::chrono::steady_clock::now();std::uint64_t checksum=0;
-    for(int i=0;i<10000;++i){int page=i%1001;auto slice=catalog.Page(Category::Armor,page);Check(slice.items.size()<=slots,"Snapshots remain bounded with 60018 catalog entries");checksum+=slice.items.front().key.form;}
-    std::cout<<"60018-entry synthetic catalog: 10000 page snapshots in "
+    for(int i=0;i<10000;++i){int page=i%1001;auto slice=catalog.Page(Category::Armor,page);Check(slice.items.size()<=slots,"Snapshots remain bounded with the expanded category catalog");checksum+=slice.items.front().key.form;}
+    std::cout<<catalog.items.size()<<"-entry synthetic catalog: 10000 page snapshots in "
         <<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<" ms, checksum="<<checksum<<'\n';
     catalog.Set({});int page=9;auto empty=catalog.Page(Category::Food,page);
     Check(page==0 && empty.items.empty() && empty.total==0,"Empty category returns a valid empty page");

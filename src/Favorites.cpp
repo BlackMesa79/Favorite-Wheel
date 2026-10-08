@@ -6,6 +6,7 @@
 #include "ItemInfoCapture.h"
 #include "QuickSlots.h"
 #include "InventoryPolicy.h"
+#include "MagicCategories.h"
 #include <chrono>
 #include <unordered_map>
 #include <optional>
@@ -118,6 +119,7 @@ namespace Wheel {
                 auto favorites=RE::MagicFavorites::GetSingleton();if(!favorites)return {};
                 const auto spell=form->As<RE::SpellItem>();const auto shout=form->As<RE::TESShout>();
                 if((!spell || !player->HasSpell(spell)) && (!shout || !player->HasShout(shout)))return {};
+                if(!MagicCategory(shout!=nullptr,spell?spell->GetSpellType():RE::MagicSystem::SpellType::kVoicePower))return {};
                 if(std::find(favorites->spells.begin(),favorites->spells.end(),form)==favorites->spells.end())return {};
                 Item item=requested;item.quickSlot=-1;
                 for(int i=0;i<nativeQuickSlots && i<static_cast<int>(favorites->hotkeys.size());++i)
@@ -178,13 +180,15 @@ namespace Wheel {
                 const auto spell = form->As<RE::SpellItem>();
                 const auto shout = form->As<RE::TESShout>();
                 if ((!spell || !player->HasSpell(spell)) && (!shout || !player->HasShout(shout))) continue;
+                const auto category=MagicCategory(shout!=nullptr,spell?spell->GetSpellType():RE::MagicSystem::SpellType::kVoicePower);
+                if(!category)continue;
                 const char* name = form->GetName();
                 bool equipped = player->GetEquippedObject(false) == form || player->GetEquippedObject(true) == form;
                 if (auto defaults = RE::BGSDefaultObjectManager::GetSingleton()) {
                     if (auto slot = defaults->GetObject<RE::BGSEquipSlot>(RE::DEFAULT_OBJECT::kVoiceEquip))
                         equipped |= player->GetEquippedObjectInSlot(slot) == form;
                 }
-                result.push_back({{form->GetFormID()}, Category::Magic, name && *name ? name : "?", 1, equipped, true, true});
+                result.push_back({{form->GetFormID()}, *category, name && *name ? name : "?", 1, equipped, true, true});
                 result.back().inventoryWide=allInventory;
                 for(int slot=0;slot<nativeQuickSlots && slot<static_cast<int>(favorites->hotkeys.size());++slot)
                     if(favorites->hotkeys[slot]==form){result.back().quickSlot=slot;break;}

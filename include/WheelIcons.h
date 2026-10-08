@@ -51,7 +51,8 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
     if (item.action == ActionKind::Outfit) { hanger(); return; }
     auto kind = item.icon;
     if (kind == IconKind::Auto) {
-        constexpr IconKind fallback[] = {IconKind::Sword,IconKind::Armor,IconKind::Potion,IconKind::Food,IconKind::Magic,IconKind::Other};
+        constexpr IconKind fallback[] = {IconKind::Sword,IconKind::Armor,IconKind::Potion,IconKind::Food,IconKind::Magic,IconKind::Magic,IconKind::Magic,IconKind::Other};
+        static_assert(std::size(fallback)==categoryCount);
         kind = fallback[static_cast<int>(item.category)];
     }
     switch (kind) {
