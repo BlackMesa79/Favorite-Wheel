@@ -97,7 +97,6 @@ only selects entries. Attacks and opening keys retain release protection.
 Wheel buttons do not activate gameplay actions while the wheel is open,
 including RB voice-slot powers. Normal controls remain available outside it.
 An entrance disabled by native control groups yields to contextual interactions.
-The 0.5.1 contextual-entry change needs confirmation with the reporting setup.
 Face Lighting and Skyrim Text Bridge are optional, not bundled dependencies.
 
 RUNTIME SUPPORT

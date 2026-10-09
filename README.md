@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current development build: **0.5.4 (test)**. Latest public release: **0.5.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current release: **0.5.1**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -123,25 +123,13 @@ Missing or ambiguous items, protected quest equipment, and shield-slot conflicts
 
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
 
-## Version 0.5.4 test build
+## Version 0.5.1
 
-**Keep open after equip is now on by default**, including INIs without the new key. An explicit `General / KeepOpen=0` still opts out; potions and food always close.
+This release includes GOG 1.6.1179 support, continuous equipment/magic/action selection, configurable controller shoulder/trigger roles, separate Keyboard/Controller settings, contextual entrance handling and improved configuration persistence. Keep open after equip defaults on; explicit saved off choices remain off, and potions/food always close. In Pause mode retained equipment processing briefly resumes the world before pausing again; outfit jobs run until complete. Slow/Normal modes keep their selected speed.
 
-Applied settings are global INI configuration and do not require a game save. The path is anchored to `SkyrimSE.exe / Data / SKSE / Plugins / FavoriteWheel.ini`, independent of the launcher's working directory. Saves stage and check the document outside the virtual Data tree, then write through the existing INI's own handle, flush it, and verify both stored bytes and reopened settings. The old virtual `.tmp` rename path is removed. Load/save logs record the path, stage and Windows error; failed saves remain visible and cancelable. This addresses identified persistence risks; the original reporter's setup is unknown and needs confirmation. See [settings persistence notes](docs/SETTINGS_PERSISTENCE_0.5.4.md).
+Use GOG SKSE64 2.2.6 and Address Library containing `versionlib-1-6-1179-0.bin` for GOG. Optional integrations require their own compatible builds. Applied settings are global INI configuration and do not require saving the game. Configuration is anchored to the game executable directory and verified on save; failures remain visible and are recorded in the log.
 
-## Version 0.5.3 test build
-
-Optional **Gameplay / Keep open after equip** keeps equipment, spells, powers, shouts, outfit presets and Face Lighting actions on screen for consecutive selection. Potions and food still close the wheel and use the existing animation-compatible path. The option defaults off, preserving automatic closing in older configurations. In Pause mode the wheel briefly releases its own pause for equipment processing, then pauses again; outfit jobs remain unpaused until complete. Slow/Normal modes keep their selected speed. Accepted actions are serialized; the overlay and input capture remain active throughout. Item state refreshes after processing; a vanished hovered instance clears selection for safety.
-
-Settings now have separate **Keyboard** and **Controller** tabs. Controller **Category buttons** chooses LB/RB (default) or LT/RT. The other pair performs left/right equip or use; RT/RB also handles neutral actions such as potions and shouts. A/X remain use/left-hand/manage, B closes, D-Pad Up/Down changes item pages, and LB/RB always cycles settings tabs. Opening bindings/modifiers remain independent. See [continuous use and controller test notes](docs/CONTINUOUS_USE_0.5.3.md).
-
-## Version 0.5.2 test build
-
-The same DLL now accepts GOG 1.6.1179. Use **GOG SKSE64 2.2.6** and Address Library containing `versionlib-1-6-1179-0.bin`; do not substitute the Steam SKSE or 1170 database. Local runtime-layout, actor-dispatch and real address-library checks cover this version, but in-game testing is pending. Other GOG runtimes remain unsupported. Optional integration plugins must support GOG independently. See [GOG setup and test notes](docs/GOG_1.6.1179.md).
-
-## Version 0.5.1 test build
-
-The entrance now respects disabled native control groups so contextual interactions can retain conflicting keys. This addresses a confirmed code-level gap affecting QuickLoot-style search; confirmation with the original reporting setup is pending. Loading logs effective keys/modifiers. The supplied 0.4.0 no-response log showed Favorites rebound to scan 51 (comma), so Q correctly did not match. Use the game Favorites binding, or set `[Controls] Hotkey=16` in the active INI and restart to force physical Q. See [entry context investigation](docs/ENTRY_CONTEXT_0.5.1.md).
+The user confirmed the combined changes passed testing before approving this release. See the [short changelog](release-materials/0.5.1/Nexus-changelog-en.txt) and [release record](docs/RELEASE_0.5.1.md). Development notes labeled 0.5.1–0.5.4 are historical test iterations merged here; future versions increment from the public release number.
 
 ## Version 0.5.0
 
@@ -221,13 +209,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.4.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.1.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.5.4 test materials](release-materials/0.5.4) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.5.1 release materials](release-materials/0.5.1) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

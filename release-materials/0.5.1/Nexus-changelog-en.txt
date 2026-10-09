@@ -1,4 +1,6 @@
-0.5.1 test build
-- Respect disabled native control groups when opening the wheel, yielding conflicting entrances to contextual interactions such as QuickLoot search. Reporting-user confirmation is pending.
-- Log effective favorites/actions keys and modifiers after loading to diagnose remapped Favorites bindings.
-- Continue following the game Favorites binding by default; Hotkey=16 explicitly selects physical Q.
+0.5.1
+- Added GOG 1.6.1179 support (requires matching GOG SKSE64 and Address Library).
+- Equipment, spells, powers, shouts and actions now keep the wheel open by default; potions and food still close. Configurable under Gameplay.
+- Added controller LT/RT left/right equip and neutral use, with a choice of LB/RB or LT/RT for category switching.
+- Separated Keyboard and Controller settings.
+- Improved contextual hotkey compatibility and settings persistence across restarts; added clearer configuration diagnostics.

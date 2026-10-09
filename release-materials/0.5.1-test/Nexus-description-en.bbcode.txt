@@ -2,7 +2,7 @@
 [color=#C9AA72]Your favorites and actions, at your fingertips.[/color]
 
 A categorized favorites wheel and a separate home for quick actions.
-[size=2]Version 0.5.1[/size][/center]
+[size=2]Version 0.5.1 — test build[/size][/center]
 
 Replace Skyrim's Favorites menu with a radial interface with keyboard, mouse, and controller controls. Browse your favorite items and spells by category, check useful item information, and use a separate action wheel to change outfits or control optional Face Lighting features. Favorites and actions have their own pages, giving additional functions room to grow without crowding your item list.
 
@@ -11,7 +11,6 @@ Replace Skyrim's Favorites menu with a radial interface with keyboard, mouse, an
 [*][b]Categorized favorites[/b] — Weapons, equipment, potions, food, spells, shouts, powers, and other items. Each page holds ten entries, with extra pages for larger collections. The wheel uses the favorites you already mark in your inventory and magic menus.
 [*][b]Optional full inventory[/b] — Choose All inventory under Settings / Gameplay / Item source. Favorites only remains the default. Pages contain ten entries and hover details are read on demand.
 [*][b]Time behavior[/b] — Pause (default), slow time with an adjustable relative speed, or normal speed. Settings and outfit dialogs always pause.
-[*][b]Consecutive equipment selection[/b] — Keep open after equip under Gameplay is on by default to equip gear, spells, powers, shouts or actions without reopening. Potions and food still close the wheel. An explicit saved off choice is preserved.
 [*][b]Native quick slots[/b] — Hover a favorite and press 1–8 to assign or clear its gameplay shortcut. The wheel displays existing and newly assigned slot numbers.
 [*][b]Flexible controls[/b] — Keyboard, mouse, and controller support, with configurable opening keys and independent favorites/actions modifiers.
 [*][b]A separate action wheel[/b] — Switch between favorites and functions inside the wheel, or open the action wheel directly. Outfit presets and optional Face Lighting controls occupy separate categories.
@@ -25,13 +24,13 @@ Replace Skyrim's Favorites menu with a radial interface with keyboard, mouse, an
 
 The action wheel is intended to accommodate additional functions as development continues. The current release includes outfit presets and the optional Face Lighting integration described below.
 
-[b]Spells, Shouts, and Powers[/b] are separate top-level categories, navigated with the same A/D or the selected controller category pair. Powers includes active greater, lesser, and voice powers. Passive abilities and internal effects are excluded. Physical scrolls remain under Other. Magic entries remain favorites only even in All inventory mode; selecting equips them for normal casting or activation.
+[b]Spells, Shouts, and Powers[/b] are separate top-level categories, navigated with the same A/D or LB/RB controls. Powers includes active greater, lesser, and voice powers. Passive abilities and internal effects are excluded. Physical scrolls remain under Other. Magic entries remain favorites only even in All inventory mode; selecting equips them for normal casting or activation.
 
 [size=4][color=#C9AA72][b]Keyboard & mouse[/b][/color][/size]
 These are the default controls. The Favorites shortcut follows your game's binding unless overridden in the wheel settings. If Favorites is rebound to another key, both default wheel entrances follow that key (with Shift for actions). To force physical Q, set Hotkey=16 under Controls in FavoriteWheel.ini and restart.
 [list]
 [*][b]Q[/b] — Open or close the favorites wheel.
-[*][b]Shift + Q[/b] — Open the action wheel directly. Both keyboard main keys and modifiers can be changed in Settings / Keyboard.
+[*][b]Shift + Q[/b] — Open the action wheel directly. Both keyboard main keys and modifiers can be changed in Settings / Controls.
 [*][b]R[/b] — Switch between favorites and actions while the wheel is open. Configurable in settings.
 [*][b]A / D[/b] or [b]Left / Right[/b] — Change categories.
 [*][b]W / S[/b], [b]Up / Down[/b], or the [b]mouse wheel[/b] — Change pages within the current category.
@@ -43,7 +42,7 @@ These are the default controls. The Favorites shortcut follows your game's bindi
 [*][b]F2[/b] — Open the built-in settings while the wheel is open.
 [/list]
 
-Opening the wheel pauses the game by default. Under F2 / Gameplay / Time behavior, choose Slow time or Normal speed and Apply. Optional slow time defaults to 20%, adjustable from 5–100% of the existing game speed. Settings and outfit dialogs pause in all modes. The world continues running in live modes and you can still take damage; UI animations retain real-time timing. Detected external multiplier changes close the wheel without overwriting that source. Keep open after equip is enabled by default and retains the overlay for equipment, magic and actions; potions and food always close. Disable it to close on every selection. In Pause mode each retained action briefly releases the wheel's own pause, then pauses again after native processing; outfit changes run until complete. Slow/Normal speed is preserved. Opening and closing animations are visual transitions and do not delay the actual action. Selecting a spell or shout equips it; cast or shout using the normal game controls.
+Opening the wheel pauses the game by default. Under F2 / Gameplay / Time behavior, choose Slow time or Normal speed and Apply. Optional slow time defaults to 20%, adjustable from 5–100% of the existing game speed. Settings and outfit dialogs pause in all modes. The world continues running in live modes and you can still take damage; UI animations retain real-time timing. Detected external multiplier changes close the wheel without overwriting that source. A successful item or action selection closes it, then executes after gameplay resumes. Opening and closing animations are visual transitions and do not delay the actual action. Selecting a spell or shout equips it; cast or shout using the normal game controls.
 
 In live modes, a movement direction held before opening is retained until you release it. New movement-key presses inside the wheel only operate the UI; keys still held when both wheel menus close resume movement immediately. Gameplay movement remaps are respected. The left stick retains its opening movement vector until centered while aiming the wheel. Attack clicks and opening keys retain their release protection.
 
@@ -51,11 +50,11 @@ Selecting an already equipped weapon in the corresponding hand, or an equipped a
 
 [size=4][color=#C9AA72][b]Controller[/b][/color][/size]
 
-Uses your game's controller Favorites binding (normally D-Pad Up); LB + Favorites opens actions. Left stick selects; A uses/right hand; X equips left hand or manages a preset; LB/RB change categories by default; LT/RT equip left/right or use neutral actions; D-Pad Up/Down change pages; Y switches wheels; B closes/returns; Start opens settings. The Controller settings tab configures opening keys/modifiers and Category buttons. Choose LB/RB or LT/RT for categories; the other pair equips left/right or uses an entry. A/X remain available. LB/RB always cycles the four settings tabs. In settings/dialogs the left stick moves the pointer and A clicks; preset names need keyboard/IME input. Apply writes global settings to FavoriteWheel.ini independently of game saves. Load/save logs record the INI path and any save failure. With the default game bindings, D-Pad Down still opens the original Favorites menu while the wheel is closed.
+Uses your game's controller Favorites binding (normally D-Pad Up); LB + Favorites opens actions. Left stick selects; A uses/right hand; X equips left hand or manages a preset; LB/RB change categories; D-Pad Up/Down change pages; Y switches wheels; B closes/returns; Start opens settings. Controller main key and modifiers are configurable. In settings/dialogs the left stick moves the pointer and A clicks; preset names need keyboard/IME input. With the default game bindings, D-Pad Down still opens the original Favorites menu while the wheel is closed.
 
 D-Pad Up/Down turns one page per physical press while the wheel is open. Release the opening button before using it to page; holding it does not also navigate. A category needs more than ten entries to have multiple pages. Held buttons do not repeat pages.
 
-While the wheel is open, captured buttons are reserved for its controls. Both shoulder buttons and triggers operate the wheel without firing attacks or equipped voice powers, including Horde’s management ability. Outside the wheel, normal gameplay controls remain available. The wheel yields an entrance whose native control group is disabled by a contextual interaction, such as QuickLoot search.
+While the wheel is open, captured buttons are reserved for its controls. RB changes categories without activating the equipped shout or power, including Horde’s management ability. Outside the wheel, normal gameplay controls remain available. This test build also yields an entrance whose native control group is disabled by a contextual interaction, such as QuickLoot search. Confirmation with the reporting setup is pending.
 
 [size=4][color=#C9AA72][b]Outfit presets[/b][/color][/size]
 Wear the equipment you want to save, open the action wheel with [b]Shift + Q[/b], and choose [b]SAVE CURRENT[/b] on the outfit page. Enter a name and confirm.
@@ -110,7 +109,6 @@ Keep your existing INI and custom language/theme files when upgrading. Mod Organ
 [*][b]Skyrim SE 1.5.97 — Tested in-game.[/b]
 [*][b]Skyrim AE 1.6.640 — Supported; in-game testing pending.[/b] Use matching SKSE64 and the AE Address Library for 1.6.640.
 [*][b]Skyrim AE 1.6.1170 — Tested in-game.[/b]
-[*][b]Skyrim GOG 1.6.1179 — Supported; not yet tested in-game.[/b] Requires the GOG build of SKSE64 2.2.6 and Address Library containing versionlib-1-6-1179-0.bin. Steam SKSE/1170 address files are not substitutes.
 [*][b]Skyrim 1.7.x — Supported, but not yet tested in-game.[/b] This build specifically supports [b]1.7.99 and 1.7.104[/b]; support does not automatically extend to every future 1.7.x update. Use the matching SKSE64 and Address Library, including the version-5 address database for these runtimes.
 [/list]
 
