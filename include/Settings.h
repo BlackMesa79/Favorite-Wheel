@@ -4,6 +4,7 @@ namespace Wheel {
     struct Settings {
         bool enabled = true;
         bool allInventory = false;
+        bool keepOpen = false; // Keep the overlay after an accepted item/action.
         int timeMode = 0; // 0 pause, 1 slow, 2 unchanged game speed.
         int slowPercent = 20; // Relative to the pre-wheel current/target multipliers.
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
@@ -23,6 +24,7 @@ namespace Wheel {
         int gamepadHotkey = -1; // -1 follows the game's controller Favorites binding.
         int gamepadModifier = -1;
         int gamepadActionModifier = 274; // LB, SKSE macro keycode.
+        int gamepadCategoryButtons = 0; // 0 LB/RB categories, LT/RT use; 1 swaps the pairs.
         std::string font = "C:/Windows/Fonts/msyh.ttc";
         bool operator==(const Settings&) const = default;
     };

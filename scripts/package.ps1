@@ -32,10 +32,12 @@ outfit preset. F2 opens settings; Esc/Tab closes or returns from a sub-list.
 Q follows your game's Favorites binding unless overridden in settings.
 If Favorites is rebound, default actions follow that key with Shift. Set
 Controls / Hotkey=16 in the active INI and restart to force physical Q.
-Settings / Controls configures independent keyboard main keys and Shift/Ctrl/Alt
+Settings / Keyboard configures independent keyboard main keys and Shift/Ctrl/Alt
 modifiers. Old configuration files retain Q and Shift+Q defaults.
 Controller: Favorites binding opens; LB + Favorites opens actions; left stick
-selects; A uses; X equips left hand/manages; LB/RB change categories; D-Pad
+selects; A uses; X equips left hand/manages; LB/RB change categories; LT/RT
+equips left/right or uses neutral actions. Controller / Category buttons may
+swap those pairs. D-Pad
 Up/Down changes pages; Y switches wheels; B closes; Start opens settings.
 Hover a favorite and press 1-8 to bind/unbind a native quick slot. Assigned
 entries show their number. Close the wheel and use the normal gameplay shortcut.
@@ -44,7 +46,8 @@ Save the game after changing bindings. Native slots are 1-8; this does not add
 D-Pad paging follows physical press edges. Release the opening key before
 paging; a category needs more than ten entries for multiple pages. Paging
 diagnostics are recorded in FavoriteWheel.log.
-Controller main key and modifiers are configurable. In settings, the left stick
+The separate Controller tab configures its main key, modifiers and category
+button scheme. LB/RB always cycles settings tabs; A/X remains available. In settings, the left stick
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 
 The supplied configuration follows your Windows display language. If no
@@ -74,6 +77,10 @@ Pages carry at most ten entries and hover details load on demand; initial
 inventory scanning/sorting and new font glyphs can still cost time in large saves.
 F2 -> Gameplay -> Time behavior offers Pause (default), Slow time and Normal speed.
 SlowTimePercent defaults to 20 (5..100), relative to the existing game speed.
+Gameplay / Keep open after equip (General / KeepOpen=0 by default) retains the
+wheel for gear, spells, powers, shouts and actions. Potions and food always close.
+In Pause mode equipment processing briefly releases the wheel pause, then
+restores it; outfit jobs run until complete. Slow/Normal speed is preserved.
 Settings and outfit dialogs pause in every mode; UI animation timing is unchanged.
 The world keeps running in live modes. Detected external time changes close the
 wheel without overwriting the other source.

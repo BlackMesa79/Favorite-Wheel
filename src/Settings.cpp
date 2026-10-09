@@ -22,6 +22,7 @@ namespace Wheel {
             result.pop_back(); return result;
         }
         void Clamp(Settings& v) {
+            v.gamepadCategoryButtons=std::clamp(v.gamepadCategoryButtons,0,1);
             v.timeMode=std::clamp(v.timeMode,0,2);
             v.slowPercent=std::clamp(v.slowPercent,5,100);
             v.scale = std::clamp(v.scale,.6f,1.5f);
@@ -51,6 +52,7 @@ namespace Wheel {
         settings = Settings{};
         settings.enabled = number(L"General",L"Enabled",1) != 0;
         settings.allInventory = number(L"General",L"AllInventory",0) != 0;
+        settings.keepOpen = number(L"General",L"KeepOpen",0) != 0;
         settings.timeMode=number(L"General",L"TimeMode",0);
         settings.slowPercent=number(L"General",L"SlowTimePercent",20);
         const auto legacyLanguage = Read(L"General",L"Chinese","");
@@ -72,6 +74,7 @@ namespace Wheel {
         settings.gamepadHotkey=number(L"Controls",L"GamepadHotkey",-1);
         settings.gamepadModifier=number(L"Controls",L"GamepadModifier",-1);
         settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",274);
+        settings.gamepadCategoryButtons=number(L"Controls",L"GamepadCategoryButtons",0);
         settings.scale = number(L"Display",L"ScalePercent",100)/100.f;
         settings.sensitivity = number(L"Controls",L"SensitivityPercent",100)/100.f;
         settings.font = Read(L"Display",L"Font",settings.font);
@@ -110,6 +113,7 @@ namespace Wheel {
         };
         const bool ok = write(L"General",L"Language",settings.language) &&
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
+            write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&
             write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&
             write(L"General",L"SlowTimePercent",std::to_string(settings.slowPercent)) &&
             write(L"Display",L"Theme",settings.theme) &&
@@ -128,6 +132,7 @@ namespace Wheel {
             write(L"Controls",L"GamepadHotkey",std::to_string(settings.gamepadHotkey)) &&
             write(L"Controls",L"GamepadModifier",std::to_string(settings.gamepadModifier)) &&
             write(L"Controls",L"GamepadActionModifier",std::to_string(settings.gamepadActionModifier)) &&
+            write(L"Controls",L"GamepadCategoryButtons",std::to_string(settings.gamepadCategoryButtons)) &&
             write(L"Controls",L"SensitivityPercent",std::to_string(static_cast<int>(settings.sensitivity*100+.5f))) &&
             write(L"Display",L"ScalePercent",std::to_string(static_cast<int>(settings.scale*100+.5f)));
         WritePrivateProfileStringW(nullptr,nullptr,nullptr,temporary.c_str());

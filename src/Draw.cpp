@@ -192,8 +192,8 @@ namespace Wheel
             const float keyOffset = edge + 22.f;
             if (v.config.showHints && ribbon.size > 1)
             {
-                Keycap(d, {c.x - keyOffset * s, y}, v.gamepad?"LB":"A", t, s);
-                Keycap(d, {c.x + keyOffset * s, y}, v.gamepad?"RB":"D", t, s);
+                Keycap(d, {c.x - keyOffset * s, y}, v.gamepad?(v.config.gamepadCategoryButtons==1?"LT":"LB"):"A", t, s);
+                Keycap(d, {c.x + keyOffset * s, y}, v.gamepad?(v.config.gamepadCategoryButtons==1?"RT":"RB"):"D", t, s);
             }
             for (int i = 0; i < ribbon.size; ++i)
             {
@@ -366,14 +366,15 @@ namespace Wheel
             const auto &config = v.config;
             const auto &t = Style(config);
             auto tr = [&](const char *key) { return Tr(config, key); };
-            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.gamepad?"padSettingsHelp":v.settingsTab==2?"gameplaySettingsHelp":v.settingsTab==1?"keyboardControlsHelp":"layoutSettingsHelp"));
+            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.settingsTab==3?"controllerControlsHelp":v.gamepad?"padSettingsHelp":v.settingsTab==2?"gameplaySettingsHelp":v.settingsTab==1?"keyboardControlsHelp":"layoutSettingsHelp"));
             Button(d,c,s,v,generalTab,tr("settingsGeneral"),v.settingsTab==0);
-            Button(d,c,s,v,controlsTab,tr("settingsControls"),v.settingsTab==1);
+            Button(d,c,s,v,controlsTab,tr("settingsKeyboard"),v.settingsTab==1);
+            Button(d,c,s,v,gamepadTab,tr("settingsController"),v.settingsTab==3);
             Button(d,c,s,v,gameplayTab,tr("settingsGameplay"),v.settingsTab==2);
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -391,7 +392,8 @@ namespace Wheel
                                           config.actionHotkey<0?tr("followFavorite"):key(config.actionHotkey),ModifierLabel(config,config.actionModifier),
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
                                           tr(config.allInventory?"scopeAll":"scopeFavorites"),
-                                          tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%"};
+                                          tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
+                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off")};
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);
@@ -409,13 +411,14 @@ namespace Wheel
                 }
                 Button(d, c, s, v, ValueButton(slot),v.capturingKey && v.captureBinding==row?"...":values[row]);
             }
-            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==2?"timeSettingsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
+            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
             if(v.settingsTab==1) {
                 const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
                 Text(d,{c.x,c.y+145*s},Fit(tr(conflict?"bindingConflict":"controlsBindHint"),14*s,610*s),14*s,conflict?t.accent:t.muted);
             }
-            if(v.settingsTab==2)Text(d,{c.x,c.y+10*s},Wrapped(tr("slowTimeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
+            if(v.settingsTab==2)Text(d,{c.x,c.y+10*s},Wrapped(tr("keepOpenHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
+            if(v.settingsTab==3)Text(d,{c.x,c.y+10*s},Wrapped(tr("controllerSchemeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             Button(d, c, s, v, defaultsButton, tr("defaults"));
             Button(d, c, s, v, cancelButton, tr("cancel"));
             Button(d, c, s, v, applyButton, tr("apply"), true);
@@ -455,7 +458,7 @@ namespace Wheel
             switch (item.action)
             {
             case ActionKind::Outfit:
-                key = item.usable ? (v.gamepad?"padUse":"outfitSelect") : "outfitUnavailable";
+                key = item.usable ? (v.gamepad?(v.config.gamepadCategoryButtons==1?"padUseBumpers":"padUseTriggers"):"outfitSelect") : "outfitUnavailable";
                 break;
             case ActionKind::SaveOutfit:
                 key = "outfitSave";
@@ -759,7 +762,7 @@ namespace Wheel
                 d->AddLine({left + 12 * s, top}, {right - 12 * s, top}, Alpha(t.border, .45f), s);
                 Text(
                     d, {c.x, top + 14 * s},
-                    Fit(tr(v.gamepad?"padUse":v.functions ? (v.functionSection == FaceLight::Section::Outfits ? "functionUse" : "lightUse")
+                    Fit(tr(v.gamepad?(v.config.gamepadCategoryButtons==1?"padUseBumpers":"padUseTriggers"):v.functions ? (v.functionSection == FaceLight::Section::Outfits ? "functionUse" : "lightUse")
                                        : "compactUse"),
                         14 * s, 535 * s),
                     14 * s, t.muted, 0, t.textShadow);

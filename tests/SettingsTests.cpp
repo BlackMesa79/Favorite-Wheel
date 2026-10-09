@@ -18,12 +18,19 @@ int main() {
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
     Check(!Config().allInventory,"Fresh installs show only favorites");
+    Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs close after use and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==20,"Fresh installs retain pause and a 20% optional slowdown");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     SetSettingsPath(path.string()); LoadSettings();
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
+    Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Old INIs preserve close/category behavior");
+    BeginSettings();auto continuous=Config();continuous.keepOpen=true;continuous.gamepadCategoryButtons=1;
+    EditSettings(continuous);RevertSettings();Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Cancel restores continuous use and pad scheme");
+    BeginSettings();EditSettings(continuous);Check(SaveSettings(),"Save continuous use and controller scheme");LoadSettings();
+    Check(Config().keepOpen && Config().gamepadCategoryButtons==1,"Continuous use and controller scheme round trip");
+    BeginSettings();DefaultSettings();Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Defaults restore auto-close and LB/RB categories");RevertSettings();
     Check(Config().timeMode==0 && Config().slowPercent==20,"Old INIs retain pause without new time keys");
     BeginSettings();auto timeSettings=Config();timeSettings.timeMode=1;timeSettings.slowPercent=30;
     EditSettings(timeSettings);RevertSettings();Check(Config().timeMode==0,"Cancel restores time mode");
@@ -146,12 +153,15 @@ int main() {
         Tr(edited,"quickSlotHint")=="HOVER + 1-8 BIND / UNBIND QUICK SLOT","Incomplete automatic catalog has complete English fallbacks");
     Check(WheelSlot(2,0)==-1 && WheelSlot(0,-1)==0 && WheelSlot(0,0)==-1,"Free pointer cannot use outside wheel or in center");
     Check(!applyButton.Contains(cancelButton.x+10,cancelButton.y+10),"Apply and cancel do not overlap");
-    for(int tab:{0,1,2})for(int slot=0;slot<SettingCount(tab);++slot) {
+    for(int tab:{0,1,2,3})for(int slot=0;slot<SettingCount(tab);++slot) {
         const auto valueRect=ValueButton(slot);
         Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
-        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
+        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
-    Check(SettingCount(2)==3 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20,"Gameplay tab groups source, time mode and speed");
+    Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
+    Check(SettingCount(2)==4 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22,"Gameplay tab includes continuous use");
+    Check(SettingCount(1)==5 && SettingCount(3)==4 && SettingRow(3,3)==21,"Keyboard and controller groups are independent");
+    Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
 }

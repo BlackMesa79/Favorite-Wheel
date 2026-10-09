@@ -298,6 +298,35 @@ int main() {
     Check(DecideAction(1,1,false,false,false,false,false)==A::Discard, "focus loss, blocking menu or invalid player cancels use");
     Check(DecideAction(1,1,true,false,false,true,true)==A::Discard, "timeout cannot consume later");
     using E=ActionExecutor;
+    Check(KeepWheelAfterUse(true,false) && !KeepWheelAfterUse(true,true) && !KeepWheelAfterUse(false,false) && !KeepWheelAfterUse(false,true),"Equipment can stay open; consumables and default mode always close");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,false,false,true,true,true)==A::Submit,"Retained action executes without removing its own overlay");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,true,true)==A::Wait,"Retained action waits for actual unpause");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,false,false,false,true,true)==A::Wait,"Default action still waits for menu removal");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,false,false,true,false,true)==A::Discard,"Retained action never lands in a newer wheel");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,false,false,false,true,false,false)==A::Submit,"Manual close still allows the already accepted action");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,2,true,false,true,false,false,true,true,true)==A::Discard,"Load cancels retained action");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::PlayerUpdate,1,1,true,false,true,false,false,true,true,true)==A::Wait,"Retained face command keeps its player-update owner");
+    Check(!RetainedActionSettled(true,false,1,10) && !RetainedActionSettled(false,true,1,10),"Pending commands and outfit jobs keep game-thread window open");
+    Check(!RetainedActionSettled(false,false,.1,10) && !RetainedActionSettled(false,false,1,1) && RetainedActionSettled(false,false,.15,2),"Retained window needs wall time and two native updates");
+    using P=PadWheelCommand;
+    for(int scheme:{0,1}) {
+        const unsigned leftCategory=scheme?280:274,rightCategory=leftCategory+1,leftUse=scheme?274:280,rightUse=leftUse+1;
+        Check(ControllerCommand(leftCategory,scheme)==P::PreviousCategory && ControllerCommand(rightCategory,scheme)==P::NextCategory,"Selected pair changes categories");
+        Check(ControllerCommand(leftUse,scheme)==P::UseLeft && ControllerCommand(rightUse,scheme)==P::UseRight,"Other pair equips left/right with no category conflict");
+        Check(ControllerCommand(276,scheme)==P::UseRight && ControllerCommand(278,scheme)==P::UseLeft && ControllerCommand(277,scheme)==P::Back,"A/X/B retain behavior in both schemes");
+        Check(ControllerCommand(266,scheme)==P::PreviousPage && ControllerCommand(267,scheme)==P::NextPage,"D-pad pages remain independent of category scheme");
+    }
+    ControllerPageButtons triggers{280};
+    Check(triggers.Observe(281,true,false) && !triggers.Observe(281,true,true),"Trigger first press works without native down and holding never repeats");
+    Check(!triggers.Observe(281,false,false) && triggers.Observe(281,true,false),"Trigger release re-arms use");
+    triggers.Reset();Check(!triggers.Observe(280,true,false),"Reset does not use an already held trigger");
+    for(unsigned key:{274u,275u,280u,281u}) {
+        InputGate triggerGate;
+        Check(triggerGate.Filter(key,true,false,true)==InputGate::Result::Suppress &&
+            triggerGate.Filter(key,true,false,false)==InputGate::Result::Suppress &&
+            triggerGate.Filter(key,false,true,false)==InputGate::Result::Suppress,"Use/category pairs remain captured through release after closing");
+        Check(triggerGate.Filter(key,true,false,false)==InputGate::Result::Pass,"Fresh trigger/bumpers pass normally outside the wheel");
+    }
     Check(ExecutorFor(true)==E::PlayerUpdate && ExecutorFor(false)==E::TaskQueue,"face commands use player update; existing actions use task queue");
     Check(DecideActionOn(E::TaskQueue,E::PlayerUpdate,1,1,true,false,false,false,false)==A::Wait,"SKSE task cannot take an unpaused face command");
     Check(DecideActionOn(E::TaskQueue,E::PlayerUpdate,1,2,false,false,false,false,true)==A::Wait,"wrong executor does not consume or cancel another queue's command");

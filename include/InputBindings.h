@@ -21,6 +21,22 @@ inline int ModifierBit(std::uint32_t code) {
   }
 }
 enum class Opening { None, Favorites, Actions };
+enum class PadWheelCommand { None, PreviousCategory, NextCategory, UseRight, UseLeft, Back, PreviousPage, NextPage };
+inline PadWheelCommand ControllerCommand(std::uint32_t code,int categoryButtons) {
+  if(code==266)return PadWheelCommand::PreviousPage;
+  if(code==267)return PadWheelCommand::NextPage;
+  if(code==268)return PadWheelCommand::PreviousCategory;
+  if(code==269)return PadWheelCommand::NextCategory;
+  if(code==276)return PadWheelCommand::UseRight;
+  if(code==278)return PadWheelCommand::UseLeft;
+  if(code==277)return PadWheelCommand::Back;
+  const bool triggers=categoryButtons==1;
+  if(code==(triggers?280u:274u))return PadWheelCommand::PreviousCategory;
+  if(code==(triggers?281u:275u))return PadWheelCommand::NextCategory;
+  if(code==(triggers?274u:280u))return PadWheelCommand::UseLeft;
+  if(code==(triggers?275u:281u))return PadWheelCommand::UseRight;
+  return PadWheelCommand::None;
+}
 inline Opening KeyboardOpening(std::uint32_t code, int held, int favoriteKey,
                                int favoriteModifier, int actionKey,
                                int actionModifier) {
@@ -47,10 +63,12 @@ inline Opening GamepadOpening(std::uint32_t code, int favoriteKey,
 // Observe outside the wheel too, so the held opening key cannot also page.
 class ControllerPageButtons {
   std::array<bool, 2> held{}, blocked{};
+  std::uint32_t first;
 public:
+  explicit ControllerPageButtons(std::uint32_t firstCode=266):first(firstCode){}
   bool Observe(std::uint32_t code, bool pressed, bool nativeDown) {
-    if (code < 266 || code > 267) return false;
-    const auto at = code - 266;
+    if (code < first || code > first+1) return false;
+    const auto at = code - first;
     if (!pressed || nativeDown) blocked[at] = false;
     const bool down = pressed && !held[at] && !blocked[at];
     held[at] = pressed;

@@ -1,0 +1,6 @@
+0.5.3 (test build)
+- Added optional Keep open after equip for gear, spells, powers, shouts and actions; potions and food still close. Disabled by default.
+- Added LT/RT left/right equip and neutral use. Choose LB/RB or LT/RT for categories; the other pair handles equip/use. A/X and D-Pad paging remain available.
+- Separated Keyboard and Controller settings; updated localized labels and input hints.
+- Retained actions refresh equipment state and keep native input isolation. Pause briefly resumes for processing, then restores; outfit jobs finish before pausing again.
+- Includes 0.5.1 contextual-entry fixes and 0.5.2 GOG 1.6.1179 support.

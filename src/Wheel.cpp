@@ -68,6 +68,7 @@ namespace Wheel {
         std::atomic<float> viewportWidth{1280}, viewportHeight{900};
         InputGate inputGate;
         ControllerPageButtons controllerPages;
+        ControllerPageButtons controllerTriggers{280};
         MovementStickGate movementStick;
         std::mutex pauseMutex;
         bool pauseRequested=false;
@@ -79,11 +80,25 @@ namespace Wheel {
             bool left;
             std::uint64_t generation;
             std::chrono::steady_clock::time_point deadline;
+            bool retained=false;
+            std::uint64_t serial=0;
         };
         std::mutex actionMutex;
         std::optional<PendingAction> pendingAction;
         std::atomic<bool> actionTaskQueued{false};
         std::uint64_t outfitGeneration=0; // SKSE task thread only.
+        std::atomic<bool> retainedAction{false};
+        std::atomic<std::uint64_t> playerUpdates{0};
+        bool retainedSubmitted=false; // lifecycleMutex held.
+        std::chrono::steady_clock::time_point retainedAt;
+        std::uint64_t retainedUpdate=0;
+
+        void CompleteRetainedAction(const PendingAction& action) {
+            std::lock_guard lifecycle(lifecycleMutex);
+            if(action.retained && retainedAction && action.serial==openSerial.load() && IsOpen()) {
+                retainedSubmitted=true;retainedAt=std::chrono::steady_clock::now();retainedUpdate=playerUpdates.load();
+            }
+        }
 
         bool HasPendingAction() { std::lock_guard lock(actionMutex); return pendingAction.has_value(); }
 
@@ -160,7 +175,7 @@ namespace Wheel {
             if(!open){TimeControl::EndSession();RequestPause(false);return;}
             if(!RendererReady() || !Focused() || !ValidPlayer() || BlockedMenu()){Cancel();return;}
             const auto config=Config();
-            const bool pause=PauseForWheel(config.timeMode,settings,dialog);
+            const bool pause=PauseForWheel(config.timeMode,settings,dialog) && !retainedAction;
             if(!TimeControl::Update(!pause && config.timeMode==1,config.slowPercent)) {
                 SKSE::log::warn("Wheel canceled: time state could not be safely maintained");Cancel();return;
             }
@@ -232,7 +247,8 @@ namespace Wheel {
             bool refresh=false;
             {std::lock_guard lock(viewMutex);
                 if(view.open && !view.functions && !view.settingsOpen && !view.outfitDialog && inventoryLoaded &&
-                    Config().timeMode!=0 && inventoryStamp!=inventoryChanges.load() && now>=nextInventoryRefresh && !directoryTaskQueued) {
+                    (Config().timeMode!=0 || Config().keepOpen) && !retainedAction &&
+                    inventoryStamp!=inventoryChanges.load() && now>=nextInventoryRefresh && !directoryTaskQueued) {
                     nextInventoryRefresh=now+std::chrono::milliseconds(250);refresh=true;
                 }
             }
@@ -346,6 +362,7 @@ namespace Wheel {
             FilterItems();
         }
         void OutfitDialog(int mode,std::uint32_t id,const std::string& name) {
+            if(retainedAction)return;
             {std::lock_guard lock(viewMutex);view.outfitDialog=mode;view.outfitId=id;view.outfitName.Set(name);view.x=view.y=0;}
             SyncWheelTime();
         }
@@ -355,6 +372,8 @@ namespace Wheel {
             SyncWheelTime();RefreshFunctions();
         }
         void Activate(bool left) {
+            std::lock_guard lifecycle(lifecycleMutex);
+            if(HasPendingAction() || retainedAction || Outfits::Busy())return;
             const auto current = Snapshot();
             const int slot = WheelSlot(current.x, current.y);
             const int index = PageItemIndex(current,slot);
@@ -378,11 +397,15 @@ namespace Wheel {
                 RE::SendHUDMessage::ShowHUDMessage((selected.action==ActionKind::FaceLightCommand?selected.detail:Tr(Config(),selected.action==ActionKind::Outfit?"outfitMissing":"unsupported")).c_str());
                 return;
             }
+            const bool keep=KeepWheelAfterUse(current.config.keepOpen,selected.action==ActionKind::Favorite &&
+                (selected.category==Category::Potions || selected.category==Category::Food));
             {
                 std::lock_guard lock(actionMutex);
-                pendingAction = PendingAction{selected, left, epoch.load(), std::chrono::steady_clock::now() + std::chrono::seconds(2)};
+                pendingAction = PendingAction{selected, left, epoch.load(), std::chrono::steady_clock::now() + std::chrono::seconds(2),keep,openSerial.load()};
             }
-            Cancel(true);
+            if(keep) {
+                retainedAction=true;retainedSubmitted=false;SyncWheelTime();
+            }else Cancel(true);
         }
         void BindQuickSlot(int slot) {
             const auto current=Snapshot();
@@ -453,18 +476,23 @@ namespace Wheel {
             },failed);
         }
         std::optional<PendingAction> TakeAction(ActionExecutor executor) {
+            std::lock_guard lifecycle(lifecycleMutex);
             std::lock_guard lock(actionMutex);
             if(!pendingAction || ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand)!=executor)return {};
             auto ui=RE::UI::GetSingleton();
-            const auto decision=DecideActionOn(executor,
+            const auto decision=DecideRetainedActionOn(executor,
                 ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand),
                 pendingAction->generation,epoch.load(),
-                ui && ValidPlayer() && Focused() && !BlockedMenu(),closing || TimeControl::Active(),
+                ui && ValidPlayer() && Focused() && !BlockedMenu(),closing || (!pendingAction->retained && TimeControl::Active()),
                 ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)),ui && ui->GameIsPaused(),
-                std::chrono::steady_clock::now()>=pendingAction->deadline);
+                std::chrono::steady_clock::now()>=pendingAction->deadline,
+                pendingAction->retained,pendingAction->serial==openSerial.load(),IsOpen());
             if(decision==ActionDecision::Wait)return {};
             auto submit=decision==ActionDecision::Submit?std::move(pendingAction):std::optional<PendingAction>{};
-            if(decision==ActionDecision::Discard)SKSE::log::info("Pending action canceled: state changed or close timed out");
+            if(decision==ActionDecision::Discard) {
+                SKSE::log::info("Pending action canceled: state changed or close timed out");
+                retainedAction=false;retainedSubmitted=false;
+            }
             pendingAction.reset();return submit;
         }
         void PumpAction() {
@@ -478,11 +506,13 @@ namespace Wheel {
             ScheduleQueuedTask(actionTaskQueued,[&] {
                 if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([generation,failed] {
                     RunQueuedTask(actionTaskQueued,[&] {
+                        std::lock_guard lifecycle(lifecycleMutex);
                         if(generation!=epoch.load())return;
                         auto submit=TakeAction(ActionExecutor::TaskQueue);
                         if (submit) {
                             if(submit->item.action==ActionKind::Outfit){outfitGeneration=submit->generation;Outfits::Apply(submit->item.actionId);}
                             else UseFavorite(submit->item, submit->left);
+                            CompleteRetainedAction(*submit);
                         }
                         if(!submit && Outfits::Busy()) {
                             auto ui=RE::UI::GetSingleton();
@@ -492,12 +522,31 @@ namespace Wheel {
                 });else actionTaskQueued=false;
             },failed);
         }
+        void PumpRetainedAction() { // Only player-update may refresh the Face Lighting API.
+            std::lock_guard lifecycle(lifecycleMutex);
+            if(!retainedAction || !retainedSubmitted || !IsOpen())return;
+            const double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-retainedAt).count();
+            if(!RetainedActionSettled(HasPendingAction(),Outfits::Busy(),elapsed,playerUpdates.load()-retainedUpdate))return;
+            retainedAction=false;retainedSubmitted=false;
+            FaceLight::Capture();
+            const auto current=Snapshot();
+            if(current.functions)RefreshFunctions();
+            // Coalesce one post-action inventory refresh, also in pause mode.
+            // PublishDirectory retains aim unless the hovered instance vanished.
+            bool loaded;{std::lock_guard lock(viewMutex);loaded=inventoryLoaded;}
+            if(loaded)RequestDirectory(true);
+        }
         void PlayerUpdate(RE::PlayerCharacter* player,float delta) {
             // Face Lighting establishes its accepted thread in the previous hook.
             // Do not call its API from input, Present or an SKSE task callback.
             previousPlayerUpdate(player,delta);
+            std::lock_guard lifecycle(lifecycleMutex);
+            ++playerUpdates;
             if(!updateLogged.exchange(true))SKSE::log::info("Wheel player-update callback active: thread={}",GetCurrentThreadId());
-            if(auto submit=TakeAction(ActionExecutor::PlayerUpdate))FaceLight::Execute(submit->item);
+            if(auto submit=TakeAction(ActionExecutor::PlayerUpdate)) {
+                FaceLight::Execute(submit->item);CompleteRetainedAction(*submit);
+            }
+            PumpRetainedAction();
             if(IsOpen())SyncWheelTime();
             PumpOpen();
         }
@@ -554,6 +603,7 @@ namespace Wheel {
         }
 
         void EnterSettings() {
+            if(retainedAction)return;
             BeginSettings();
             {std::lock_guard lock(viewMutex);
                 view.settingsOpen=true; view.capturingKey=false; view.settingsTab=0; view.saveError=false;
@@ -601,6 +651,8 @@ namespace Wheel {
             case 18: config.allInventory=!config.allInventory; break;
             case 19: config.timeMode=Wrap(config.timeMode+direction,3); break;
             case 20: config.slowPercent+=direction*5; break;
+            case 21: config.gamepadCategoryButtons=1-config.gamepadCategoryButtons; break;
+            case 22: config.keepOpen=!config.keepOpen; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -609,8 +661,8 @@ namespace Wheel {
             const auto current=Snapshot();
             const float x=current.x*224, y=current.y*224;
             if (current.capturingKey) return;
-            if(generalTab.Contains(x,y) || controlsTab.Contains(x,y) || gameplayTab.Contains(x,y)) {
-                std::lock_guard lock(viewMutex);view.settingsTab=gameplayTab.Contains(x,y)?2:controlsTab.Contains(x,y)?1:0;return;
+            if(generalTab.Contains(x,y) || controlsTab.Contains(x,y) || gameplayTab.Contains(x,y) || gamepadTab.Contains(x,y)) {
+                std::lock_guard lock(viewMutex);view.settingsTab=gameplayTab.Contains(x,y)?2:gamepadTab.Contains(x,y)?3:controlsTab.Contains(x,y)?1:0;return;
             }
             if (applyButton.Contains(x,y) && !right) { LeaveSettings(true); return; }
             if (cancelButton.Contains(x,y) && !right) { LeaveSettings(false); return; }
@@ -715,7 +767,7 @@ namespace Wheel {
                         const auto at=buttons.find(SKSE::InputMap::GamepadKeycodeToMask(i+266));
                         padHeld[i]=at!=buttons.end() && at->second && at->second->heldDownSecs>0;
                     }
-                } else {movementStick.Reset();controllerPages.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
+                } else {movementStick.Reset();controllerPages.Reset();controllerTriggers.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
             }
             for(auto event=events?*events:nullptr;event;event=event->next) {
                 if(auto c=event->AsCharEvent();c && c->keyCode>=32)characterBatch=true;
@@ -745,11 +797,13 @@ namespace Wheel {
                     const bool gamepad=button->GetDevice()==RE::INPUT_DEVICE::kGamepad;
                     const auto pad=gamepad?SKSE::InputMap::GamepadMaskToKeycode(code):0u;
                     const bool pageDown=gamepad && controllerPages.Observe(pad,pressed,button->IsDown());
+                    const bool triggerDown=gamepad && controllerTriggers.Observe(pad,pressed,button->IsDown());
                     // Some controller event sources omit the native zero-duration
                     // down or emit release with zero duration. Do not retain the
                     // UI's swallowed state after an observed physical release.
                     const bool up = gamepad?!pressed:button->IsUp();
-                    const bool down = gamepad && (pad==266 || pad==267) && IsOpen()?pageDown:button->IsDown();
+                    const bool down = gamepad && IsOpen() && (pad==266 || pad==267 || pad==280 || pad==281)?
+                        (pad>=280?triggerDown:pageDown):button->IsDown();
                     bool nameRepeat=false;
                     if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code<256) {
                         if(up)nameRepeatAt[code]=0;
@@ -829,7 +883,7 @@ namespace Wheel {
                         } else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse && code<2) SettingsClick(code==1);
                         else if(pad==276 || pad==278)SettingsClick(pad==278);
                         else if(pad==277)LeaveSettings(false);
-                        else if(pad==274 || pad==275){std::lock_guard lock(viewMutex);view.settingsTab=Wrap(view.settingsTab+(pad==275?1:-1),3);}
+                        else if(pad==274 || pad==275){std::lock_guard lock(viewMutex);view.settingsTab=NextSettingsTab(view.settingsTab,pad==275?1:-1);}
                     } else if (down && current.open && !inputGate.Swallowed(identity) &&
                         ((button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==60) || pad==270)) {
                         EnterSettings(); // Remains reachable even if Favorites itself is bound to F2.
@@ -858,14 +912,14 @@ namespace Wheel {
                             else if (code == 8) ChangePage(-1);
                             else if (code == 9) ChangePage(1);
                         } else if(pad) {
-                            switch(pad) {
-                            case 276:Activate(false);break;
-                            case 278:Activate(true);break;
-                            case 277:if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true);break;
-                            case 274: case 268:ChangeCategory(-1);break;
-                            case 275: case 269:ChangeCategory(1);break;
-                            case 266:ChangePage(-1,"up");break;
-                            case 267:ChangePage(1,"down");break;
+                            switch(ControllerCommand(pad,current.config.gamepadCategoryButtons)) {
+                            case PadWheelCommand::UseRight:Activate(false);break;
+                            case PadWheelCommand::UseLeft:Activate(true);break;
+                            case PadWheelCommand::Back:if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true);break;
+                            case PadWheelCommand::PreviousCategory:ChangeCategory(-1);break;
+                            case PadWheelCommand::NextCategory:ChangeCategory(1);break;
+                            case PadWheelCommand::PreviousPage:ChangePage(-1,"up");break;
+                            case PadWheelCommand::NextPage:ChangePage(1,"down");break;
                             default:break;
                             }
                         }
@@ -890,8 +944,8 @@ namespace Wheel {
                             code,button->GetUserEvent().c_str(),current.open,openQueued.load(),closing.load(),
                             decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":
                             decision==InputGate::Result::Resume?"resume":"suppress");
-                    if(down && (pad==274 || pad==275) && consume)
-                        SKSE::log::info("Controller category input: raw={} key={} event='{}' filter={}",code,pad,
+                    if(down && (pad==274 || pad==275 || pad==280 || pad==281) && consume)
+                        SKSE::log::info("Controller wheel input: raw={} key={} event='{}' filter={}",code,pad,
                             button->GetUserEvent().c_str(),decision==InputGate::Result::Suppress?"removed":
                             decision==InputGate::Result::Release?"release":"pass");
                     if(decision==InputGate::Result::Resume) {
@@ -940,7 +994,7 @@ namespace Wheel {
             previousDispatch(source, dispatch.Events());
             dispatch.Restore();
             if (!Focused()) {
-                inputGate.Reset();movementStick.Reset();controllerPages.Reset();shiftHeld[0]=shiftHeld[1]=false;
+                inputGate.Reset();movementStick.Reset();controllerPages.Reset();controllerTriggers.Reset();shiftHeld[0]=shiftHeld[1]=false;
                 std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
@@ -969,6 +1023,7 @@ namespace Wheel {
                     const auto old=Snapshot();
                     if(old.outfitDialog==1 || old.outfitDialog==2)TextBridge::Reset();
                     TimeControl::EndSession();RequestPause(false);
+                    retainedAction=false;retainedSubmitted=false;
                     RevertSettings();
                     std::lock_guard lock(viewMutex);
                     if(view.open) view.animateClose=false;
@@ -1064,6 +1119,7 @@ namespace Wheel {
     bool IsOpen() { std::lock_guard lock(viewMutex); return view.open; }
     void Cancel(bool effects) {
         std::lock_guard lifecycle(lifecycleMutex);
+        retainedAction=false;retainedSubmitted=false;
         {std::lock_guard lock(openMutex);++openSerial;openQueued=false;pendingOpen.reset();}
         const auto current=Snapshot();
         if(current.outfitDialog==1 || current.outfitDialog==2)TextBridge::Reset();
@@ -1087,7 +1143,7 @@ namespace Wheel {
         gameActive = active;
         Cancel();
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
-        inputGate.Reset();movementStick.Reset();controllerPages.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
+        inputGate.Reset();movementStick.Reset();controllerPages.Reset();controllerTriggers.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
         { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
             view.items.clear();view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);
