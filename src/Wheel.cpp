@@ -401,7 +401,8 @@ namespace Wheel {
                 RE::SendHUDMessage::ShowHUDMessage((selected.action==ActionKind::FaceLightCommand?selected.detail:Tr(Config(),selected.action==ActionKind::Outfit?"outfitMissing":"unsupported")).c_str());
                 return;
             }
-            const bool keep=KeepWheelAfterUse(current.config.keepOpen,selected.action==ActionKind::Favorite &&
+            // Outfit changes close the overlay so the player can observe the full transition.
+            const bool keep=selected.action!=ActionKind::Outfit && KeepWheelAfterUse(current.config.keepOpen,selected.action==ActionKind::Favorite &&
                 (selected.category==Category::Potions || selected.category==Category::Food));
             {
                 std::lock_guard lock(actionMutex);

@@ -127,7 +127,7 @@ See [outfit implementation notes](docs/OUTFITS.md) for identity matching and ser
 
 Empty item categories are hidden from navigation and the title strip for the selected item source. Categories return when entries become available; a remembered empty category advances to the next populated one. An entirely empty wheel still opens with the empty-state message. The action wheel keeps its outfit creation/import category and optional Face Lighting handling.
 
-Outfit switching now preserves shared worn instances, equips the new outfit first (body-slot pieces first), then removes old leftover apparel. Clicking an exact already worn preset still removes the complete managed outfit. Each update submits at most two equipment calls with a soft 3 ms work budget; delayed engine state changes are still verified. This avoids the deliberate all-undressed phase, but native model updates and third-party equipment scripts cannot be made atomic. See [implementation and test notes](docs/EMPTY_CATEGORIES_AND_OUTFITS_0.5.2.md).
+Outfit switching now preserves shared worn instances, equips the new outfit first (body-slot pieces first), then removes old leftover apparel. Clicking an exact already worn preset still removes the complete managed outfit. Applying or removing a preset always closes the wheel before processing, regardless of Keep open after equip, so the transition is visible. Each update submits at most two equipment calls with a soft 3 ms work budget; delayed engine state changes are still verified. This avoids the deliberate all-undressed phase, but native model updates and third-party equipment scripts cannot be made atomic. See [implementation and test notes](docs/EMPTY_CATEGORIES_AND_OUTFITS_0.5.2.md).
 
 ## Version 0.5.1
 
