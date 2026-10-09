@@ -14,7 +14,7 @@ int wmain(int argc,wchar_t** argv) {
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
     if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
         SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
-        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.allInventory && v.timeMode==1 && v.slowPercent==30 &&
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && v.allInventory && v.timeMode==1 && v.slowPercent==30 &&
             v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
             v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
             "A fresh process reads all applied settings from disk");
@@ -29,12 +29,14 @@ int wmain(int argc,wchar_t** argv) {
     Check(!Config().allInventory,"Fresh installs show only favorites");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==20,"Fresh installs retain pause and a 20% optional slowdown");
+    Check(!Config().gamepadMoveWhileOpen,"Split sticks remain opt-in on fresh installs");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     Check(Config().keepOpen,"Saving fresh defaults persists keep-open on");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     SetSettingsPath(path.string()); LoadSettings();
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
+    Check(!Config().gamepadMoveWhileOpen,"Old INIs keep left-stick wheel selection when the option is missing");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Missing KeepOpen now defaults on without changing controller scheme");
     BeginSettings();auto continuous=Config();continuous.keepOpen=false;continuous.gamepadCategoryButtons=1;
     EditSettings(continuous);RevertSettings();Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Cancel restores continuous use and pad scheme");
@@ -101,7 +103,7 @@ int wmain(int argc,wchar_t** argv) {
         }
     }
     const auto original=Config();
-    BeginSettings(); auto edited=Config(); edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
+    BeginSettings(); auto edited=Config(); edited.gamepadMoveWhileOpen=true; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
     Check(Config()==edited,"Live preview");
     RevertSettings(); Check(Config()==original,"Cancel restores every setting");
     BeginSettings(); EditSettings(edited); Check(SaveSettings(),"Save settings");
@@ -154,6 +156,7 @@ int wmain(int argc,wchar_t** argv) {
     LoadResources("assets");
     Check(Languages().size()>=2 && Themes().size()>=2,"Bundled resources load");
     Check(Tr(edited,"settings")=="设置","UTF-8 language");
+    Check(Tr(edited,"gamepadMoveWhileOpen")=="左摇杆控制移动" && Tr(edited,"padSettingsHelpRight").find("右摇杆")!=std::string::npos,"Split stick controls are localized");
     Check(Tr(edited,"spells")=="法术" && Tr(edited,"shouts")=="龙吼" && Tr(edited,"powers")=="能力","Separated magic categories use localized labels");
     Check(ResolveLanguage("auto","ZH-cn")=="zh_CN" && ResolveLanguage("zh-CN","en-US")=="zh_CN","Case/hyphen normalization and explicit override");
     Check(ResolveLanguage("auto","en-GB")=="en" && ResolveLanguage("auto","de-DE")=="en","English variants and unavailable locales fall back to English");
@@ -205,7 +208,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
     Check(SettingCount(2)==4 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22,"Gameplay tab includes continuous use");
-    Check(SettingCount(1)==5 && SettingCount(3)==4 && SettingRow(3,3)==21,"Keyboard and controller groups are independent");
+    Check(SettingCount(1)==5 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Controller tab includes separate category and split-stick settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
 }

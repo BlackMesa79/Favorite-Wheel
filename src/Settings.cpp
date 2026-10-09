@@ -99,6 +99,7 @@ namespace Wheel {
             settings.gamepadModifier=number(L"Controls",L"GamepadModifier",-1);
             settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",274);
             settings.gamepadCategoryButtons=number(L"Controls",L"GamepadCategoryButtons",0);
+            settings.gamepadMoveWhileOpen=number(L"Controls",L"GamepadMoveWhileOpen",0)!=0;
             settings.scale = number(L"Display",L"ScalePercent",100)/100.f;
             settings.sensitivity = number(L"Controls",L"SensitivityPercent",100)/100.f;
             settings.font = Read(file,L"Display",L"Font",settings.font);
@@ -187,6 +188,7 @@ namespace Wheel {
             write(L"Controls",L"GamepadModifier",std::to_string(settings.gamepadModifier)) &&
             write(L"Controls",L"GamepadActionModifier",std::to_string(settings.gamepadActionModifier)) &&
             write(L"Controls",L"GamepadCategoryButtons",std::to_string(settings.gamepadCategoryButtons)) &&
+            write(L"Controls",L"GamepadMoveWhileOpen",settings.gamepadMoveWhileOpen?"1":"0") &&
             write(L"Controls",L"SensitivityPercent",std::to_string(static_cast<int>(settings.sensitivity*100+.5f))) &&
             write(L"Display",L"ScalePercent",std::to_string(static_cast<int>(settings.scale*100+.5f)));
         if(!ok)return Report("edit-stage",GetLastError());

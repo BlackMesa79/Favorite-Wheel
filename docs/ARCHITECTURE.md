@@ -1,5 +1,7 @@
 # 工程说明
 
+当前0.5.2追加可选ControllerSticks输入分流与LookStickGate回中交接；GamepadMoveWhileOpen默认0，左杆在实时轮盘自由移动、右杆选择/窗口光标，模态停步。见CONTROLLER_SPLIT_STICKS.md。
+
 当前开发0.5.2（最近正式0.5.1）：InventoryPages生成可见分类掩码，导航/标题使用同一集合；换装保留共有实例，主体优先穿戴目标，再验证/清理旧配件，最多两次装备调用与软3ms预算。详见EMPTY_CATEGORIES_AND_OUTFITS_0.5.2.md；下面同编号GOG测试为历史，不代表本轮内容。
 
 2026-10-09：用户确认此前测试改动正常并授权发布0.5.1，合并上下文入口/GOG/连续装备与手柄方案/设置持久化；下文待测描述为历史记录。发布依据与编号规则见RELEASE_0.5.1.md。

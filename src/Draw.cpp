@@ -366,7 +366,10 @@ namespace Wheel
             const auto &config = v.config;
             const auto &t = Style(config);
             auto tr = [&](const char *key) { return Tr(config, key); };
-            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.settingsTab==3?"controllerControlsHelp":v.gamepad?"padSettingsHelp":v.settingsTab==2?"gameplaySettingsHelp":v.settingsTab==1?"keyboardControlsHelp":"layoutSettingsHelp"));
+            PanelFrame(d, c, s, t, tr("settingsTitle"), tr(v.settingsTab==3?
+                (config.gamepadMoveWhileOpen?"padSettingsHelpRight":"controllerControlsHelp"):v.gamepad?
+                (config.gamepadMoveWhileOpen?"padSettingsHelpRight":"padSettingsHelp"):
+                v.settingsTab==2?"gameplaySettingsHelp":v.settingsTab==1?"keyboardControlsHelp":"layoutSettingsHelp"));
             Button(d,c,s,v,generalTab,tr("settingsGeneral"),v.settingsTab==0);
             Button(d,c,s,v,controlsTab,tr("settingsKeyboard"),v.settingsTab==1);
             Button(d,c,s,v,gamepadTab,tr("settingsController"),v.settingsTab==3);
@@ -374,7 +377,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -393,7 +396,7 @@ namespace Wheel
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
                                           tr(config.allInventory?"scopeAll":"scopeFavorites"),
                                           tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
-                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off")};
+                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off")};
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);
@@ -419,6 +422,7 @@ namespace Wheel
             }
             if(v.settingsTab==2)Text(d,{c.x,c.y+10*s},Wrapped(tr("keepOpenHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             if(v.settingsTab==3)Text(d,{c.x,c.y+10*s},Wrapped(tr("controllerSchemeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
+            if(v.settingsTab==3)Text(d,{c.x,c.y+105*s},Wrapped(tr("gamepadMoveHelp"),14*s,575*s,4),14*s,t.muted,575*s,t.textShadow);
             Button(d, c, s, v, defaultsButton, tr("defaults"));
             Button(d, c, s, v, cancelButton, tr("cancel"));
             Button(d, c, s, v, applyButton, tr("apply"), true);
@@ -767,7 +771,8 @@ namespace Wheel
                         14 * s, 535 * s),
                     14 * s, t.muted, 0, t.textShadow);
                 Text(d, {c.x, top + 36 * s},
-                     Fit(v.gamepad?tr("padNavigation"):KeyLabel([&] {
+                     Fit(v.gamepad?tr(config.gamepadMoveWhileOpen?
+                         (config.timeMode==0?"padNavigationRight":"padNavigationMoving"):"padNavigation"):KeyLabel([&] {
                              auto x = config;
                              x.hotkey = config.switchKey;
                              return x;

@@ -37,6 +37,9 @@ int main(int argc, char** argv) {
     if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay"))config.allInventory=true;
     if(argc>4 && std::string(argv[4])=="gameplay"){config.timeMode=1;config.slowPercent=20;}
     if(argc>4 && std::string(argv[4])=="pad-triggers")config.gamepadCategoryButtons=1;
+    if(argc>4 && (std::string(argv[4])=="controls-pad-move" || std::string(argv[4])=="pad-move" || std::string(argv[4])=="pad-move-pause")) {
+        config.gamepadMoveWhileOpen=true;config.timeMode=std::string(argv[4])=="pad-move-pause"?0:1;
+    }
     Wheel::EditSettings(config);
     Wheel::preview.config=config;
     Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";
@@ -44,6 +47,10 @@ int main(int argc, char** argv) {
         Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=std::string(argv[4])=="controls-pad"?3:(std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")?2:1;
     }
     Wheel::preview.gamepad=argc>4 && (std::string(argv[4])=="pad" || std::string(argv[4])=="pad-triggers" || std::string(argv[4])=="controls-pad");
+    if(argc>4 && (std::string(argv[4])=="controls-pad-move" || std::string(argv[4])=="pad-move" || std::string(argv[4])=="pad-move-pause")) {
+        Wheel::preview.gamepad=true;
+        if(std::string(argv[4])=="controls-pad-move") {Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=3;}
+    }
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> context;
     D3D_FEATURE_LEVEL level;

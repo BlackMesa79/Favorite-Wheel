@@ -1,6 +1,7 @@
 #include "WheelLogic.h"
 #include "FunctionNavigation.h"
 #include "InputGate.h"
+#include "ControllerSticks.h"
 #include "InputDispatchChain.h"
 #include "OpenPolicy.h"
 #include "InputBindings.h"
@@ -190,6 +191,45 @@ int main() {
         Check(filter(1,0)==std::array<float,2>{1,0},"Closing immediately returns the current stick position to gameplay");
         stick.Reset();stick.Capture(true);
         Check(filter(0,1)==std::array<float,2>{0,0},"Idle or reset stick never starts movement on opening");
+        using S=LeftStickMode;
+        for(bool split:{false,true})for(bool capture:{false,true})for(bool open:{false,true})
+            for(bool modal:{false,true})for(int time=0;time<3;++time)for(bool transition:{false,true}) {
+                const auto mode=ControllerLeftStick(split,capture,open,modal,time,transition);
+                if(!capture)Check(mode==S::Gameplay,"Gameplay always receives the physical left stick outside capture");
+                else if(!split)Check(mode==S::HeldDirection,"Legacy selection keeps opening-vector behavior in every wheel state");
+                else Check(mode==((open || transition) && !modal && time!=0?S::Gameplay:S::Block),
+                    "Split movement is available only in a live wheel lifecycle with no blocking modal");
+            }
+        Check(ControllerSelectionStick(false,true,false) && !ControllerSelectionStick(false,false,true) &&
+            ControllerSelectionStick(true,false,true) && !ControllerSelectionStick(true,true,false),
+            "Exactly one physical stick drives selection in each scheme");
+        // Simulate opening from rest, changing direction, modal stop and resuming
+        // physical movement. Neither a shared gate nor centering is required.
+        MovementStickGate splitMovement;
+        auto route=[&](float x,float y,bool modal,bool capture=true){
+            const auto mode=ControllerLeftStick(true,capture,true,modal,1,false);
+            splitMovement.Capture(mode==S::HeldDirection);
+            if(mode==S::Block)x=y=0;
+            splitMovement.Filter(x,y);return std::array<float,2>{x,y};
+        };
+        Check(route(0,0,false)==std::array<float,2>{0,0} && route(.8f,.1f,false)==std::array<float,2>{.8f,.1f} &&
+            route(-.3f,.9f,false)==std::array<float,2>{-.3f,.9f},"Split mode starts and redirects movement while the wheel is open");
+        Check(route(.8f,.1f,true)==std::array<float,2>{0,0} && route(.8f,.1f,false)==std::array<float,2>{.8f,.1f},
+            "Modal dialogs stop movement and returning to the live wheel resumes the physical stick");
+        Check(route(.8f,.1f,false,false)==std::array<float,2>{.8f,.1f},"Closing does not stop split left-stick movement");
+        LookStickGate look;
+        auto camera=[&](float x,float y,bool capture,bool protect){look.Filter(x,y,capture,protect);return std::array<float,2>{x,y};};
+        Check(camera(.6f,.4f,false,false)==std::array<float,2>{.6f,.4f},"Legacy camera input passes normally outside the wheel");
+        Check(camera(.6f,.4f,true,true)==std::array<float,2>{0,0},"Right-stick UI selection never turns the camera");
+        Check(camera(-.4f,.7f,false,false)==std::array<float,2>{0,0},"Closing or disabling split mode with right stick held cannot snap the camera");
+        Check(camera(.05f,.05f,false,false)==std::array<float,2>{.05f,.05f} &&
+            camera(-.4f,.7f,false,false)==std::array<float,2>{-.4f,.7f},"Returning to center restores ordinary camera control");
+        look.Reset(true);
+        Check(camera(.9f,0,false,true)==std::array<float,2>{0,0},"Focus/load/disconnect reset blocks a stale right-stick deflection");
+        camera(0,0,false,true);
+        Check(camera(.9f,0,false,true)==std::array<float,2>{.9f,0},"After reset centering restores camera input");
+        look.Reset();camera(.9f,0,true,false);
+        Check(camera(.9f,0,false,false)==std::array<float,2>{.9f,0},"Opt-out retains the original camera handoff");
     }
     Check(PlayerEligible(true,true,true,false,false), "normal player and humanoid vampire/custom race eligible without race playable flag");
     Check(!PlayerEligible(true,true,true,false,true), "beast form yields to vanilla");

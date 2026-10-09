@@ -25,6 +25,7 @@ namespace Wheel {
         int gamepadModifier = -1;
         int gamepadActionModifier = 274; // LB, SKSE macro keycode.
         int gamepadCategoryButtons = 0; // 0 LB/RB categories, LT/RT use; 1 swaps the pairs.
+        bool gamepadMoveWhileOpen = false; // Left stick moves in live modes; right stick selects.
         std::string font = "C:/Windows/Fonts/msyh.ttc";
         bool operator==(const Settings&) const = default;
     };
