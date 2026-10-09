@@ -55,6 +55,11 @@ translation matches, it falls back to English. F2 settings offer System mode
 and manual choices. Set Language=auto to follow the system or Language=en to
 force English in SKSE/Plugins/FavoriteWheel.ini; restart after manual edits.
 Keep your existing INI and custom languages/themes when upgrading.
+Apply saves global INI settings; no game save is needed for configuration.
+The INI path is anchored to SkyrimSE.exe/Data/SKSE/Plugins/FavoriteWheel.ini.
+If an applied value resets on restart, check the load/save path and Windows
+error in FavoriteWheel.log, plus your mod manager's winning INI and profile.
+KeepOpen defaults on when missing; an explicit KeepOpen=0 remains off.
 Existing manual language choices stay unchanged; select System to opt in.
 Translation guide: https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md
 Outfit edits require a game save. Preserve matching .skse co-saves.
@@ -77,7 +82,7 @@ Pages carry at most ten entries and hover details load on demand; initial
 inventory scanning/sorting and new font glyphs can still cost time in large saves.
 F2 -> Gameplay -> Time behavior offers Pause (default), Slow time and Normal speed.
 SlowTimePercent defaults to 20 (5..100), relative to the existing game speed.
-Gameplay / Keep open after equip (General / KeepOpen=0 by default) retains the
+Gameplay / Keep open after equip (General / KeepOpen=1 by default) retains the
 wheel for gear, spells, powers, shouts and actions. Potions and food always close.
 In Pause mode equipment processing briefly releases the wheel pause, then
 restores it; outfit jobs run until complete. Slow/Normal speed is preserved.

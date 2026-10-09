@@ -9,8 +9,17 @@
 #include <cstdlib>
 #include <cmath>
 void Check(bool condition,const char* message) { if(!condition){std::cerr<<message<<'\n';std::exit(1);} }
-int main() {
+int wmain(int argc,wchar_t** argv) {
     using namespace Wheel;
+    auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
+    if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
+        SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.allInventory && v.timeMode==1 && v.slowPercent==30 &&
+            v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
+            v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
+            "A fresh process reads all applied settings from disk");
+        return 0;
+    }
     const auto root=std::filesystem::path("build")/("settings-test-"+std::to_string(GetCurrentProcessId()));
     std::filesystem::create_directories(root);
     const auto path=root/"FavoriteWheel.ini";
@@ -18,19 +27,20 @@ int main() {
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
     Check(!Config().allInventory,"Fresh installs show only favorites");
-    Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs close after use and use LB/RB categories");
+    Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==20,"Fresh installs retain pause and a 20% optional slowdown");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
+    Check(Config().keepOpen,"Saving fresh defaults persists keep-open on");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     SetSettingsPath(path.string()); LoadSettings();
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
-    Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Old INIs preserve close/category behavior");
-    BeginSettings();auto continuous=Config();continuous.keepOpen=true;continuous.gamepadCategoryButtons=1;
-    EditSettings(continuous);RevertSettings();Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Cancel restores continuous use and pad scheme");
+    Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Missing KeepOpen now defaults on without changing controller scheme");
+    BeginSettings();auto continuous=Config();continuous.keepOpen=false;continuous.gamepadCategoryButtons=1;
+    EditSettings(continuous);RevertSettings();Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Cancel restores continuous use and pad scheme");
     BeginSettings();EditSettings(continuous);Check(SaveSettings(),"Save continuous use and controller scheme");LoadSettings();
-    Check(Config().keepOpen && Config().gamepadCategoryButtons==1,"Continuous use and controller scheme round trip");
-    BeginSettings();DefaultSettings();Check(!Config().keepOpen && Config().gamepadCategoryButtons==0,"Defaults restore auto-close and LB/RB categories");RevertSettings();
+    Check(!Config().keepOpen && Config().gamepadCategoryButtons==1,"Explicit off and controller scheme round trip");
+    BeginSettings();DefaultSettings();Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Defaults restore keep-open and LB/RB categories");RevertSettings();
     Check(Config().timeMode==0 && Config().slowPercent==20,"Old INIs retain pause without new time keys");
     BeginSettings();auto timeSettings=Config();timeSettings.timeMode=1;timeSettings.slowPercent=30;
     EditSettings(timeSettings);RevertSettings();Check(Config().timeMode==0,"Cancel restores time mode");
@@ -97,6 +107,40 @@ int main() {
     BeginSettings(); EditSettings(edited); Check(SaveSettings(),"Save settings");
     RevertSettings(); Check(Config()==edited,"Closing after apply preserves applied values");
     LoadSettings(); Check(Config()==edited,"Settings survive reload");
+    {
+        // Persist and reload through an actual child process, not the same
+        // Win32 profile cache. Use a Unicode path and change the working dir.
+        const auto unicodePath=std::filesystem::absolute(root)/L"设置-持久化.ini";
+        SetSettingsPath(utf8(unicodePath));Check(SaveSettings(),"Save to Unicode path");
+        const auto working=std::filesystem::current_path();std::filesystem::current_path(root);
+        LoadSettings();Check(Config()==edited,"Resolved path survives working directory changes");
+        std::filesystem::current_path(working);
+        std::wstring executable(32768,L'\0');executable.resize(GetModuleFileNameW(nullptr,executable.data(),32768));
+        std::wstring command=L"\""+executable+L"\" --verify-persisted \""+unicodePath.wstring()+L"\"";
+        STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION process{};
+        Check(CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,
+            std::filesystem::absolute(root).c_str(),&startup,&process),"Launch independent settings reader");
+        const auto wait=WaitForSingleObject(process.hProcess,10000);DWORD result=1;
+        GetExitCodeProcess(process.hProcess,&result);CloseHandle(process.hThread);CloseHandle(process.hProcess);
+        Check(wait==WAIT_OBJECT_0 && result==0,"Applied settings survive a fresh process");
+        SetSettingsPath(path.string());
+        // A read-only destination must not claim Apply succeeded or replace it.
+        std::ifstream oldFile(path,std::ios::binary);
+        const std::string before((std::istreambuf_iterator<char>(oldFile)),{});oldFile.close();
+        Check(SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_READONLY),"Set read-only fixture");
+        BeginSettings();auto blocked=Config();blocked.positionX=12;EditSettings(blocked);
+        const bool written=SaveSettings();const auto diagnostic=SettingsDiagnostic();
+        SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_NORMAL);
+        std::ifstream unchangedFile(path,std::ios::binary);
+        const std::string unchanged((std::istreambuf_iterator<char>(unchangedFile)),{});unchangedFile.close();
+        Check(!written && diagnostic.find("open-target")!=std::string::npos && unchanged==before,"Read-only save failure is explicit and leaves original file intact");
+        RevertSettings();LoadSettings();Check(Config()==edited,"Failed save does not change persisted settings");
+        // Default game path is based on the executable, regardless of cwd.
+        SetSettingsPath("");LoadSettings();const auto first=SettingsDiagnostic();
+        std::filesystem::current_path(root);SetSettingsPath("");LoadSettings();
+        Check(SettingsDiagnostic()==first,"Default path is independent of the launcher working directory");
+        std::filesystem::current_path(working);SetSettingsPath(path.string());LoadSettings();
+    }
     wchar_t value[32]{};
     GetPrivateProfileStringW(L"Custom",L"Keep",L"",value,32,std::filesystem::absolute(path).c_str());
     Check(std::wstring(value)==L"123","Unrelated INI keys survive");

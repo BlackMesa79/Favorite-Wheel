@@ -1,0 +1,6 @@
+0.5.4 (test build)
+- Keep open after equip now defaults on, including older INIs without the key. Explicit saved off choices remain off; potions and food still close.
+- Anchored settings to the game executable directory so launch-directory changes cannot select another INI.
+- Replaced virtual temporary-file renaming with staged, verified writes through the destination INI handle; added flush/reopen checks and save failure diagnostics.
+- Added independent-process restart, Unicode path, working-directory and read-only destination regressions. Original persistence report still needs confirmation with that user's setup.
+- Includes 0.5.3 selective keep-open, controller schemes and separate Keyboard/Controller settings, plus earlier 0.5.1/0.5.2 changes.

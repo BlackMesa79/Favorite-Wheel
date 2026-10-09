@@ -4,7 +4,7 @@ namespace Wheel {
     struct Settings {
         bool enabled = true;
         bool allInventory = false;
-        bool keepOpen = false; // Keep the overlay after an accepted item/action.
+        bool keepOpen = true; // Equipment/magic/actions stay open; consumables close.
         int timeMode = 0; // 0 pause, 1 slow, 2 unchanged game speed.
         int slowPercent = 20; // Relative to the pre-wheel current/target multipliers.
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
@@ -36,4 +36,5 @@ namespace Wheel {
     bool SaveSettings();
     void DefaultSettings();
     void SetSettingsPath(const std::string& path);
+    std::string SettingsDiagnostic(); // Last load/save path, stage and Win32 error.
 }

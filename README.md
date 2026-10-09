@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current development build: **0.5.3 (test)**. Latest public release: **0.5.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current development build: **0.5.4 (test)**. Latest public release: **0.5.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -123,6 +123,12 @@ Missing or ambiguous items, protected quest equipment, and shield-slot conflicts
 
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
 
+## Version 0.5.4 test build
+
+**Keep open after equip is now on by default**, including INIs without the new key. An explicit `General / KeepOpen=0` still opts out; potions and food always close.
+
+Applied settings are global INI configuration and do not require a game save. The path is anchored to `SkyrimSE.exe / Data / SKSE / Plugins / FavoriteWheel.ini`, independent of the launcher's working directory. Saves stage and check the document outside the virtual Data tree, then write through the existing INI's own handle, flush it, and verify both stored bytes and reopened settings. The old virtual `.tmp` rename path is removed. Load/save logs record the path, stage and Windows error; failed saves remain visible and cancelable. This addresses identified persistence risks; the original reporter's setup is unknown and needs confirmation. See [settings persistence notes](docs/SETTINGS_PERSISTENCE_0.5.4.md).
+
 ## Version 0.5.3 test build
 
 Optional **Gameplay / Keep open after equip** keeps equipment, spells, powers, shouts, outfit presets and Face Lighting actions on screen for consecutive selection. Potions and food still close the wheel and use the existing animation-compatible path. The option defaults off, preserving automatic closing in older configurations. In Pause mode the wheel briefly releases its own pause for equipment processing, then pauses again; outfit jobs remain unpaused until complete. Slow/Normal modes keep their selected speed. Accepted actions are serialized; the overlay and input capture remain active throughout. Item state refreshes after processing; a vanished hovered instance clears selection for safety.
@@ -215,13 +221,13 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.3.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.4.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 
 Report issues with your Skyrim/SKSE versions, mod version, reproduction steps, relevant UI or animation integrations, and `FavoriteWheel.log` from `Documents/My Games/Skyrim Special Edition/SKSE/`. Add a crash log for crashes.
 
-The [0.5.3 test materials](release-materials/0.5.3) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
+The [0.5.4 test materials](release-materials/0.5.4) contain the current English Nexus summary, BBCode description, local HTML preview, and English/Chinese changelogs. The [cover assets](release-materials/0.3.15) include the editable SVG and PNG exports. The `.cjs` generators use Node.js; PNG export additionally requires `sharp`.
 
 ## License and credits
 

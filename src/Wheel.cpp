@@ -611,10 +611,14 @@ namespace Wheel {
             SyncWheelTime();
         }
         void LeaveSettings(bool save) {
-            if (save && !SaveSettings()) { std::lock_guard lock(viewMutex); view.saveError=true; return; }
+            if (save && !SaveSettings()) {
+                SKSE::log::error("Settings save failed: {}",SettingsDiagnostic());
+                std::lock_guard lock(viewMutex);view.saveError=true;return;
+            }
             if (save) {
                 const auto config=Config();
-                SKSE::log::info("Settings saved: language={} theme={} scale={} hotkey={}",config.language,config.theme,config.scale,config.hotkey);
+                SKSE::log::info("Settings saved: {}; language={} theme={} scale={} hotkey={} keepOpen={} padCategory={}",
+                    SettingsDiagnostic(),config.language,config.theme,config.scale,config.hotkey,config.keepOpen,config.gamepadCategoryButtons);
             }
             if (!save) RevertSettings();
             bool reload=false;
