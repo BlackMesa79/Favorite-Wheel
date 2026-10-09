@@ -1,10 +1,11 @@
 #include "OutfitModel.h"
 #include "OutfitStep.h"
+#include "OutfitPlan.h"
 #include <cstdlib>
 #include <iostream>
 using namespace Wheel::Outfits;
 void Check(bool result,const char* label){if(!result){std::cerr<<label<<'\n';std::exit(1);}}
-struct Candidate{Piece piece;bool worn=false;};
+struct Candidate{Piece piece;bool worn=false;std::uint32_t mask=0;};
 int main(){
     Check(!ValidName("   ") && !ValidName("a\nb") && ValidName("中文"),"Validate display names");
     using D=StepDecision;
@@ -15,6 +16,42 @@ int main(){
     Check(DecideStep(false,true,true,.8)==D::Timeout,"Rejected equip times out without repeated calls");
     Check(DecideStep(true,true,true,.8)==D::Advance,"Observed completion wins at timeout boundary");
     Piece armor{{"Skyrim.esm",0x1234},{"",0xFF000ABC},{"Skyrim.esm",0x14},42,1.25f,"旅者 \"甲\"","Armor"};
+    {
+        auto piece=[&](unsigned id){auto value=armor;value.base.id=id;value.unique=static_cast<std::uint16_t>(id);return value;};
+        const auto oldBody=piece(1),oldRing=piece(2),commonBoots=piece(3),newRing=piece(4),newBody=piece(5);
+        std::vector<Candidate> current{{oldBody,true,4},{oldRing,true,64},{commonBoots,true,128},
+            {newRing,false,64},{newBody,false,4}};
+        const std::vector<int> target{3,2,4}; // Preset save order need not put Body first.
+        const auto plan=ReplacementPlan(current,target,false);
+        Check(plan.size()==4 && plan[0].piece==newBody && plan[0].equip && plan[1].piece==newRing && plan[1].equip,
+            "Replacement covers the body before accessories, then cleans old apparel");
+        Check(!plan[2].equip && !plan[3].equip && plan[2].piece==oldBody && plan[3].piece==oldRing,
+            "Only previously worn pieces outside the target are cleaned up after equipping");
+        Check(std::none_of(plan.begin(),plan.end(),[&](const auto& op){return op.piece==commonBoots;}),
+            "Common worn instances are never unequipped or reequipped");
+        auto simulated=current;
+        for(const auto& op:plan) {
+            const int at=Match(op.piece,simulated);
+            Check(at>=0,"Replacement simulation re-resolves each saved instance");
+            if(op.equip)for(auto& item:simulated)if(item.mask&simulated[at].mask)item.worn=false;
+            simulated[at].worn=op.equip;
+            Check(simulated[2].worn && (simulated[0].worn || simulated[4].worn),
+                "Native slot replacement never requires a plugin-driven bare-body stage or removal of shared boots");
+        }
+        Check(Wearing(simulated,target),"Replacement finishes with the exact target, without old accessories");
+        current[0].worn=false;current[1].worn=false;current[3].worn=true;current[4].worn=true;
+        Check(ReplacementPlan(current,target,false).empty(),"A completed target has no replacement operations");
+        const auto off=ReplacementPlan(current,target,true);
+        Check(off.size()==3 && std::none_of(off.begin(),off.end(),[](const auto& op){return op.equip;}),
+            "Clicking an exact preset again removes all managed apparel only");
+        current[1].worn=true;
+        const auto extra=ReplacementPlan(current,target,false);
+        Check(extra.size()==1 && !extra[0].equip && extra[0].piece==oldRing,
+            "A fully worn target plus extra apparel only removes the extra item");
+        Check(OutfitBudgetAvailable(0,0) && OutfitBudgetAvailable(1,2.9) &&
+            !OutfitBudgetAvailable(2,0) && !OutfitBudgetAvailable(1,3.),
+            "Per-tick budget bounds both engine submissions and elapsed work");
+    }
     Preset outfit{1,"夜行套装",{armor}};
     std::vector<Preset> decoded;
     Check(Decode(Encode({outfit}),decoded) && decoded==std::vector<Preset>{outfit},"Unicode and instance fields survive serialization");

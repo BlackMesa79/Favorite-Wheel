@@ -6,7 +6,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current release: **0.5.1**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current development build: **0.5.2 (test)**. Latest public release: **0.5.1**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -95,7 +95,7 @@ Controller controls (Xbox names; equivalent PlayStation buttons use the same pos
 
 The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the left stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB cycle appearance, controls, and gameplay tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
 
-Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. Item use and actions execute after the menu closes and its time control is released. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
+Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. With Keep open after equip enabled, equipment and actions retain the wheel while its own pause briefly yields for processing. Potions and food always close before use. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
 
 Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
 
@@ -113,7 +113,7 @@ Skyrim provides eight native slots. **9 and 0 are not added as extra native slot
 
 Wear the equipment to capture, open the action wheel, and choose **SAVE CURRENT**. Presets include armor, clothing, jewelry, and other non-shield armor items in your inventory; they do not require favorites.
 
-Applying a preset first removes currently worn managed equipment, then equips the saved outfit. If the complete managed outfit already matches, selecting it again removes it. **Weapons, shields, and ammunition are excluded.** No items are created or retrieved from containers or followers.
+Applying a preset preserves shared worn pieces, equips the new outfit (Body slot first), then clears old leftover apparel. If the complete managed outfit already matches, selecting it again removes it. **Weapons, shields, and ammunition are excluded.** No items are created or retrieved from containers or followers.
 
 Right-click a preset to rename, overwrite, delete, or export it. **Save the game after editing presets:** they are stored per character in the SKSE co-save. Loading an older save restores its preset data. Preserve the matching `.skse` file when transferring saves.
 
@@ -122,6 +122,12 @@ Exports use `Data/SKSE/Plugins/FavoriteWheel/Outfits/Exports/*.fwo`. Place files
 Missing or ambiguous items, protected quest equipment, and shield-slot conflicts can prevent a change. Improving, enchanting, or renaming equipment may require recapturing the preset. Other mods can alter or block individual equipment steps; incomplete changes are reported rather than forced or rolled back.
 
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
+
+## Version 0.5.2 test build
+
+Empty item categories are hidden from navigation and the title strip for the selected item source. Categories return when entries become available; a remembered empty category advances to the next populated one. An entirely empty wheel still opens with the empty-state message. The action wheel keeps its outfit creation/import category and optional Face Lighting handling.
+
+Outfit switching now preserves shared worn instances, equips the new outfit first (body-slot pieces first), then removes old leftover apparel. Clicking an exact already worn preset still removes the complete managed outfit. Each update submits at most two equipment calls with a soft 3 ms work budget; delayed engine state changes are still verified. This avoids the deliberate all-undressed phase, but native model updates and third-party equipment scripts cannot be made atomic. See [implementation and test notes](docs/EMPTY_CATEGORIES_AND_OUTFITS_0.5.2.md).
 
 ## Version 0.5.1
 
@@ -209,7 +215,7 @@ foreach ($testTarget in $testTargets) {
 
 Runtime/address checks have optional local game-library inputs. The `WheelPreview` target uses the actual drawing code with synthetic data and D3D11 WARP; previews are not game screenshots. Local checks do not replace in-game tests. See the [test plan](docs/TESTING.md) and [CommonLib upgrade review](docs/COMMONLIB_1.7_REVIEW.md).
 
-Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.1.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
+Package with `pwsh -NoProfile -File scripts/package.ps1`. It produces `dist/FavoriteWheel-0.5.2.zip` and a source ZIP containing pinned dependency sources. The installation ZIP contains only runtime files under `SKSE/` and a root `readme.txt` with the full GPL and third-party notices. Use `-TestPackage` for a `-test.zip` filename or `-SkipSource` to skip the source archive. Build caches, local game files, and private handoff notes are excluded from Git. Technical documents are mainly in Chinese and include clearly labeled historical development notes; current runtime support is stated above and enforced by the code.
 
 ## Feedback and release materials
 

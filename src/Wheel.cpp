@@ -42,7 +42,6 @@ namespace Wheel {
         std::chrono::steady_clock::time_point hoverStarted;
         std::uint64_t hoverSerial=0; // Input pump only; a reopened wheel starts a new dwell.
         int favoritePage=0,functionPage=0;
-        bool favoriteCategoryChosen=false; // Session-local navigation, independent of wheel mode.
         FaceLight::Section functionCategory=FaceLight::Section::Outfits; // Remember the top-level type, not a child list.
         bool shiftHeld[2]{};
         bool keyboardHeld[256]{}, padHeld[16]{};
@@ -197,7 +196,12 @@ namespace Wheel {
         }
         void FilterItems() { // viewMutex held; O(10), independent of category size.
             if(view.functions)PublishPage(SlicePage(functionItems,0,functionItems.size(),view.page));
-            else PublishPage(inventoryPages.Page(view.category,view.page));
+            else {
+                view.visibleCategories=inventoryPages.visible;
+                const auto category=inventoryPages.visible.Select(view.category);
+                if(category!=view.category){view.category=category;view.page=favoritePage=0;}
+                PublishPage(inventoryPages.Page(view.category,view.page));
+            }
         }
         void PublishDirectory(std::vector<Item> items,bool scope,bool preserveSelection=false) { // viewMutex held
             const int oldSlot=WheelSlot(view.x,view.y),oldIndex=PageItemIndex(view,oldSlot);
@@ -207,10 +211,7 @@ namespace Wheel {
             inventoryPages.Set(std::move(items));inventoryLoaded=true;inventoryScope=scope;view.inventoryLoading=false;
             view.inventoryWide=scope;
             if(!view.functions) {
-                if(!favoriteCategoryChosen && !inventoryPages.items.empty() &&
-                    inventoryPages.boundaries[int(view.category)]==inventoryPages.boundaries[int(view.category)+1])
-                    view.category=inventoryPages.items.front().category;
-                favoriteCategoryChosen=true;FilterItems();
+                FilterItems();
                 const int newIndex=PageItemIndex(view,oldSlot);
                 const auto newKey=oldSlot>=0 && newIndex>=0 && newIndex<int(view.items.size())?
                     std::optional<ItemKey>{view.items[newIndex].key}:std::optional<ItemKey>{};
@@ -221,7 +222,7 @@ namespace Wheel {
         void RequestDirectory(bool refresh=false) {
             // Clear a previous wheel/page even when an older request is still queued.
             // The input pump retries after that stale task releases the queue flag.
-            if(!refresh){std::lock_guard lock(viewMutex);view.inventoryLoading=true;if(!view.functions)PublishPage({});}
+            if(!refresh){std::lock_guard lock(viewMutex);view.inventoryLoading=true;if(!view.functions){view.visibleCategories={0};PublishPage({});}}
             const bool scope=Config().allInventory;
             if(directoryTaskQueued.exchange(true))return;
             const auto generation=epoch.load(),serial=openSerial.load(),revision=directoryRevision.load();
@@ -286,6 +287,7 @@ namespace Wheel {
                 view.faceLightAvailable=FaceLight::Available();
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
                 ++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
+                view.visibleCategories={0};
                 inventoryStamp=stamp;nextInventoryRefresh=std::chrono::steady_clock::now();
                 PublishPage({});
                 view.inventoryGlyphs.clear();view.inventoryWide=scope;view.inventoryLoading=false;
@@ -343,8 +345,10 @@ namespace Wheel {
                 return;
             }
             std::lock_guard lock(viewMutex);
-            favoriteCategoryChosen=true;
-            view.category = static_cast<Category>(Wrap(static_cast<int>(view.category) + direction, categoryCount));
+            if(!inventoryLoaded || view.inventoryLoading)return;
+            const auto category=inventoryPages.visible.Move(view.category,direction);
+            if(category==view.category)return; // One type (or no items) preserves its page.
+            view.category = category;
             view.page = 0; // Keep the pointer on the same sector when changing type.
             FilterItems();
         }
@@ -1149,7 +1153,7 @@ namespace Wheel {
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
         inputGate.Reset();movementStick.Reset();controllerPages.Reset();controllerTriggers.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
         { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
-            view.items.clear();view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
+            view.items.clear();view.visibleCategories={0};view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);
         if (active) {
             const auto config=Config();const auto favorite=EffectiveKeyboardKey(config);

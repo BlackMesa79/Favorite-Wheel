@@ -151,8 +151,8 @@ namespace Wheel
         {
             const auto &t = Style(v.config);
             const int current =
-                v.functions ? (v.functionSection == FaceLight::Section::Outfits ? 0 : 1) : int(v.category);
-            const auto ribbon = RibbonLabels(current, v.functions ? FaceLight::TypeCount(v.faceLightAvailable) : categoryCount);
+                v.functions ? (v.functionSection == FaceLight::Section::Outfits ? 0 : 1) : v.visibleCategories.Index(v.category);
+            const auto ribbon = RibbonLabels(current, v.functions ? FaceLight::TypeCount(v.faceLightAvailable) : v.visibleCategories.Count());
             const float y = c.y - 307 * s;
             std::array<std::string, 5> captions;
             std::array<float, 5> halfWidths{}, positions{}, sizes{};
@@ -163,7 +163,7 @@ namespace Wheel
                 const int at = label.offset + 2;
                 const bool selected = label.offset == 0;
                 const char *key =
-                    v.functions ? (label.index == 0 ? "outfitTitle" : "lightTitle") : categoryKeys[label.index];
+                    v.functions ? (label.index == 0 ? "outfitTitle" : "lightTitle") : categoryKeys[static_cast<int>(v.visibleCategories.At(label.index))];
                 sizes[at] = selected ? 25 * s * t.titleScale : 16 * s;
                 const float width = (selected ? 154.f : std::abs(label.offset) == 1 ? 82.f : 64.f) * s;
                 captions[at] = Fit(Tr(v.config, key), sizes[at], width);
@@ -605,7 +605,7 @@ namespace Wheel
                                        ? tr(v.functionSection == FaceLight::Section::Outfits    ? "outfitTitle"
                                             : v.functionSection == FaceLight::Section::Lighting ? "lightTitle"
                                                                                                 : "lightFollowers")
-                                       : tr(categoryKeys[int(v.category)]);
+                                       : tr(v.visibleCategories.Count()?categoryKeys[int(v.category)]:"title");
             const int titleStart = d->VtxBuffer.Size;
             CategoryStrip(d, c, s, v, pageFade);
             Rule(d, {c.x, c.y - 283 * s}, 160 * s, t, s);

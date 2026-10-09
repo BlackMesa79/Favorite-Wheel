@@ -1,6 +1,7 @@
 #include "Outfits.h"
 #include "OutfitModel.h"
 #include "OutfitStep.h"
+#include "OutfitPlan.h"
 #include "UIResources.h"
 #include "Settings.h"
 #include <filesystem>
@@ -15,7 +16,7 @@ namespace Wheel::Outfits {
         std::unordered_map<std::uint32_t,ResolveProblem> reportedProblems; // mutex held; log only state changes.
         constexpr std::uint32_t record=0x46574F50;
         const std::filesystem::path folder="Data/SKSE/Plugins/FavoriteWheel/Outfits";
-        struct Candidate {Piece piece; RE::TESObjectARMO* armor; RE::ExtraDataList* extra; bool worn,quest;};
+        struct Candidate {Piece piece; RE::TESObjectARMO* armor; RE::ExtraDataList* extra; bool worn,quest;std::uint32_t mask;};
         void Tell(const char* key) {RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),key).c_str());}
         FormRef Ref(RE::TESForm* form) {
             if(!form)return {};
@@ -52,9 +53,9 @@ namespace Wheel::Outfits {
                 if(data.second->extraLists)for(auto extra:*data.second->extraLists) if(extra) {
                     represented+=std::max(1,extra->GetCount());
                     result.push_back({Describe(armor,extra,labels),armor,extra,
-                        extra->HasType<RE::ExtraWorn>()||extra->HasType<RE::ExtraWornLeft>(),quest});
+                        extra->HasType<RE::ExtraWorn>()||extra->HasType<RE::ExtraWornLeft>(),quest,armor->GetSlotMask().underlying()});
                 }
-                if(data.first>represented)result.push_back({Describe(armor,nullptr,labels),armor,nullptr,false,quest});
+                if(data.first>represented)result.push_back({Describe(armor,nullptr,labels),armor,nullptr,false,quest,armor->GetSlotMask().underlying()});
             }
             const auto ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
             if(ms>8)SKSE::log::info("Outfit inventory scan: form={:08X}, candidates={}, ms={:.2f}",only,result.size(),ms);
@@ -89,11 +90,10 @@ namespace Wheel::Outfits {
             }
             SKSE::log::warn("Outfit validation: same_base_candidates={} (at most 4 detailed above)",count);
         }
-        struct Operation {Piece piece;bool equip;};
         struct Job {
-            Preset preset;std::vector<Operation> operations;std::size_t index=0;
-            bool issued=false,removeOnly=false,cleared=false;
-            std::chrono::steady_clock::time_point started,issuedAt,nextTick;
+            Preset preset;std::vector<PlannedOperation> operations;std::size_t index=0;
+            bool issued=false,removeOnly=false,targetsConfirmed=false;
+            std::chrono::steady_clock::time_point started,issuedAt;
         };
         std::optional<Job> job; // Only accessed from SKSE task callbacks.
         std::atomic<bool> busy=false;
@@ -259,17 +259,14 @@ namespace Wheel::Outfits {
         }
         const bool removeOnly=Wearing(inventory,matches);
         for(int i:matches)if(!removeOnly && (inventory[i].armor->GetSlotMask().underlying()&shieldMask)){Tell("outfitBlocked");return;}
-        std::vector<Piece> worn;
         for(const auto& c:inventory)if(c.worn) {
             if(c.quest){Tell("outfitBlocked");return;}
-            worn.push_back(c.piece);
         }
         Job next;next.preset=p;next.removeOnly=removeOnly;
-        for(const auto& piece:worn)next.operations.push_back({piece,false});
-        if(!removeOnly)for(const auto& piece:p.pieces)next.operations.push_back({piece,true});
-        next.started=next.nextTick=std::chrono::steady_clock::now();
+        next.operations=ReplacementPlan(inventory,matches,removeOnly);
+        next.started=std::chrono::steady_clock::now();
         cancelRequested=false;job=std::move(next);busy=true;
-        SKSE::log::info("Outfit {} started: removeOnly={} operations={}",id,removeOnly,job->operations.size());
+        SKSE::log::info("Outfit {} started: mode=replacement removeOnly={} operations={}",id,removeOnly,job->operations.size());
         Tell("outfitWorking");
     }
     bool Busy() {return busy.load();}
@@ -278,43 +275,51 @@ namespace Wheel::Outfits {
         if(!job)return;
         if(!valid || cancelRequested.exchange(false)){Finish("outfitInterrupted");return;}
         const auto now=std::chrono::steady_clock::now();
-        if(now<job->nextTick)return;
-        job->nextTick=now+std::chrono::milliseconds(16);
         if(now-job->started>std::chrono::seconds(15)){Finish("outfitPartial");return;}
         auto player=RE::PlayerCharacter::GetSingleton();auto manager=RE::ActorEquipManager::GetSingleton();
         if(!player||!manager){Finish("outfitInterrupted");return;}
-        if(job->index==job->operations.size()) {
-            auto inventory=Inventory();std::vector<int> matches;
-            const bool success=job->removeOnly?
-                std::none_of(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;}):
-                Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches);
-            Finish(success?(job->removeOnly?"outfitRemoved":"outfitApplied"):"outfitPartial");return;
+        unsigned calls=0,checked=0;
+        while(checked++<16 && OutfitBudgetAvailable(calls,
+            std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-now).count())) {
+            if(job->index==job->operations.size()) {
+                auto inventory=Inventory();std::vector<int> matches;
+                const bool success=job->removeOnly?
+                    std::none_of(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;}):
+                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches);
+                Finish(success?(job->removeOnly?"outfitRemoved":"outfitApplied"):"outfitPartial");return;
+            }
+            const auto& op=job->operations[job->index];
+            // Do not clean up old apparel until every target is observed worn.
+            if(!op.equip && !job->removeOnly && !job->targetsConfirmed) {
+                const auto current=Inventory();
+                std::vector<int> matches;
+                if(!Resolve(job->preset,current,matches) || !WearingPieces(current,matches)){Finish("outfitPartial");return;}
+                job->targetsConfirmed=true;
+                // Validation scans also count toward the per-tick time budget.
+                if(!OutfitBudgetAvailable(calls,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-now).count()))return;
+            }
+            const auto form=RuntimeID(op.piece.base);
+            if(!form){Finish("outfitChanged");return;}
+            auto inventory=Inventory(form);const int match=Match(op.piece,inventory);
+            if(match<0){Finish("outfitChanged");return;}
+            const auto& candidate=inventory[match];
+            switch(DecideStep(candidate.worn,op.equip,job->issued,std::chrono::duration<double>(std::chrono::steady_clock::now()-job->issuedAt).count())) {
+            case StepDecision::Advance: ++job->index;job->issued=false;continue;
+            case StepDecision::Wait:return;
+            case StepDecision::Timeout:Finish("outfitPartial");return;
+            case StepDecision::Issue:break;
+            }
+            if(!op.equip && candidate.quest){Finish("outfitBlocked");return;}
+            // A costly identity scan must not starve the first operation forever.
+            if(calls && !OutfitBudgetAvailable(calls,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-now).count()))return;
+            const auto start=std::chrono::steady_clock::now();
+            if(op.equip)manager->EquipObject(player,candidate.armor,candidate.extra,1,nullptr,false,false,false,true);
+            else manager->UnequipObject(player,candidate.armor,candidate.extra,1,nullptr,false,false,false,true);
+            job->issued=true;job->issuedAt=std::chrono::steady_clock::now();
+            ++calls;
+            const double ms=std::chrono::duration<double,std::milli>(job->issuedAt-start).count();
+            SKSE::log::info("Outfit {} step {}/{} {} {:08X}: call_ms={:.2f}",job->preset.id,
+                job->index+1,job->operations.size(),op.equip?"equip":"unequip",form,ms);
         }
-        const auto& op=job->operations[job->index];
-        // Confirm the unload phase on a later tick before issuing any equip.
-        if(op.equip && !job->cleared) {
-            const auto current=Inventory();
-            if(std::any_of(current.begin(),current.end(),[](const auto& c){return c.worn;})){Finish("outfitPartial");return;}
-            job->cleared=true;return;
-        }
-        const auto form=RuntimeID(op.piece.base);
-        if(!form){Finish("outfitChanged");return;}
-        auto inventory=Inventory(form);const int match=Match(op.piece,inventory);
-        if(match<0){Finish("outfitChanged");return;}
-        const auto& candidate=inventory[match];
-        switch(DecideStep(candidate.worn,op.equip,job->issued,std::chrono::duration<double>(now-job->issuedAt).count())) {
-        case StepDecision::Advance: ++job->index;job->issued=false;return;
-        case StepDecision::Wait:return;
-        case StepDecision::Timeout:Finish("outfitPartial");return;
-        case StepDecision::Issue:break;
-        }
-        if(!op.equip && candidate.quest){Finish("outfitBlocked");return;}
-        const auto start=std::chrono::steady_clock::now();
-        if(op.equip)manager->EquipObject(player,candidate.armor,candidate.extra,1,nullptr,false,false,false,true);
-        else manager->UnequipObject(player,candidate.armor,candidate.extra,1,nullptr,false,false,false,true);
-        job->issued=true;job->issuedAt=std::chrono::steady_clock::now();
-        const double ms=std::chrono::duration<double,std::milli>(job->issuedAt-start).count();
-        SKSE::log::info("Outfit {} step {}/{} {} {:08X}: call_ms={:.2f}",job->preset.id,
-            job->index+1,job->operations.size(),op.equip?"equip":"unequip",form,ms);
     }
 }

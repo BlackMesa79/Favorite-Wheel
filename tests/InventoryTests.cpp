@@ -34,6 +34,40 @@ int main() {
         <<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<" ms, checksum="<<checksum<<'\n';
     catalog.Set({});int page=9;auto empty=catalog.Page(Category::Food,page);
     Check(page==0 && empty.items.empty() && empty.total==0,"Empty category returns a valid empty page");
+    Check(catalog.visible.Count()==0 && catalog.visible.Move(Category::Food,1)==Category::Food,
+        "An entirely empty inventory has no categories and navigation is stable");
+    {
+        std::vector<Item> sparse;
+        for(auto category:{Category::Armor,Category::Potions,Category::Powers}) {
+            Item item;item.category=category;sparse.push_back(item);
+        }
+        catalog.Set(sparse);
+        Check(catalog.visible.Count()==3 && catalog.visible.At(0)==Category::Armor && catalog.visible.At(2)==Category::Powers,
+            "A sparse catalog publishes only populated types in original order");
+        Check(catalog.visible.Move(Category::Armor,1)==Category::Potions && catalog.visible.Move(Category::Armor,-1)==Category::Powers,
+            "Navigation skips every hidden category and wraps in both directions");
+        Check(catalog.visible.Select(Category::Potions)==Category::Potions,
+            "A still populated remembered category survives a refresh");
+        sparse.erase(sparse.begin()+1);catalog.Set(sparse);
+        Check(catalog.visible.Select(Category::Potions)==Category::Powers,
+            "Consuming the final entry selects the next populated category");
+        sparse.erase(sparse.begin());catalog.Set(sparse);
+        Check(catalog.visible.Move(Category::Powers,1)==Category::Powers && catalog.visible.Move(Category::Powers,-1)==Category::Powers,
+            "One populated category never navigates away");
+        Item returned;returned.category=Category::Potions;sparse.insert(sparse.begin(),returned);catalog.Set(sparse);
+        Check(catalog.visible.Contains(Category::Potions) && catalog.visible.Count()==2,
+            "An added item restores its previously hidden category on the next directory refresh");
+        for(unsigned mask=0;mask<(1u<<categoryCount);++mask) {
+            VisibleCategories visible{mask};
+            for(int type=0;type<categoryCount;++type) {
+                const auto current=static_cast<Category>(type),selected=visible.Select(current);
+                if(!mask){Check(selected==current,"Empty catalog preserves session type");continue;}
+                Check(visible.Contains(selected),"Selection always recovers into a visible category");
+                Check(visible.At(visible.Index(selected))==selected,"Ribbon index maps back to the visible enum");
+                Check(visible.Move(visible.Move(selected,1),-1)==selected,"Filtered navigation is reversible for every subset");
+            }
+        }
+    }
     View preview;preview.page=2;preview.items.resize(23);Check(ItemCount(preview)==23 && PageItemIndex(preview,2)==22,"Existing full-list preview snapshots retain their indexing");
     std::cout<<"Inventory count partitioning, source gates, large paging and exact selection tests passed\n";
 }

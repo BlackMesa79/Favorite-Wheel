@@ -3,6 +3,7 @@
 #include "Settings.h"
 #include "NameEditor.h"
 #include "FaceLightClient.h"
+#include "CategoryNavigation.h"
 #include <vector>
 namespace Wheel {
     inline constexpr const char* menuName = "FavoriteWheelMenu";
@@ -22,6 +23,7 @@ namespace Wheel {
         int captureBinding=0; // favorites, actions, switch, controller favorites
         Settings config;
         Category category = Category::Weapons;
+        VisibleCategories visibleCategories;
         int page = 0;
         float x = 0, y = 0;
         std::vector<Item> items;

@@ -1,5 +1,6 @@
 #pragma once
 #include "Favorites.h"
+#include "CategoryNavigation.h"
 #include <array>
 namespace Wheel {
     struct ItemPage {
@@ -17,6 +18,7 @@ namespace Wheel {
     struct InventoryPages {
         std::vector<Item> items;
         std::array<std::size_t,categoryCount+1> boundaries{};
+        VisibleCategories visible{0};
         void Set(std::vector<Item> values) {
             items=std::move(values);
             std::size_t at=0;
@@ -25,6 +27,9 @@ namespace Wheel {
                 while(at<items.size() && static_cast<int>(items[at].category)==category)++at;
             }
             boundaries[categoryCount]=at;
+            visible.mask=0;
+            for(int category=0;category<categoryCount;++category)
+                if(boundaries[category+1]>boundaries[category])visible.mask|=1u<<category;
         }
         ItemPage Page(Category category,int& page) const {
             const auto type=static_cast<int>(category);

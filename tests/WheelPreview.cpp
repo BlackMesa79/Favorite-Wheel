@@ -167,6 +167,13 @@ int main(int argc, char** argv) {
             }
         }
     }
+    if(argc>4) {
+        const std::string mode=argv[4];
+        if(mode=="types-sparse")Wheel::preview.visibleCategories={
+            (1u<<int(Wheel::Category::Armor))|(1u<<int(Wheel::Category::Potions))|(1u<<int(Wheel::Category::Powers))};
+        if(mode=="types-single")Wheel::preview.visibleCategories={1u<<int(Wheel::Category::Armor)};
+        if(mode=="types-empty") {Wheel::preview.visibleCategories={0};Wheel::preview.items.clear();}
+    }
     const auto scale = Wheel::ViewScale(float(width),float(height),Wheel::preview);
     auto require = [](bool ok) { if (!ok) { std::cerr << "Visual regression failed\n"; std::exit(5); } };
     for(const auto viewport : {ImVec2{1280,720},ImVec2{2560,1440},ImVec2{3440,1440}})
