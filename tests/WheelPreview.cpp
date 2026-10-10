@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     if(argc>10)config.positionY=std::atoi(argv[10]);
     if(argc>4 && std::string(argv[4])=="fallback-font")config.font="build/missing-primary-font.ttf";
     if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay"))config.allInventory=true;
-    if(argc>4 && std::string(argv[4])=="gameplay"){config.timeMode=1;config.slowPercent=20;}
+    if(argc>4 && std::string(argv[4])=="gameplay"){config.timeMode=1;config.slowPercent=50;}
     if(argc>4 && std::string(argv[4])=="pad-triggers")config.gamepadCategoryButtons=1;
     if(argc>4 && (std::string(argv[4])=="controls-pad-move" || std::string(argv[4])=="pad-move" || std::string(argv[4])=="pad-move-pause")) {
         config.gamepadMoveWhileOpen=true;config.timeMode=std::string(argv[4])=="pad-move-pause"?0:1;

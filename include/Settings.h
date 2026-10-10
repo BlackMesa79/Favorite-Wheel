@@ -7,7 +7,7 @@ namespace Wheel {
         bool hideEmptyCategories = true;
         bool keepOpen = true; // Equipment/magic/actions stay open; consumables close.
         int timeMode = 0; // 0 pause, 1 slow, 2 unchanged game speed.
-        int slowPercent = 20; // Relative to the pre-wheel current/target multipliers.
+        int slowPercent = 50; // Relative slowdown, with an absolute 50% physics floor.
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
         std::string theme = "classic";
         bool showHints = true;

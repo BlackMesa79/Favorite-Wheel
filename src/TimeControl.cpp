@@ -5,8 +5,8 @@ namespace Wheel::TimeControl {
     namespace {
         std::mutex mutex;
         TimeLease lease;
-        bool session=false,conflict=false;
-        int appliedPercent=20;
+        bool session=false,conflict=false,limitReported=false;
+        int appliedPercent=MinWheelSlowPercent;
         TimePair Read() {return {RE::BSTimer::QGlobalTimeMultiplier(),RE::BSTimer::QGlobalTimeMultiplierTarget()};}
         void Write(TimePair value) {
             // Native setter maintains engine bookkeeping. Set the declared current
@@ -31,25 +31,35 @@ namespace Wheel::TimeControl {
     }
     void BeginSession() {
         std::lock_guard lock(mutex);
-        Release();session=true;conflict=false;
+        Release();session=true;conflict=false;limitReported=false;
     }
     bool Update(bool slow,int percent) {
         std::lock_guard lock(mutex);
         if(!session)return true;
+        percent=ClampWheelSlowPercent(percent);
         slow=slow && percent<100; // A 100% choice needs no ownership or native write.
         if(lease.Active() && !lease.Observe(Read())) {
             conflict=true;
             SKSE::log::warn("Wheel time ownership changed externally; closing wheel without rewriting time");
         }
         if(conflict)return false;
-        if(!slow || percent!=appliedPercent)Release();
+        if(!slow || percent!=appliedPercent) {Release();limitReported=false;}
         if(conflict)return false;
         if(slow && !lease.Active()) {
             auto timer=RE::BSTimer::GetSingleton();if(!timer)return false;
-            const auto base=Read();const auto next=lease.Begin(base,std::clamp(percent,5,100)/100.f);
+            const auto base=Read();const auto factor=WheelSlowFactor(base,percent);
+            if(!factor)return false;
+            appliedPercent=percent;
+            if(!limitReported && *factor>percent/100.f) {
+                limitReported=true;
+                SKSE::log::info("Wheel time physics floor: requested={} baseline={}/{} effectiveFactor={} (existing lower time is preserved)",percent,base.current,base.target,*factor);
+            }
+            // No lease/write for a baseline already at or below the floor.
+            if(*factor>=1.f)return true;
+            const auto next=lease.Begin(base,*factor);
             if(!next)return false;
-            Write(*next);appliedPercent=percent;
-            SKSE::log::info("Wheel time applied: percent={} baseline={}/{} applied={}/{}",percent,base.current,base.target,next->current,next->target);
+            Write(*next);
+            SKSE::log::info("Wheel time applied: percent={} effectiveFactor={} baseline={}/{} applied={}/{}",percent,*factor,base.current,base.target,next->current,next->target);
         }
         return true;
     }

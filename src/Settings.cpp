@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include "TimePolicy.h"
 #include <Windows.h>
 #include <algorithm>
 #include <filesystem>
@@ -44,7 +45,7 @@ namespace Wheel {
         void Clamp(Settings& v) {
             v.gamepadCategoryButtons=std::clamp(v.gamepadCategoryButtons,0,1);
             v.timeMode=std::clamp(v.timeMode,0,2);
-            v.slowPercent=std::clamp(v.slowPercent,5,100);
+            v.slowPercent=ClampWheelSlowPercent(v.slowPercent);
             v.scale = std::clamp(v.scale,.6f,1.5f);
             v.wheelScale = std::clamp(v.wheelScale,.6f,1.5f);
             v.positionX=std::clamp(v.positionX,0,100);

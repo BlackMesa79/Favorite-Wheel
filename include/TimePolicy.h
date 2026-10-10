@@ -14,6 +14,19 @@ namespace Wheel {
     inline bool SameTime(float a,float b) {
         return std::isfinite(a) && std::isfinite(b) && std::abs(a-b)<=std::max(1e-6f,std::max(std::abs(a),std::abs(b))*1e-5f);
     }
+    // Conservative floor from the reported 20% sign-physics regression and
+    // the same user's successful 50% test. This is mitigation, not a Havok fix.
+    inline constexpr int MinWheelSlowPercent=50;
+    inline int ClampWheelSlowPercent(int percent) {return std::clamp(percent,MinWheelSlowPercent,100);}
+    inline std::optional<float> WheelSlowFactor(TimePair baseline,int percent) {
+        if(!ValidTime(baseline))return {};
+        constexpr float floor=MinWheelSlowPercent/100.f;
+        const float lowest=std::min(baseline.current,baseline.target);
+        // An existing spell/mod may already be below the floor. Leave it alone;
+        // neither accelerate it nor compound it with the wheel's slowdown.
+        if(lowest<=floor)return 1.f;
+        return std::min(1.f,std::max(ClampWheelSlowPercent(percent)/100.f,floor/lowest));
+    }
     // A lease only restores its own write. The engine may interpolate current
     // toward target, but a new target or a backwards/out-of-range current yields
     // ownership. Never divide an unknown external write by our slowdown factor.

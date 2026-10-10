@@ -14,7 +14,7 @@ int wmain(int argc,wchar_t** argv) {
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
     if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
         SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
-        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==30 &&
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
             v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
             v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
             "A fresh process reads all applied settings from disk");
@@ -52,12 +52,24 @@ int wmain(int argc,wchar_t** argv) {
     SetSettingsPath(root.string());LoadSettings();
     Check(Config()==Settings{} && SettingsDiagnostic().find("load-unavailable")!=std::string::npos,
         "A directory at the INI path uses safe defaults and is not reported as a loaded file");
+    const auto lowTimePath=root/"Legacy20.ini";
+    {std::ofstream file(lowTimePath);file<<"; player-owned legacy config\n[General]\nTimeMode=1\nSlowTimePercent=20\n[Custom]\nKeep=123\n";}
+    const auto lowTimeBytes=bytes(lowTimePath);
+    SetSettingsPath(lowTimePath.string());LoadSettings();
+    Check(Config().timeMode==1 && Config().slowPercent==50 && bytes(lowTimePath)==lowTimeBytes,
+        "Legacy 20% uses 50% in memory without rewriting the player-owned INI at startup");
+    BeginSettings();auto lowTimeEdit=Config();lowTimeEdit.slowPercent=5;EditSettings(lowTimeEdit);
+    Check(Config().slowPercent==50,"Editing cannot bypass the physics floor");RevertSettings();
+    Check(bytes(lowTimePath)==lowTimeBytes,"Cancel leaves legacy low-speed settings untouched");
+    BeginSettings();Check(SaveSettings(),"Apply explicitly persists the clamped speed");LoadSettings();
+    Check(Config().slowPercent==50 && bytes(lowTimePath).find("SlowTimePercent=50")!=std::string::npos,
+        "Applied effective speed survives a reload");
     const auto newPath=root/"Fresh.ini";
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
     Check(!Config().allInventory,"Fresh installs show only favorites");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
-    Check(Config().timeMode==0 && Config().slowPercent==20,"Fresh installs retain pause and a 20% optional slowdown");
+    Check(Config().timeMode==0 && Config().slowPercent==50,"Fresh installs retain pause and a 50% optional slowdown");
     Check(!Config().gamepadMoveWhileOpen,"Split sticks remain opt-in on fresh installs");
     Check(Config().positionX==72 && Config().hideEmptyCategories,"Fresh installs use right-side placement and hide empty categories");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
@@ -75,13 +87,13 @@ int wmain(int argc,wchar_t** argv) {
     BeginSettings();EditSettings(continuous);Check(SaveSettings(),"Save continuous use and controller scheme");LoadSettings();
     Check(!Config().keepOpen && Config().gamepadCategoryButtons==1,"Explicit off and controller scheme round trip");
     BeginSettings();DefaultSettings();Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Defaults restore keep-open and LB/RB categories");RevertSettings();
-    Check(Config().timeMode==0 && Config().slowPercent==20,"Old INIs retain pause without new time keys");
-    BeginSettings();auto timeSettings=Config();timeSettings.timeMode=1;timeSettings.slowPercent=30;
+    Check(Config().timeMode==0 && Config().slowPercent==50,"Old INIs retain pause without new time keys");
+    BeginSettings();auto timeSettings=Config();timeSettings.timeMode=1;timeSettings.slowPercent=70;
     EditSettings(timeSettings);RevertSettings();Check(Config().timeMode==0,"Cancel restores time mode");
     BeginSettings();EditSettings(timeSettings);Check(SaveSettings(),"Save slow-time settings");LoadSettings();
-    Check(Config().timeMode==1 && Config().slowPercent==30,"Time mode and factor survive reload");
-    BeginSettings();DefaultSettings();Check(Config().timeMode==0 && Config().slowPercent==20,"Defaults restore pause and 20% factor");RevertSettings();
-    Check(Config().timeMode==1 && Config().slowPercent==30,"Canceling defaults retains slow time");
+    Check(Config().timeMode==1 && Config().slowPercent==70,"Time mode and factor survive reload");
+    BeginSettings();DefaultSettings();Check(Config().timeMode==0 && Config().slowPercent==50,"Defaults restore pause and 50% factor");RevertSettings();
+    Check(Config().timeMode==1 && Config().slowPercent==70,"Canceling defaults retains slow time");
     BeginSettings();auto inventorySettings=Config();inventorySettings.allInventory=true;
     EditSettings(inventorySettings);RevertSettings();Check(!Config().allInventory,"Cancelled item-source edit restores favorites");
     BeginSettings();EditSettings(inventorySettings);Check(SaveSettings(),"Save all-inventory source");LoadSettings();
@@ -193,7 +205,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(std::wstring(value)==L"123","Unrelated INI keys survive");
     BeginSettings(); DefaultSettings(); RevertSettings(); Check(Config()==edited,"Defaults can be canceled");
     BeginSettings(); auto clamped=Config();clamped.wheelScale=99;clamped.positionX=-10;clamped.positionY=999;clamped.overlayOpacity=999;clamped.scale=99;clamped.sensitivity=-5;clamped.timeMode=99;clamped.slowPercent=-1; EditSettings(clamped);
-    Check(Config().timeMode==2 && Config().slowPercent==5,"Time bounds enforced");
+    Check(Config().timeMode==2 && Config().slowPercent==50,"Time bounds enforced");
     Check(Config().scale==1.5f && Config().sensitivity==.2f,"Bounds enforced");
     Check(Config().wheelScale==1.5f && Config().positionX==0 && Config().positionY==100 && Config().overlayOpacity==80,"Layout and dimming bounds enforced");
     SetSettingsPath(root.string()); Check(!SaveSettings(),"Save failure reported");

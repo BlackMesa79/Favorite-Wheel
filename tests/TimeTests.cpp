@@ -9,6 +9,36 @@
 namespace {
     void Check(bool value,const char* message){if(!value){std::cerr<<message<<'\n';std::exit(1);}}
     bool Matches(Wheel::TimePair a,Wheel::TimePair b){return Wheel::SameTime(a.current,b.current)&&Wheel::SameTime(a.target,b.target);}
+    void PhysicsFloor() {
+        using namespace Wheel;
+        Check(ClampWheelSlowPercent(20)==50 && ClampWheelSlowPercent(75)==75 && ClampWheelSlowPercent(101)==100,
+            "Legacy low values clamp to the conservative range without changing valid choices");
+        Check(SameTime(*WheelSlowFactor({1,1},20),.5f),"The reported 20% reproduction now uses 50%");
+        Check(SameTime(*WheelSlowFactor({1,1},75),.75f),"A requested 75% remains relative to ordinary speed");
+        for(auto base:{TimePair{.5f,.5f},TimePair{.2f,.2f},TimePair{1,.2f},TimePair{.2f,1}})
+            Check(*WheelSlowFactor(base,50)==1.f,"Existing low current or target is never accelerated or compounded");
+        for(auto base:{TimePair{.6f,.6f},TimePair{1,.6f},TimePair{.6f,1},TimePair{1,1},TimePair{2,2}})
+            for(int percent:{5,20,50,75,100}) {
+                const float factor=*WheelSlowFactor(base,percent);
+                Check(factor<=1 && base.current*factor>=.5f-1e-6f && base.target*factor>=.5f-1e-6f,
+                    "Both ends of native interpolation stay above the floor without speeding up the baseline");
+                TimeLease lease;
+                if(factor<1)for(int i=0;i<100;++i) {
+                    auto applied=lease.Begin(base,factor);
+                    Check(applied.has_value(),"Guarded slowdown acquires a lease");
+                    const TimePair progressed{(applied->current+applied->target)/2,applied->target};
+                    const auto restored=lease.End(progressed);
+                    Check(restored && Matches(*restored,{(base.current+base.target)/2,base.target}),
+                        "Floor-limited leases restore transition progress without drift across repeated openings");
+                }
+            }
+        Check(!WheelSlowFactor({0,1},50) && !WheelSlowFactor({1,std::numeric_limits<float>::quiet_NaN()},50),
+            "Invalid baselines are rejected before any native write");
+        TimeLease lease;
+        const auto applied=lease.Begin({.75f,.75f},*WheelSlowFactor({.75f,.75f},50));
+        Check(applied && !lease.Observe({.3f,.3f}) && !lease.End({.3f,.3f}),
+            "Physics protection does not overwrite a later external low-time effect");
+    }
     void TaskFailures() {
         using namespace Wheel;
         TimeLease lease;
@@ -49,6 +79,7 @@ namespace {
 }
 int main() {
     using namespace Wheel;
+    PhysicsFloor();
     for(int mode=0;mode<3;++mode) {
         Check(PauseForWheel(mode,false,0)==(mode==0),"Only pause mode pauses the ordinary wheel");
         Check(PauseForWheel(mode,true,0),"All settings pages pause independently of the wheel mode");

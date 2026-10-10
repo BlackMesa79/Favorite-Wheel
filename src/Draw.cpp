@@ -516,7 +516,7 @@ namespace Wheel
                 }
                 Button(d, c, s, v, ValueButton(slot),v.capturingKey && v.captureBinding==row?"...":values[row]);
             }
-            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
+            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsPhysicsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
             if(v.settingsTab==1) {
                 const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
