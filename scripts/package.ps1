@@ -51,7 +51,13 @@ button scheme. LB/RB always cycles settings tabs; A/X remains available. In sett
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 
 The supplied configuration follows your Windows display language. If no
-translation matches, it falls back to English. F2 settings offer System mode
+translation matches, it falls back to English. Bundled languages are English,
+Simplified Chinese, French, Brazilian Portuguese, Russian,
+Japanese, Korean and German. French is based on a community contribution;
+the contributor's name was not included in the supplied translation archive.
+Windows fonts are loaded locally and are not redistributed. Japanese/Korean
+use automatic installed fonts; missing requested glyphs use system fallbacks.
+F2 settings offer System mode
 and manual choices. Set Language=auto to follow the system or Language=en to
 force English in SKSE/Plugins/FavoriteWheel.ini; restart after manual edits.
 Keep your existing INI and custom languages/themes when upgrading.

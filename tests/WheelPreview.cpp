@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     if(argc>8)config.overlayOpacity=std::atoi(argv[8]);
     if(argc>9)config.positionX=std::atoi(argv[9]);
     if(argc>10)config.positionY=std::atoi(argv[10]);
+    if(argc>4 && std::string(argv[4])=="fallback-font")config.font="build/missing-primary-font.ttf";
     if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay"))config.allInventory=true;
     if(argc>4 && std::string(argv[4])=="gameplay"){config.timeMode=1;config.slowPercent=20;}
     if(argc>4 && std::string(argv[4])=="pad-triggers")config.gamepadCategoryButtons=1;
@@ -208,6 +209,11 @@ int main(int argc, char** argv) {
     require(Wheel::FontAt(25*scale*visual.titleScale)->FontSize==std::round(25*scale*visual.titleScale));
     require(Wheel::FontAt(16*scale*visual.labelScale)->FontSize==std::round(16*scale*visual.labelScale));
     require(!Wheel::PrepareFonts(Wheel::preview, scale));
+    ImFontGlyphRangesBuilder uiGlyphs;uiGlyphs.AddText(Wheel::UIGlyphs(Wheel::preview.config).c_str());
+    ImVector<ImWchar> uiRanges;uiGlyphs.BuildRanges(&uiRanges);
+    for(int range=0;uiRanges[range];range+=2)for(unsigned code=uiRanges[range];code<=uiRanges[range+1];++code)
+        require(Wheel::FontAt(14*scale)->FindGlyphNoFallback(static_cast<ImWchar>(code))!=nullptr);
+    std::cout<<"Active language UI and all language names have font coverage\n";
     auto changed = Wheel::preview;
     changed.items.push_back({{},Wheel::Category::Armor,"麟",1,false,false,true});
     require(Wheel::PrepareFonts(changed, scale));
@@ -226,6 +232,18 @@ int main(int argc, char** argv) {
     require(Wheel::PrepareFonts(effectGlyph,scale));
     require(Wheel::FontAt(14*scale)->FindGlyphNoFallback(L'霽')!=nullptr);
     require(!Wheel::PrepareFonts(effectGlyph,scale));
+    for(const auto& language:Wheel::Languages()) {
+        auto localized=Wheel::preview;localized.config.language=language.id;
+        Wheel::PrepareFonts(localized,scale);
+        ImFontGlyphRangesBuilder needed;needed.AddText(Wheel::UIGlyphs(localized.config).c_str());
+        ImVector<ImWchar> neededRanges;needed.BuildRanges(&neededRanges);
+        for(int range=0;neededRanges[range];range+=2)for(unsigned code=neededRanges[range];code<=neededRanges[range+1];++code)
+            require(Wheel::FontAt(14*scale)->FindGlyphNoFallback(static_cast<ImWchar>(code))!=nullptr);
+        require(!Wheel::PrepareFonts(localized,scale));
+    }
+    Wheel::PrepareFonts(Wheel::preview,scale);
+    require(!Wheel::PrepareFonts(Wheel::preview,scale));
+    std::cout<<"Language switching and font fallback atlas reuse passed\n";
     std::cout << "Font native sizes, glyph expansion, reuse and resize passed; atlas " << io.Fonts->TexWidth << 'x' << io.Fonts->TexHeight << '\n';
     // Optional last argument captures the same render-only pose in either direction.
     const float expansion=argc>11?std::clamp(std::stof(argv[11]),0.f,1.f):1.f;
@@ -252,6 +270,13 @@ int main(int argc, char** argv) {
         }
     }
     ImGui::Render();
+    const auto drawData=ImGui::GetDrawData();
+    int drawCalls=0;
+    for(int list=0;list<drawData->CmdListsCount;++list)
+        for(const auto& command:drawData->CmdLists[list]->CmdBuffer)
+            if(command.ElemCount && !command.UserCallback)++drawCalls;
+    std::cout<<"UI geometry: lists="<<drawData->CmdListsCount<<", draw_commands="<<drawCalls
+        <<", vertices="<<drawData->TotalVtxCount<<", triangles="<<drawData->TotalIdxCount/3<<'\n';
     for(int list=0;list<ImGui::GetDrawData()->CmdListsCount;++list)
         for(const auto& vertex:ImGui::GetDrawData()->CmdLists[list]->VtxBuffer)
             require(std::isfinite(vertex.pos.x) && std::isfinite(vertex.pos.y));

@@ -19,7 +19,7 @@ Current development build: **0.5.2 (test)**. Latest public release: **0.5.1**. T
 - **Optional integrations:** Face Lighting SKSE public API V1 and compatible Skyrim Text Bridge IME input.
 - **Built-in settings:** wheel size and X/Y position, background dimming, mouse sensitivity, bindings, sounds, animations, language, and theme.
 - **Original UI:** 29 redesigned outline icons, neighboring category titles, diamond page indicators, and staggered fan-style transitions.
-- **Resource support:** English and Simplified Chinese; Classic Gold, Frost, Engraved Gold, and Quiet Slate themes; external language and theme files.
+- **Resource support:** English, Simplified Chinese, French, Brazilian Portuguese, Russian, Japanese, Korean, and German; Classic Gold, Frost, Engraved Gold, and Quiet Slate themes; external language and theme files.
 - **Session memory:** each wheel remembers its last category during the current game session. Category changes preserve the cursor position.
 
 ## Requirements and runtime compatibility
@@ -60,6 +60,8 @@ For all carried items, open the wheel → F2 → Gameplay → Item source → Al
 The directory collects lightweight item identities once per opening; category/page changes and rendering copy at most ten entries. Details are requested after about 80 ms of stable hover and cached for that opening; live modes refresh the hovered details at most twice per second. Inventory/equipment events trigger coalesced directory refreshes in live modes. Opening the action wheel directly skips inventory collection until you switch to items. Initial collection and sorting still scale with inventory size, and new font glyphs may require an atlas upload. Large-inventory use received positive user feedback; see [inventory mode notes](docs/INVENTORY_MODE.md).
 
 The supplied INI uses `Language=auto`: follow the Windows display language, then fall back to English if no translation matches. F2 settings also offer explicit language selection. Existing manual choices are preserved on upgrade; choose System to enable automatic selection. Fonts are loaded from your own system; no Windows fonts are distributed.
+
+Japanese/Korean select installed Windows fonts automatically. Missing requested characters, including language-selector names, use available system font fallbacks. New translations are initial drafts; native-speaker corrections are welcome. French uses the community translation supplied by a user, with current-version additions; see [translation provenance](docs/FRENCH_LOCALIZATION.md).
 
 ## Default controls
 

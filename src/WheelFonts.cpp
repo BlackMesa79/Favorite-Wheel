@@ -7,6 +7,9 @@
 #include <limits>
 #include <map>
 #include <stdexcept>
+#define STBTT_STATIC
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <imstb_truetype.h>
 
 namespace Wheel {
     namespace {
@@ -16,8 +19,24 @@ namespace Wheel {
         std::map<int, ImFont*> fonts;
         float bakedScale = 0;
         float bakedTitle=0,bakedLabel=0;
-        std::vector<char> fontData;
+        struct FontFile {std::vector<unsigned char> data;stbtt_fontinfo info{};bool valid=false;};
+        std::map<std::string,FontFile> fontFiles;
+        struct ExtraFont {FontFile* file;ImVector<ImWchar> ranges;};
+        std::vector<ExtraFont> extras; // ImGui retains range pointers until the next atlas clear.
         std::string loadedFont;
+        FontFile& ReadFont(const std::string& path) {
+            auto [entry,inserted]=fontFiles.try_emplace(path);
+            auto& font=entry->second;
+            if(!inserted)return font;
+            std::ifstream file(std::filesystem::u8path(path),std::ios::binary|std::ios::ate);
+            const auto length=file?static_cast<std::streamoff>(file.tellg()):0;
+            if(length<=0 || length>std::numeric_limits<int>::max())return font;
+            font.data.resize(static_cast<std::size_t>(length));file.seekg(0);
+            if(!file.read(reinterpret_cast<char*>(font.data.data()),length)){font.data.clear();return font;}
+            const int offset=stbtt_GetFontOffsetForIndex(font.data.data(),0);
+            font.valid=offset>=0 && stbtt_InitFont(&font.info,font.data.data(),offset);
+            return font;
+        }
     }
     bool PrepareFonts(const View& view, float scale) {
         auto& io = ImGui::GetIO();
@@ -40,18 +59,33 @@ namespace Wheel {
         if (!changed) return false;
 
         io.Fonts->Clear();
+        extras.clear();
         ranges.clear();
         glyphs.BuildRanges(&ranges);
         io.FontDefault = nullptr;
         fonts.clear();
-        if (fontChanged) {
-            loadedFont=path; fontData.clear();
-            std::ifstream file(std::filesystem::u8path(path), std::ios::binary | std::ios::ate);
-            const auto length = file ? static_cast<std::streamoff>(file.tellg()) : 0;
-            if (length > 0 && length <= std::numeric_limits<int>::max()) {
-                fontData.resize(static_cast<std::size_t>(length));
-                file.seekg(0);
-                if (!file.read(fontData.data(), length)) fontData.clear();
+        loadedFont=path;
+        auto& primary=ReadFont(path);
+        // Resolve missing requested glyphs once per atlas build, not per frame.
+        // Merge only those glyphs; do not bake full CJK alphabets at every size.
+        std::vector<ImWchar> missing;
+        for(int range=0;ranges[range];range+=2)
+            for(unsigned code=ranges[range];code<=ranges[range+1];++code)
+                if(!primary.valid || !stbtt_FindGlyphIndex(&primary.info,static_cast<int>(code)))
+                    missing.push_back(static_cast<ImWchar>(code));
+        extras.reserve(FallbackFontPaths().size());
+        for(const auto& fallback:FallbackFontPaths()) {
+            if(missing.empty())break;
+            if(fallback==path)continue;
+            auto& font=ReadFont(fallback);if(!font.valid)continue;
+            ImFontGlyphRangesBuilder extraGlyphs;
+            const auto before=missing.size();
+            std::erase_if(missing,[&](ImWchar code) {
+                if(!stbtt_FindGlyphIndex(&font.info,code))return false;
+                extraGlyphs.AddChar(code);return true;
+            });
+            if(missing.size()!=before) {
+                auto& extra=extras.emplace_back();extra.file=&font;extraGlyphs.BuildRanges(&extra.ranges);
             }
         }
         std::vector<float> bakeSizes(sizes.begin(),sizes.end());
@@ -67,8 +101,12 @@ namespace Wheel {
             cfg.PixelSnapH = true;
             // Share the font file across sizes; only glyph bitmaps are per-size.
             cfg.FontDataOwnedByAtlas = false;
-            ImFont* font = !fontData.empty() ? io.Fonts->AddFontFromMemoryTTF(fontData.data(), static_cast<int>(fontData.size()), cfg.SizePixels, &cfg, ranges.Data) : nullptr;
+            ImFont* font = primary.valid ? io.Fonts->AddFontFromMemoryTTF(primary.data.data(), static_cast<int>(primary.data.size()), cfg.SizePixels, &cfg, ranges.Data) : nullptr;
             if (!font) font = io.Fonts->AddFontDefault(&cfg);
+            for(const auto& extra:extras) {
+                auto merged=cfg;merged.MergeMode=true;merged.DstFont=font;
+                io.Fonts->AddFontFromMemoryTTF(extra.file->data.data(),static_cast<int>(extra.file->data.size()),cfg.SizePixels,&merged,extra.ranges.Data);
+            }
             fonts.emplace(pixels, font);
         }
         io.FontDefault = fonts.begin()->second;

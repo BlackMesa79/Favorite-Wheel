@@ -27,6 +27,7 @@ namespace Wheel {
     std::string Tr(const Settings& config, const std::string& key);
     std::string UIGlyphs(const Settings& config);
     std::string FontPath(const Settings& config);
+    const std::vector<std::string>& FallbackFontPaths(); // Installed Windows fonts, resolved at resource load.
     std::string KeyLabel(const Settings& config);
     std::string ModifierLabel(const Settings& config,int modifier);
     std::string PadLabel(const Settings& config,int key,bool follow=false);

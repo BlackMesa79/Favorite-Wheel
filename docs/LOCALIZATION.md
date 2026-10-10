@@ -1,6 +1,6 @@
 # Favorite Wheel language files
 
-Favorite Wheel 0.3.14 includes English (`en.ini`) and Simplified Chinese (`zh_CN.ini`). Its default language mode follows your **Windows display language**, independently of Skyrim's language or the active keyboard/IME.
+The current 0.5.2 development build includes English (`en.ini`), Simplified Chinese (`zh_CN.ini`), French (`fr.ini`), Brazilian Portuguese (`pt_BR.ini`), Russian (`ru.ini`), Japanese (`ja.ini`), Korean (`ko.ini`), and German (`de.ini`). Its default language mode follows your **Windows display language**, independently of Skyrim's language or the active keyboard/IME. The French base was supplied by a community user; the other new translations and French additions are initial translations awaiting native-speaker feedback.
 
 ## Automatic selection
 
@@ -13,6 +13,12 @@ Language codes ignore case and treat `_` and `-` equally. The resolver first loo
 | `zh-CN` | `zh_CN.ini` | Simplified Chinese |
 | `fr-FR` | `fr.ini` | French |
 | `fr-CA` | `fr-CA.ini` and `fr.ini` | Canadian French |
+| `pt-BR` | bundled `pt_BR.ini` | Brazilian Portuguese |
+| `pt-PT` | only bundled `pt_BR.ini` | English |
+| `ru-RU` | bundled `ru.ini` | Russian |
+| `de-DE` | bundled `de.ini` | German |
+| `ja-JP` | bundled `ja.ini` | Japanese |
+| `ko-KR` | bundled `ko.ini` | Korean |
 | `pt-BR` | `pt.ini` | Portuguese |
 | `ja-JP` | no `ja-JP.ini` or `ja.ini` | English |
 | `zh-TW` | only `zh_CN.ini` | English |
@@ -26,7 +32,7 @@ Select an explicit language in F2 settings to override automatic selection, or s
 1. Copy `SKSE/Plugins/FavoriteWheel/Languages/en.ini` to a new filename in the same folder, for example `fr.ini`, `de.ini`, `ja.ini`, or `pt-BR.ini`.
 2. Save as **UTF-8**, with or without BOM. Language IDs contain ASCII letters/digits separated by `-` or `_`, up to 63 characters. `auto` is reserved. Use lowercase `.ini` as the extension.
 3. Set `Name` to the language's display name, such as `Français`. Translate values after `=`, keeping every key unchanged.
-4. Keep `Font` empty to inherit the theme or main configuration font, or provide a local font path covering the language's characters.
+4. Keep `Font` empty to inherit the theme or main configuration font, use `Font=auto` to choose an installed Windows font for the language, or provide a local font path covering the language's characters.
 5. Restart the game, open the wheel, press F2, select your translation, and apply. Test all wheel categories, item details, outfit dialogs, and notifications. Also test with System selected when Windows uses a matching locale.
 
 The files use the existing flat `key=value` format, not the Face Lighting project's sectioned format. Example:
@@ -53,7 +59,13 @@ The language's `Font` takes precedence over the theme's font and the main INI's 
 
 Translation files cover the wheel UI, action labels, notifications, settings, and item-information labels and units. Item, spell, effect, actor, and user-created preset names come from the game or the player. They are not renamed by the UI translation.
 
-The renderer currently supports common left-to-right text covered by the selected font. Complex-script shaping, right-to-left layout, and a multi-font fallback chain are not implemented.
+Japanese and Korean use `Font=auto`. Windows' Fonts directory is resolved at resource load, rather than assuming Windows is installed on C:. Japanese tries Yu Gothic, Meiryo, then MS Gothic; Korean tries Malgun Gothic, then Gulim. Other automatic fonts try Segoe UI/Arial, or appropriate Chinese system fonts for Chinese locales. If no matching primary font is installed, the configured/theme font remains the primary choice.
+
+When building an atlas, the renderer merges only requested characters missing from the primary font, using available Windows fonts. This also covers language-selector names and inventory text in another script. It caches loaded fonts and retains the existing atlas reuse path; it does not rasterize complete CJK character sets or rebuild the atlas every frame. Windows fonts are never bundled. If the needed script's fonts are absent, install the corresponding Windows language fonts or set a suitable local font path; fallback cannot supply characters absent from every installed candidate.
+
+The renderer currently supports common left-to-right text covered by installed fonts. Complex-script shaping and right-to-left layout are not implemented.
+
+Keep technical names, filenames and paths unchanged in translated messages: for example `FavoriteWheel/Outfits/Exports`, `Imports`, `.fwo`, and `FavoriteWheel.log`.
 
 ## Share a translation
 

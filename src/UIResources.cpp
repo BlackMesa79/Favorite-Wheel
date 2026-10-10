@@ -6,6 +6,7 @@
 #include <string_view>
 #include <cmath>
 #include <Windows.h>
+#include <initializer_list>
 
 namespace Wheel {
     namespace {
@@ -86,7 +87,7 @@ namespace Wheel {
             {"controllerControlsHelp","Left stick moves pointer; A selects; X resets; B cancels; LB/RB tabs."},
             {"controllerCaptureHint","Main key: select to bind; X resets. Modifiers: cycle with - / +."},
             {"controllerSchemeHelp","Choose LB/RB or LT/RT to change categories. The other pair equips left/right; A/X also use/manage. D-Pad Up/Down changes item pages."},
-            {"keepOpenHelp","Equipment, spells, powers, shouts and actions stay open. Potions and food always close. Pause briefly releases for equipment changes, then resumes; outfits run until complete. Slow/normal speed is preserved."},
+            {"keepOpenHelp","Equipment, spells, powers, shouts and other actions stay open. Potions, food and outfit presets close the wheel. Pause briefly releases for equipment changes, then resumes. Slow/normal speed is preserved."},
             {"padUseTriggers","RT / A USE  ·  LT / X LEFT / MANAGE"},
             {"padUseBumpers","RB / A USE  ·  LB / X LEFT / MANAGE"},
             {"inventoryEmpty","NO ITEMS IN THIS CATEGORY"},{"inventoryLoading","LOADING ITEMS"},{"inventoryCount","ITEMS"},
@@ -153,6 +154,25 @@ namespace Wheel {
         std::vector<Language> languages{{"en","English","",english}};
         std::vector<Theme> themes{Theme{}};
         std::string systemLanguage="en";
+        std::vector<std::string> fallbackFonts;
+        std::filesystem::path windowsFonts;
+        std::string InstalledFont(const char* filename) {
+            if(windowsFonts.empty())return {};
+            const auto path=windowsFonts/filename;
+            std::error_code error;
+            if(!std::filesystem::is_regular_file(path,error))return {};
+            const auto utf8=path.u8string();return {utf8.begin(),utf8.end()};
+        }
+        std::string AutomaticFont(const std::string& code) {
+            const auto choose=[](std::initializer_list<const char*> names) {
+                for(const auto name:names)if(auto path=InstalledFont(name);!path.empty())return path;
+                return std::string{};
+            };
+            if(code=="ja" || code.starts_with("ja-"))return choose({"YuGothM.ttc","meiryo.ttc","msgothic.ttc"});
+            if(code=="ko" || code.starts_with("ko-"))return choose({"malgun.ttf","gulim.ttc"});
+            if(code=="zh" || code.starts_with("zh-"))return choose({"msyh.ttc","msjh.ttc","simsun.ttc"});
+            return choose({"segoeui.ttf","arial.ttf"});
+        }
         std::string Trim(std::string value) {
             const auto first=value.find_first_not_of(" \t\r\n");
             return first==std::string::npos ? "" : value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);
@@ -229,12 +249,18 @@ namespace Wheel {
     void LoadResources(const std::string& root) {
         languages={{"en","English","",english}}; themes={Theme{}};
         systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
+        wchar_t windows[MAX_PATH]{};const auto length=GetWindowsDirectoryW(windows,MAX_PATH);
+        windowsFonts=length && length<MAX_PATH?std::filesystem::path(windows)/L"Fonts":std::filesystem::path{};
+        fallbackFonts.clear();
+        for(const auto name:{"segoeui.ttf","msyh.ttc","malgun.ttf","YuGothM.ttc","meiryo.ttc","msgothic.ttc","gulim.ttc","msjh.ttc"})
+            if(auto path=InstalledFont(name);!path.empty())fallbackFonts.push_back(std::move(path));
         for (const auto& path:Files(std::filesystem::u8path(root)/"Languages")) {
             auto values=Read(path); const auto stem=path.stem().u8string();
             const std::string id(stem.begin(),stem.end());const auto code=NormalizeLanguage(id);
             if(code.empty() || code=="auto" || values.empty())continue;
             const auto name=values.contains("Name")&&!values["Name"].empty()?values["Name"]:id;
             Language entry{id,name,values["Font"],std::move(values)};
+            if(entry.font=="auto")entry.font=AutomaticFont(code);
             if(code=="en") {entry.id="en";languages[0]=std::move(entry);}
             else if(std::none_of(languages.begin(),languages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
                 languages.push_back(std::move(entry));
@@ -326,6 +352,7 @@ namespace Wheel {
         for(const auto& language:languages) if(language.id==active&&!language.font.empty())return language.font;
         const auto& theme=Style(config); return theme.font.empty()?config.font:theme.font;
     }
+    const std::vector<std::string>& FallbackFontPaths(){return fallbackFonts;}
     std::string CycleLanguage(const std::string& id,int delta){
         const auto code=NormalizeLanguage(id)=="auto"?"auto":NormalizeLanguage(ResolveLanguage(id,systemLanguage));int index=0;
         for(int i=0;i<static_cast<int>(languages.size());++i)if(NormalizeLanguage(languages[i].id)==code)index=i+1;

@@ -1,5 +1,7 @@
 # 工程说明
 
+2026-10-10当前0.5.2补齐8种自带语言：英/简中/法/巴西葡语/俄/日/韩/德。UIResources启动解析Windows字体目录与Font=auto，WheelFonts在字库变化时用stbtt检查字符覆盖、仅合并缺失字形并缓存字体文件/合并ranges（直到atlas清理才释放）；不在稳定帧查询字体文件或重建atlas。见LOCALIZATION.md、LOCALIZATION_EXPANSION_0.5.2.md。1080Ti负载反馈排查见GPU_LOAD_REPORT.md，未据此修改Present或强加限帧。
+
 2026-10-10当前0.5.2追加设置修正：实际手柄选杆/分流/重置读取已应用值，事务预览不切换物理操作方案；HideEmptyCategories默认1，可切为完整八类，复用现有目录掩码；新安装/默认值位置X72/Y46，保留已有坐标。见SETTINGS_REFINEMENTS_0.5.2.md。
 
 当前0.5.2追加可选ControllerSticks输入分流与LookStickGate回中交接；GamepadMoveWhileOpen默认0，左杆在实时轮盘自由移动、右杆选择/窗口光标，模态停步。见CONTROLLER_SPLIT_STICKS.md。

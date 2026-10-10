@@ -167,14 +167,29 @@ int wmain(int argc,wchar_t** argv) {
     SetSettingsPath(root.string()); Check(!SaveSettings(),"Save failure reported");
     RevertSettings(); Check(Config()==edited,"Failed save remains cancelable");
     LoadResources("assets");
-    Check(Languages().size()>=2 && Themes().size()>=2,"Bundled resources load");
+    Check(Languages().size()==8 && Themes().size()>=2,"All eight bundled languages load");
+    for(const auto& language:Languages())for(const auto& [key,value]:Languages().front().text) {
+        Check(language.text.contains(key),"Every bundled catalog contains the current English keys");
+        Check(key=="Font" || !language.text.at(key).empty(),"Bundled translations do not silently fall back through empty values");
+    }
+    for(const auto& [locale,id]:{std::pair{"de-DE","de"},std::pair{"ru-RU","ru"},std::pair{"ja-JP","ja"},std::pair{"ko-KR","ko"},std::pair{"pt-BR","pt_BR"}})
+        Check(ResolveLanguage("auto",locale)==id,"New bundled locales resolve automatically");
+    Check(ResolveLanguage("auto","pt-PT")=="en","Brazilian Portuguese is not substituted for Portugal");
+    auto japanese=edited;japanese.language="ja";
+    Check(FontPath(japanese)!="auto" && !FallbackFontPaths().empty(),"Automatic installed font selection resolves before rendering");
+    Check(ResolveLanguage("auto","fr-FR")=="fr" && ResolveLanguage("auto","fr-CA")=="fr",
+        "Bundled generic French resolves regional Windows locales");
+    auto french=edited;french.language="fr";
+    Check(Tr(french,"settings")=="PARAMÈTRES" && Tr(french,"hideEmptyCategories")=="Masquer les catégories vides" &&
+        Tr(french,"outfitExported").find("FavoriteWheel/Outfits/Exports")!=std::string::npos,
+        "Community French and current settings load with the real export path");
     Check(Tr(edited,"settings")=="设置","UTF-8 language");
     Check(Tr(edited,"gamepadMoveWhileOpen")=="左摇杆控制移动" && Tr(edited,"padSettingsHelpRight").find("右摇杆")!=std::string::npos,"Split stick controls are localized");
     Check(Tr(edited,"spells")=="法术" && Tr(edited,"shouts")=="龙吼" && Tr(edited,"powers")=="能力","Separated magic categories use localized labels");
     Check(ResolveLanguage("auto","ZH-cn")=="zh_CN" && ResolveLanguage("zh-CN","en-US")=="zh_CN","Case/hyphen normalization and explicit override");
-    Check(ResolveLanguage("auto","en-GB")=="en" && ResolveLanguage("auto","de-DE")=="en","English variants and unavailable locales fall back to English");
+    Check(ResolveLanguage("auto","en-GB")=="en" && ResolveLanguage("auto","es-ES")=="en","English variants and unavailable locales fall back to English");
     Check(ResolveLanguage("auto","zh-TW")=="en","No unrelated regional translation is silently selected");
-    Check(CycleLanguage("auto",1)=="en" && CycleLanguage("en",-1)=="auto" && CycleLanguage("zh-CN",1)=="auto","Automatic mode participates in language selection");
+    Check(CycleLanguage("auto",1)=="en" && CycleLanguage("en",-1)=="auto" && CycleLanguage(Languages().back().id,1)=="auto","Automatic mode participates in language selection");
     edited.language="missing";Check(Tr(edited,"settings")=="SETTINGS","Unknown language fallback");
     const auto extra=root/"Resources"/"Languages";std::filesystem::create_directories(extra);
     {std::ofstream file(extra/"partial.ini");file<<"Name=Partial\nsettings=Custom\napply=\n";}
