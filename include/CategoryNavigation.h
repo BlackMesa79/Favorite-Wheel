@@ -35,4 +35,7 @@ namespace Wheel {
             return count?At(Wrap(Index(Select(current))+direction,count)):current;
         }
     };
+    inline VisibleCategories CategoryVisibility(VisibleCategories populated,bool hideEmpty) {
+        return hideEmpty?populated:VisibleCategories{};
+    }
 }

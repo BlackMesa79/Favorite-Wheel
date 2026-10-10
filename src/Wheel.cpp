@@ -199,8 +199,8 @@ namespace Wheel {
         void FilterItems() { // viewMutex held; O(10), independent of category size.
             if(view.functions)PublishPage(SlicePage(functionItems,0,functionItems.size(),view.page));
             else {
-                view.visibleCategories=inventoryPages.visible;
-                const auto category=inventoryPages.visible.Select(view.category);
+                view.visibleCategories=CategoryVisibility(inventoryPages.visible,Config().hideEmptyCategories);
+                const auto category=view.visibleCategories.Select(view.category);
                 if(category!=view.category){view.category=category;view.page=favoritePage=0;}
                 PublishPage(inventoryPages.Page(view.category,view.page));
             }
@@ -348,7 +348,7 @@ namespace Wheel {
             }
             std::lock_guard lock(viewMutex);
             if(!inventoryLoaded || view.inventoryLoading)return;
-            const auto category=inventoryPages.visible.Move(view.category,direction);
+            const auto category=CategoryVisibility(inventoryPages.visible,Config().hideEmptyCategories).Move(view.category,direction);
             if(category==view.category)return; // One type (or no items) preserves its page.
             view.category = category;
             view.page = 0; // Keep the pointer on the same sector when changing type.
@@ -631,9 +631,11 @@ namespace Wheel {
             bool reload=false;
             {std::lock_guard lock(viewMutex);
                 view.settingsOpen=view.capturingKey=view.saveError=false;view.x=view.y=0;
+                padX=padY=0;
                 if(save && Config().allInventory!=inventoryScope) {
                     inventoryLoaded=false;++directoryRevision;reload=!view.functions;
                 }
+                if(!reload && inventoryLoaded && !view.functions)FilterItems();
             }
             if(reload)RequestDirectory();
             SyncWheelTime();
@@ -665,10 +667,10 @@ namespace Wheel {
             case 21: config.gamepadCategoryButtons=1-config.gamepadCategoryButtons; break;
             case 22: config.keepOpen=!config.keepOpen; break;
             case 23: config.gamepadMoveWhileOpen=!config.gamepadMoveWhileOpen; break;
+            case 24: config.hideEmptyCategories=!config.hideEmptyCategories; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
-            if(row==23)padX=padY=0; // Never integrate the previous stick's held vector.
         }
         void SettingsClick(bool right) {
             const auto current=Snapshot();
@@ -780,7 +782,7 @@ namespace Wheel {
                         const auto at=buttons.find(SKSE::InputMap::GamepadKeycodeToMask(i+266));
                         padHeld[i]=at!=buttons.end() && at->second && at->second->heldDownSecs>0;
                     }
-                } else {movementStick.Reset();lookStick.Reset(Config().gamepadMoveWhileOpen);controllerPages.Reset();controllerTriggers.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
+                } else {movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
             }
             for(auto event=events?*events:nullptr;event;event=event->next) {
                 if(auto c=event->AsCharEvent();c && c->keyCode>=32)characterBatch=true;
@@ -792,7 +794,7 @@ namespace Wheel {
                     }
                 }
                 if(auto stick=event->AsThumbstickEvent();stick && IsOpen() &&
-                    ControllerSelectionStick(Config().gamepadMoveWhileOpen,stick->IsLeft(),stick->IsRight())) {
+                    ControllerSelectionStick(AppliedGamepadMoveWhileOpen(),stick->IsLeft(),stick->IsRight())) {
                     std::lock_guard lock(viewMutex);padX=stick->xValue;padY=stick->yValue;
                     if(std::hypot(padX,padY)>.2f) {
                         view.gamepad=true;
@@ -996,18 +998,19 @@ namespace Wheel {
                     if(current.outfitDialog!=1 && current.outfitDialog!=2)character->keyCode=0;
                 } else if (auto stick = event->AsThumbstickEvent(); stick) {
                     const auto config=Config();
+                    const bool split=AppliedGamepadMoveWhileOpen();
                     if(stick->IsLeft()) {
                         bool open,modal;
                         {std::lock_guard lock(viewMutex);open=view.open;modal=view.settingsOpen || view.outfitDialog;}
-                        if(config.gamepadMoveWhileOpen && captureBatch && config.timeMode!=0)
+                        if(split && captureBatch && config.timeMode!=0)
                             modal=modal || !Focused() || !ValidPlayer() || BlockedMenu();
-                        const auto mode=ControllerLeftStick(config.gamepadMoveWhileOpen,captureBatch,
+                        const auto mode=ControllerLeftStick(split,captureBatch,
                             open,modal,config.timeMode,closing || openQueued);
                         movementStick.Capture(mode==LeftStickMode::HeldDirection);
                         if(mode==LeftStickMode::Block)stick->xValue=stick->yValue=0;
                         movementStick.Filter(stick->xValue,stick->yValue);
                     } else if(stick->IsRight()) {
-                        lookStick.Filter(stick->xValue,stick->yValue,captureBatch,config.gamepadMoveWhileOpen);
+                        lookStick.Filter(stick->xValue,stick->yValue,captureBatch,split);
                     } else if(captureBatch)stick->xValue=stick->yValue=0;
                 }
                 dispatch.Append(event,!suppress);
@@ -1019,7 +1022,7 @@ namespace Wheel {
             previousDispatch(source, dispatch.Events());
             dispatch.Restore();
             if (!Focused()) {
-                inputGate.Reset();movementStick.Reset();lookStick.Reset(Config().gamepadMoveWhileOpen);controllerPages.Reset();controllerTriggers.Reset();shiftHeld[0]=shiftHeld[1]=false;
+                inputGate.Reset();movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();shiftHeld[0]=shiftHeld[1]=false;
                 std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
@@ -1130,7 +1133,7 @@ namespace Wheel {
         };
     }
 
-    View Snapshot() { std::lock_guard lock(viewMutex); auto copy=view; copy.config=Config(); return copy; }
+    View Snapshot() { std::lock_guard lock(viewMutex); auto copy=view; copy.config=Config();copy.appliedGamepadMove=AppliedGamepadMoveWhileOpen(); return copy; }
     void AdvanceGamepadPointer(float elapsed) {
         std::lock_guard lock(viewMutex);
         if(!view.open || !view.gamepad || (!view.settingsOpen && !view.outfitDialog))return;
@@ -1168,7 +1171,7 @@ namespace Wheel {
         gameActive = active;
         Cancel();
         favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
-        inputGate.Reset();movementStick.Reset();lookStick.Reset(Config().gamepadMoveWhileOpen);controllerPages.Reset();controllerTriggers.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
+        inputGate.Reset();movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
         { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
             view.items.clear();view.visibleCategories={0};view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);

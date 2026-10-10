@@ -4,6 +4,7 @@ namespace Wheel {
     struct Settings {
         bool enabled = true;
         bool allInventory = false;
+        bool hideEmptyCategories = true;
         bool keepOpen = true; // Equipment/magic/actions stay open; consumables close.
         int timeMode = 0; // 0 pause, 1 slow, 2 unchanged game speed.
         int slowPercent = 20; // Relative to the pre-wheel current/target multipliers.
@@ -12,7 +13,7 @@ namespace Wheel {
         bool showHints = true;
         float scale = 1.0f;
         float wheelScale = 1.0f;
-        int positionX = 28, positionY = 46;
+        int positionX = 72, positionY = 46;
         int overlayOpacity = 35;
         bool sounds = true, animations = true;
         float sensitivity = 1.0f;
@@ -30,6 +31,7 @@ namespace Wheel {
         bool operator==(const Settings&) const = default;
     };
     Settings Config();
+    bool AppliedGamepadMoveWhileOpen(); // Input scheme changes only after successful Apply.
     void LoadSettings();
     void BeginSettings();
     void EditSettings(Settings values);

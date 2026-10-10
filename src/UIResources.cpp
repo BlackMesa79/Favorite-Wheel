@@ -77,6 +77,8 @@ namespace Wheel {
             {"settingsKeyboard","KEYBOARD"},{"settingsController","CONTROLLER"},
             {"keepOpen","Keep open after equip"},{"gamepadCategoryButtons","Category buttons"},
             {"gamepadMoveWhileOpen","Left stick movement"},
+            {"hideEmptyCategories","Hide empty categories"},
+            {"gamepadMoveApplyHint","Stick controls change only after Apply; Cancel keeps the current scheme."},
             {"gamepadMoveHelp","On: left stick moves in Slow/Normal; right stick selects or moves dialog pointers. Pause and dialogs stop movement. Sprint buttons remain wheel controls."},
             {"padSettingsHelpRight","Right stick moves pointer; A selects; X resets; B cancels; LB/RB tabs."},
             {"padNavigationMoving","LS MOVE  ·  RS SELECT  ·  Y WHEEL  ·  B CLOSE  ·  START SETTINGS"},

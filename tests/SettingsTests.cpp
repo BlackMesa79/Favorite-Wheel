@@ -14,7 +14,7 @@ int wmain(int argc,wchar_t** argv) {
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
     if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
         SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
-        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && v.allInventory && v.timeMode==1 && v.slowPercent==30 &&
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==30 &&
             v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
             v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
             "A fresh process reads all applied settings from disk");
@@ -30,6 +30,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==20,"Fresh installs retain pause and a 20% optional slowdown");
     Check(!Config().gamepadMoveWhileOpen,"Split sticks remain opt-in on fresh installs");
+    Check(Config().positionX==72 && Config().hideEmptyCategories,"Fresh installs use right-side placement and hide empty categories");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     Check(Config().keepOpen,"Saving fresh defaults persists keep-open on");
@@ -103,12 +104,23 @@ int wmain(int argc,wchar_t** argv) {
         }
     }
     const auto original=Config();
-    BeginSettings(); auto edited=Config(); edited.gamepadMoveWhileOpen=true; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
+    BeginSettings(); auto edited=Config(); edited.gamepadMoveWhileOpen=true;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
     Check(Config()==edited,"Live preview");
+    Check(!AppliedGamepadMoveWhileOpen(),"Pending toggle does not change the active selection stick");
     RevertSettings(); Check(Config()==original,"Cancel restores every setting");
+    Check(!AppliedGamepadMoveWhileOpen(),"Cancel leaves the active stick scheme unchanged");
     BeginSettings(); EditSettings(edited); Check(SaveSettings(),"Save settings");
+    Check(AppliedGamepadMoveWhileOpen(),"Successful Apply activates the new stick scheme");
     RevertSettings(); Check(Config()==edited,"Closing after apply preserves applied values");
     LoadSettings(); Check(Config()==edited,"Settings survive reload");
+    BeginSettings();auto pendingOff=Config();pendingOff.gamepadMoveWhileOpen=false;EditSettings(pendingOff);
+    Check(AppliedGamepadMoveWhileOpen(),"Pending disable preserves the right stick until Apply");
+    DefaultSettings();Check(AppliedGamepadMoveWhileOpen() && !Config().gamepadMoveWhileOpen && Config().positionX==72,
+        "Defaults preview preserves the applied stick scheme and restores right-side placement");
+    RevertSettings();Check(AppliedGamepadMoveWhileOpen(),"Canceling defaults preserves the applied right-stick scheme");
+    BeginSettings();EditSettings(pendingOff);Check(SaveSettings(),"Apply left-stick selection again");
+    Check(!AppliedGamepadMoveWhileOpen(),"Successful disable restores left-stick selection");
+    BeginSettings();EditSettings(edited);Check(SaveSettings(),"Restore applied right-stick selection");
     {
         // Persist and reload through an actual child process, not the same
         // Win32 profile cache. Use a Unicode path and change the working dir.
@@ -130,12 +142,13 @@ int wmain(int argc,wchar_t** argv) {
         std::ifstream oldFile(path,std::ios::binary);
         const std::string before((std::istreambuf_iterator<char>(oldFile)),{});oldFile.close();
         Check(SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_READONLY),"Set read-only fixture");
-        BeginSettings();auto blocked=Config();blocked.positionX=12;EditSettings(blocked);
+        BeginSettings();auto blocked=Config();blocked.positionX=12;blocked.gamepadMoveWhileOpen=false;EditSettings(blocked);
         const bool written=SaveSettings();const auto diagnostic=SettingsDiagnostic();
         SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_NORMAL);
         std::ifstream unchangedFile(path,std::ios::binary);
         const std::string unchanged((std::istreambuf_iterator<char>(unchangedFile)),{});unchangedFile.close();
         Check(!written && diagnostic.find("open-target")!=std::string::npos && unchanged==before,"Read-only save failure is explicit and leaves original file intact");
+        Check(AppliedGamepadMoveWhileOpen(),"Failed Apply cannot switch the active stick scheme");
         RevertSettings();LoadSettings();Check(Config()==edited,"Failed save does not change persisted settings");
         // Default game path is based on the executable, regardless of cwd.
         SetSettingsPath("");LoadSettings();const auto first=SettingsDiagnostic();
@@ -207,7 +220,7 @@ int wmain(int argc,wchar_t** argv) {
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
-    Check(SettingCount(2)==4 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22,"Gameplay tab includes continuous use");
+    Check(SettingCount(2)==5 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24,"Gameplay tab includes continuous use and empty category visibility");
     Check(SettingCount(1)==5 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Controller tab includes separate category and split-stick settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";

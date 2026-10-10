@@ -42,6 +42,11 @@ int main() {
             Item item;item.category=category;sparse.push_back(item);
         }
         catalog.Set(sparse);
+        const auto showAll=CategoryVisibility(catalog.visible,false);
+        Check(showAll.Count()==categoryCount && showAll.Move(Category::Armor,1)==Category::Potions &&
+            showAll.Move(Category::Potions,1)==Category::Food && showAll.Select(Category::Spells)==Category::Spells,
+            "Disabling empty hiding restores all original category navigation and empty selections");
+        Check(CategoryVisibility(catalog.visible,true).mask==catalog.visible.mask,"Enabled hiding uses the populated directory");
         Check(catalog.visible.Count()==3 && catalog.visible.At(0)==Category::Armor && catalog.visible.At(2)==Category::Powers,
             "A sparse catalog publishes only populated types in original order");
         Check(catalog.visible.Move(Category::Armor,1)==Category::Potions && catalog.visible.Move(Category::Armor,-1)==Category::Powers,

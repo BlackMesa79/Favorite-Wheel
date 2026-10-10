@@ -62,6 +62,7 @@ namespace Wheel {
         }
     }
     Settings Config() { std::lock_guard lock(settingsMutex); return settings; }
+    bool AppliedGamepadMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).gamepadMoveWhileOpen;}
     void SetSettingsPath(const std::string& path) {
         std::lock_guard lock(settingsMutex);
         settingsPath=path.empty()?std::filesystem::path{}:std::filesystem::absolute(std::filesystem::u8path(path));
@@ -76,6 +77,7 @@ namespace Wheel {
             };
             settings.enabled = number(L"General",L"Enabled",1) != 0;
             settings.allInventory = number(L"General",L"AllInventory",0) != 0;
+            settings.hideEmptyCategories=number(L"General",L"HideEmptyCategories",1)!=0;
             settings.keepOpen = number(L"General",L"KeepOpen",1) != 0;
             settings.timeMode=number(L"General",L"TimeMode",0);
             settings.slowPercent=number(L"General",L"SlowTimePercent",20);
@@ -85,7 +87,7 @@ namespace Wheel {
             settings.theme = Read(file,L"Display",L"Theme","classic");
             settings.showHints = number(L"Display",L"ShowHints",1) != 0;
             settings.wheelScale=number(L"Display",L"WheelScalePercent",100)/100.f;
-            settings.positionX=number(L"Display",L"PositionXPercent",28);
+            settings.positionX=number(L"Display",L"PositionXPercent",72);
             settings.positionY=number(L"Display",L"PositionYPercent",46);
             settings.overlayOpacity=number(L"Display",L"OverlayOpacityPercent",35);
             settings.sounds=number(L"Effects",L"Sounds",1)!=0;
@@ -168,6 +170,7 @@ namespace Wheel {
         };
         const bool ok = write(L"General",L"Language",settings.language) &&
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
+            write(L"General",L"HideEmptyCategories",settings.hideEmptyCategories?"1":"0") &&
             write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&
             write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&
             write(L"General",L"SlowTimePercent",std::to_string(settings.slowPercent)) &&

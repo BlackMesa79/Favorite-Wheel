@@ -41,12 +41,17 @@ int main(int argc, char** argv) {
         config.gamepadMoveWhileOpen=true;config.timeMode=std::string(argv[4])=="pad-move-pause"?0:1;
     }
     Wheel::EditSettings(config);
-    Wheel::preview.config=config;
+    Wheel::preview.config=config;Wheel::preview.appliedGamepadMove=config.gamepadMoveWhileOpen;
     Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";
     if(argc>4 && (std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")) {
         Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=std::string(argv[4])=="controls-pad"?3:(std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")?2:1;
     }
     Wheel::preview.gamepad=argc>4 && (std::string(argv[4])=="pad" || std::string(argv[4])=="pad-triggers" || std::string(argv[4])=="controls-pad");
+    if(argc>4 && (std::string(argv[4])=="pending-pad-on" || std::string(argv[4])=="pending-pad-off")) {
+        config.gamepadMoveWhileOpen=std::string(argv[4])=="pending-pad-on";
+        Wheel::preview.config=config;Wheel::preview.appliedGamepadMove=!config.gamepadMoveWhileOpen;
+        Wheel::preview.gamepad=Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=3;
+    }
     if(argc>4 && (std::string(argv[4])=="controls-pad-move" || std::string(argv[4])=="pad-move" || std::string(argv[4])=="pad-move-pause")) {
         Wheel::preview.gamepad=true;
         if(std::string(argv[4])=="controls-pad-move") {Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=3;}
@@ -180,6 +185,7 @@ int main(int argc, char** argv) {
             (1u<<int(Wheel::Category::Armor))|(1u<<int(Wheel::Category::Potions))|(1u<<int(Wheel::Category::Powers))};
         if(mode=="types-single")Wheel::preview.visibleCategories={1u<<int(Wheel::Category::Armor)};
         if(mode=="types-empty") {Wheel::preview.visibleCategories={0};Wheel::preview.items.clear();}
+        if(mode=="types-unhidden") {Wheel::preview.visibleCategories=Wheel::CategoryVisibility({0},false);Wheel::preview.items.clear();}
     }
     const auto scale = Wheel::ViewScale(float(width),float(height),Wheel::preview);
     auto require = [](bool ok) { if (!ok) { std::cerr << "Visual regression failed\n"; std::exit(5); } };
