@@ -6,6 +6,8 @@ The current 0.5.2 development build includes English (`en.ini`), Simplified Chin
 
 `Language=auto` in `Data/SKSE/Plugins/FavoriteWheel.ini` selects the system language at game startup. The F2 settings page shows **System (resolved language)**; this option remains automatic when saved. Restart the game after changing Windows display language or adding translation files.
 
+Installation ZIPs include language/theme INI resources but omit the main settings INI. If it is absent, automatic language selection works from built-in defaults; the first successful Apply creates the main INI. Existing files are read without being rewritten at startup.
+
 Language codes ignore case and treat `_` and `-` equally. The resolver first looks for the full locale, then removes trailing subtags to look for a more general translation, then falls back to English:
 
 | Windows display language | Installed translation | Result |

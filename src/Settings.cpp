@@ -75,48 +75,55 @@ namespace Wheel {
             auto number = [&](const wchar_t* section, const wchar_t* key, int value) {
                 return static_cast<int>(GetPrivateProfileIntW(section,key,value,path.c_str()));
             };
-            settings.enabled = number(L"General",L"Enabled",1) != 0;
-            settings.allInventory = number(L"General",L"AllInventory",0) != 0;
-            settings.hideEmptyCategories=number(L"General",L"HideEmptyCategories",1)!=0;
-            settings.keepOpen = number(L"General",L"KeepOpen",1) != 0;
-            settings.timeMode=number(L"General",L"TimeMode",0);
-            settings.slowPercent=number(L"General",L"SlowTimePercent",20);
+            settings.enabled = number(L"General",L"Enabled",settings.enabled) != 0;
+            settings.allInventory = number(L"General",L"AllInventory",settings.allInventory) != 0;
+            settings.hideEmptyCategories=number(L"General",L"HideEmptyCategories",settings.hideEmptyCategories)!=0;
+            settings.keepOpen = number(L"General",L"KeepOpen",settings.keepOpen) != 0;
+            settings.timeMode=number(L"General",L"TimeMode",settings.timeMode);
+            settings.slowPercent=number(L"General",L"SlowTimePercent",settings.slowPercent);
             const auto legacyLanguage = Read(file,L"General",L"Chinese","");
-            settings.language = Read(file,L"General",L"Language",legacyLanguage.empty() ? "auto" :
+            settings.language = Read(file,L"General",L"Language",legacyLanguage.empty() ? settings.language :
                 (number(L"General",L"Chinese",1) ? "zh_CN" : "en"));
-            settings.theme = Read(file,L"Display",L"Theme","classic");
-            settings.showHints = number(L"Display",L"ShowHints",1) != 0;
-            settings.wheelScale=number(L"Display",L"WheelScalePercent",100)/100.f;
-            settings.positionX=number(L"Display",L"PositionXPercent",72);
-            settings.positionY=number(L"Display",L"PositionYPercent",46);
-            settings.overlayOpacity=number(L"Display",L"OverlayOpacityPercent",35);
-            settings.sounds=number(L"Effects",L"Sounds",1)!=0;
-            settings.animations=number(L"Effects",L"Animations",1)!=0;
-            settings.switchKey=number(L"Controls",L"SwitchWheelKey",19);
-            settings.hotkey = number(L"Controls",L"Hotkey",-1);
-            settings.hotkeyModifier=number(L"Controls",L"HotkeyModifier",0);
-            settings.actionHotkey=number(L"Controls",L"ActionHotkey",-1);
-            settings.actionModifier=number(L"Controls",L"ActionModifier",1);
-            settings.gamepadHotkey=number(L"Controls",L"GamepadHotkey",-1);
-            settings.gamepadModifier=number(L"Controls",L"GamepadModifier",-1);
-            settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",274);
-            settings.gamepadCategoryButtons=number(L"Controls",L"GamepadCategoryButtons",0);
-            settings.gamepadMoveWhileOpen=number(L"Controls",L"GamepadMoveWhileOpen",0)!=0;
-            settings.scale = number(L"Display",L"ScalePercent",100)/100.f;
-            settings.sensitivity = number(L"Controls",L"SensitivityPercent",100)/100.f;
+            settings.theme = Read(file,L"Display",L"Theme",settings.theme);
+            settings.showHints = number(L"Display",L"ShowHints",settings.showHints) != 0;
+            settings.wheelScale=number(L"Display",L"WheelScalePercent",static_cast<int>(settings.wheelScale*100))/100.f;
+            settings.positionX=number(L"Display",L"PositionXPercent",settings.positionX);
+            settings.positionY=number(L"Display",L"PositionYPercent",settings.positionY);
+            settings.overlayOpacity=number(L"Display",L"OverlayOpacityPercent",settings.overlayOpacity);
+            settings.sounds=number(L"Effects",L"Sounds",settings.sounds)!=0;
+            settings.animations=number(L"Effects",L"Animations",settings.animations)!=0;
+            settings.switchKey=number(L"Controls",L"SwitchWheelKey",settings.switchKey);
+            settings.hotkey = number(L"Controls",L"Hotkey",settings.hotkey);
+            settings.hotkeyModifier=number(L"Controls",L"HotkeyModifier",settings.hotkeyModifier);
+            settings.actionHotkey=number(L"Controls",L"ActionHotkey",settings.actionHotkey);
+            settings.actionModifier=number(L"Controls",L"ActionModifier",settings.actionModifier);
+            settings.gamepadHotkey=number(L"Controls",L"GamepadHotkey",settings.gamepadHotkey);
+            settings.gamepadModifier=number(L"Controls",L"GamepadModifier",settings.gamepadModifier);
+            settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",settings.gamepadActionModifier);
+            settings.gamepadCategoryButtons=number(L"Controls",L"GamepadCategoryButtons",settings.gamepadCategoryButtons);
+            settings.gamepadMoveWhileOpen=number(L"Controls",L"GamepadMoveWhileOpen",settings.gamepadMoveWhileOpen)!=0;
+            settings.scale = number(L"Display",L"ScalePercent",static_cast<int>(settings.scale*100))/100.f;
+            settings.sensitivity = number(L"Controls",L"SensitivityPercent",static_cast<int>(settings.sensitivity*100))/100.f;
             settings.font = Read(file,L"Display",L"Font",settings.font);
             Clamp(settings);return settings;
         }
         }
     void LoadSettings() {
         std::lock_guard lock(settingsMutex);
+        // Startup is read-only: absence/partial INIs use struct defaults. Only
+        // explicit Apply creates or updates a player's configuration file.
         const auto& path=SettingsFile();
         if(path.empty()) {settings=Settings{};Report("resolve",GetLastError());}
         else {
-            settings=ReadSettings(path);
             const auto attributes=GetFileAttributesW(path.c_str());
-            Report(attributes==INVALID_FILE_ATTRIBUTES?"load-defaults":"loaded",
-                attributes==INVALID_FILE_ATTRIBUTES?GetLastError():ERROR_SUCCESS);
+            if(attributes==INVALID_FILE_ATTRIBUTES) {
+                const auto error=GetLastError();settings=Settings{};
+                Report(error==ERROR_FILE_NOT_FOUND || error==ERROR_PATH_NOT_FOUND ? "load-defaults" : "load-unavailable",error);
+            }else if(attributes&FILE_ATTRIBUTE_DIRECTORY) {
+                settings=Settings{};Report("load-unavailable",ERROR_DIRECTORY);
+            }else {
+                settings=ReadSettings(path);Report("loaded");
+            }
         }
         saved=settings;editing=false;
     }
@@ -168,7 +175,9 @@ namespace Wheel {
             MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,wide.data(),size);
             return WritePrivateProfileStringW(section,key,wide.c_str(),temporary.c_str()) != 0;
         };
-        const bool ok = write(L"General",L"Language",settings.language) &&
+        const bool ok = write(L"General",L"Enabled",settings.enabled?"1":"0") &&
+            write(L"Display",L"Font",settings.font) &&
+            write(L"General",L"Language",settings.language) &&
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
             write(L"General",L"HideEmptyCategories",settings.hideEmptyCategories?"1":"0") &&
             write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&

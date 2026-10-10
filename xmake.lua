@@ -36,9 +36,8 @@ target("FavoriteWheel")
         local pluginsdir = path.join(moddir, "SKSE", "Plugins")
         os.mkdir(pluginsdir)
         os.cp(target:targetfile(), path.join(pluginsdir, "FavoriteWheel.dll"))
-        -- Preserve the user's settings on subsequent builds.
-        local inifile = path.join(pluginsdir, "FavoriteWheel.ini")
-        if not os.isfile(inifile) then os.cp("FavoriteWheel.ini", inifile) end
+        -- Main settings use built-in defaults; Apply creates the player-owned INI.
+        -- Never deploy the source checkout's example configuration.
         for _, kind in ipairs({"Languages", "Themes"}) do
             local destination = path.join(pluginsdir, "FavoriteWheel", kind)
             os.mkdir(destination)
@@ -48,13 +47,20 @@ target("FavoriteWheel")
                 if not os.isfile(file) then os.cp(source, file) end
                 if kind == "Languages" then
                     local current = io.readfile(file)
+                    local additions = {}
                     for line in io.lines(source) do
                         local key = line:match("^([%w_]+)=")
                         if key and not ("\n" .. current):find("\n%s*" .. key .. "%s*=") then
                             current = current .. "\n" .. line
+                            table.insert(additions, line)
                         end
                     end
-                    io.writefile(file, current)
+                    if #additions > 0 then
+                        -- Append bytes only; retain custom values, BOM and line endings.
+                        local writer = io.open(file, "ab")
+                        writer:write("\n" .. table.concat(additions, "\n") .. "\n")
+                        writer:close()
+                    end
                 end
             end
         end

@@ -23,6 +23,35 @@ int wmain(int argc,wchar_t** argv) {
     const auto root=std::filesystem::path("build")/("settings-test-"+std::to_string(GetCurrentProcessId()));
     std::filesystem::create_directories(root);
     const auto path=root/"FavoriteWheel.ini";
+    auto bytes=[](const std::filesystem::path& file) {
+        std::ifstream input(file,std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(input)),{});
+    };
+    // No installer INI: initialization stays read-only, then Apply creates a
+    // complete document even with Unicode paths and absent parent directories.
+    const auto firstRun=root/L"首次配置"/L"缺少目录"/L"FavoriteWheel.ini";
+    SetSettingsPath(utf8(firstRun));LoadSettings();
+    Check(Config()==Settings{},"Missing INI initializes every field from struct defaults");
+    Check(!std::filesystem::exists(firstRun.parent_path()) && SettingsDiagnostic().find("load-defaults")!=std::string::npos,
+        "Startup does not create files or directories when the main INI is absent");
+    BeginSettings();auto firstSettings=Config();firstSettings.enabled=false;firstSettings.font=utf8(L"D:/字体/自定义.ttf");EditSettings(firstSettings);
+    Check(SaveSettings(),"First Apply creates a complete INI including Enabled and Unicode Font");
+    LoadSettings();Check(Config()==firstSettings,"First-created INI round trips every field");
+    std::filesystem::remove(firstRun);LoadSettings();
+    Check(Config()==Settings{} && !std::filesystem::exists(firstRun),"Deleting INI resets memory defaults without recreating it at startup");
+    const auto empty=root/"Empty.ini";
+    {std::ofstream file(empty,std::ios::binary);}
+    SetSettingsPath(empty.string());LoadSettings();
+    Check(Config()==Settings{} && std::filesystem::file_size(empty)==0,"Existing empty INI uses defaults and is never rewritten at startup");
+    const auto blockedParent=root/"NotADirectory";
+    {std::ofstream file(blockedParent);file<<"preserve";}
+    SetSettingsPath(utf8(blockedParent/"FavoriteWheel.ini"));LoadSettings();BeginSettings();
+    Check(!SaveSettings() && SettingsDiagnostic().find("create-directory")!=std::string::npos && bytes(blockedParent)=="preserve",
+        "Blocked first-run directory creation fails explicitly without replacing the obstruction");
+    RevertSettings();
+    SetSettingsPath(root.string());LoadSettings();
+    Check(Config()==Settings{} && SettingsDiagnostic().find("load-unavailable")!=std::string::npos,
+        "A directory at the INI path uses safe defaults and is not reported as a loaded file");
     const auto newPath=root/"Fresh.ini";
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
@@ -35,7 +64,9 @@ int wmain(int argc,wchar_t** argv) {
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     Check(Config().keepOpen,"Saving fresh defaults persists keep-open on");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
+    const auto initialBytes=bytes(path);
     SetSettingsPath(path.string()); LoadSettings();
+    Check(bytes(path)==initialBytes,"Startup leaves partial legacy settings and comments byte-for-byte intact");
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
     Check(!Config().gamepadMoveWhileOpen,"Old INIs keep left-stick wheel selection when the option is missing");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Missing KeepOpen now defaults on without changing controller scheme");
@@ -142,6 +173,7 @@ int wmain(int argc,wchar_t** argv) {
         std::ifstream oldFile(path,std::ios::binary);
         const std::string before((std::istreambuf_iterator<char>(oldFile)),{});oldFile.close();
         Check(SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_READONLY),"Set read-only fixture");
+        LoadSettings();Check(Config()==edited && bytes(path)==before,"Read-only settings load without modification");
         BeginSettings();auto blocked=Config();blocked.positionX=12;blocked.gamepadMoveWhileOpen=false;EditSettings(blocked);
         const bool written=SaveSettings();const auto diagnostic=SettingsDiagnostic();
         SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_NORMAL);

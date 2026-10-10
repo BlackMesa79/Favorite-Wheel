@@ -48,18 +48,19 @@ Install the packaged ZIP with your mod manager, enable it, and launch through SK
 
 ```text
 SKSE/Plugins/FavoriteWheel.dll
-SKSE/Plugins/FavoriteWheel.ini
 SKSE/Plugins/FavoriteWheel/Languages/*.ini
 SKSE/Plugins/FavoriteWheel/Themes/*.ini
 ```
 
+The installation ZIP omits the player-owned `FavoriteWheel.ini`, so upgrades cannot replace it. Without this file, the plugin uses built-in defaults; the first successful **Apply** creates it at `Data/SKSE/Plugins/FavoriteWheel.ini` relative to `SkyrimSE.exe`, creating missing parent directories. Startup only reads existing files; missing keys use defaults without rewriting them. Mod managers may place a newly created INI in their writable override area. The repository's main INI is a reference example for manual configuration, not an installation file.
+
 Mark items and spells as favorites in your normal inventory and magic menus, return to gameplay, and press the Favorites key. SkyUI is optional. Disable competing Favorites-menu replacement features in other mods.
 
-For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the supplied default is `0`. Switching the source does not add or remove favorites. Spells, shouts, and active powers occupy three separate top-level categories and remain favorites only. Passive abilities are excluded; physical scrolls stay under Other. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
+For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the built-in default is `0`. Switching the source does not add or remove favorites. Spells, shouts, and active powers occupy three separate top-level categories and remain favorites only. Passive abilities are excluded; physical scrolls stay under Other. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
 
 The directory collects lightweight item identities once per opening; category/page changes and rendering copy at most ten entries. Details are requested after about 80 ms of stable hover and cached for that opening; live modes refresh the hovered details at most twice per second. Inventory/equipment events trigger coalesced directory refreshes in live modes. Opening the action wheel directly skips inventory collection until you switch to items. Initial collection and sorting still scale with inventory size, and new font glyphs may require an atlas upload. Large-inventory use received positive user feedback; see [inventory mode notes](docs/INVENTORY_MODE.md).
 
-The supplied INI uses `Language=auto`: follow the Windows display language, then fall back to English if no translation matches. F2 settings also offer explicit language selection. Existing manual choices are preserved on upgrade; choose System to enable automatic selection. Fonts are loaded from your own system; no Windows fonts are distributed.
+The built-in default is `Language=auto`: follow the Windows display language, then fall back to English if no translation matches. F2 settings also offer explicit language selection. Existing manual choices are preserved on upgrade; choose System to enable automatic selection. Fonts are loaded from your own system; no Windows fonts are distributed.
 
 Japanese/Korean select installed Windows fonts automatically. Missing requested characters, including language-selector names, use available system font fallbacks. New translations are initial drafts; native-speaker corrections are welcome. French uses the community translation supplied by a user, with current-version additions; see [translation provenance](docs/FRENCH_LOCALIZATION.md).
 

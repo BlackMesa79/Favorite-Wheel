@@ -12,7 +12,7 @@ $stage = Join-Path $projectRoot ('build/package-' + [Guid]::NewGuid().ToString('
 $plugins = Join-Path $stage 'SKSE/Plugins'
 New-Item -ItemType Directory -Force $dist,$plugins | Out-Null
 Copy-Item -LiteralPath $dll -Destination $plugins
-Copy-Item -LiteralPath (Join-Path $projectRoot 'FavoriteWheel.ini') -Destination $plugins
+# The main settings INI is player-owned. Ship only language/theme INI resources.
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets') -Destination (Join-Path $plugins 'FavoriteWheel') -Recurse
 $readme = @"
 Favorite Wheel - Radial Actions $version
@@ -50,7 +50,7 @@ The separate Controller tab configures its main key, modifiers and category
 button scheme. LB/RB always cycles settings tabs; A/X remains available. In settings, the left stick
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 
-The supplied configuration follows your Windows display language. If no
+The built-in defaults follow your Windows display language. If no
 translation matches, it falls back to English. Bundled languages are English,
 Simplified Chinese, French, Brazilian Portuguese, Russian,
 Japanese, Korean and German. French is based on a community contribution;
@@ -61,6 +61,10 @@ F2 settings offer System mode
 and manual choices. Set Language=auto to follow the system or Language=en to
 force English in SKSE/Plugins/FavoriteWheel.ini; restart after manual edits.
 Keep your existing INI and custom languages/themes when upgrading.
+The installation archive deliberately omits FavoriteWheel.ini. With no main
+INI, the plugin uses built-in defaults without writing at startup. The first
+successful Apply creates it and any missing parent directories. Existing files
+are only read at startup; missing keys use defaults without rewriting the file.
 Apply saves global INI settings; no game save is needed for configuration.
 The INI path is anchored to SkyrimSE.exe/Data/SKSE/Plugins/FavoriteWheel.ini.
 If an applied value resets on restart, check the load/save path and Windows
@@ -159,6 +163,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $binaryArchive = [IO.Compression.ZipFile]::OpenRead($binaryZip)
 try {
     $files = @($binaryArchive.Entries | Where-Object { !$_.FullName.EndsWith('/') })
+    if (@($files | Where-Object { $_.FullName.Replace('\','/') -ieq 'SKSE/Plugins/FavoriteWheel.ini' }).Count) {
+        throw 'Installation archive must not ship the player-owned FavoriteWheel.ini.'
+    }
     $nonRuntimeFiles = @($files | Where-Object { !$_.FullName.StartsWith('SKSE/') })
     if ($nonRuntimeFiles.Count -ne 1 -or $nonRuntimeFiles[0].FullName -ne 'readme.txt') {
         throw 'Installation archive must contain only runtime files and readme.txt.'
