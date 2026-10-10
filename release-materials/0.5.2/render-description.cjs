@@ -46,10 +46,11 @@ const html = `<!doctype html>
 <title>Favorite Wheel - Radial Actions — Description Preview</title>
 <style>
 body{margin:0;background:#11191b;color:#e4e6e4;font:16px/1.65 "Segoe UI",Arial,sans-serif}
-main{max-width:900px;margin:0 auto;padding:32px 28px 72px}img{display:block;width:100%;height:auto;border-radius:8px;margin-bottom:28px}
+main{max-width:820px;margin:0 auto;padding:32px 28px 72px;overflow-wrap:anywhere}img{display:block;width:100%;height:auto;border-radius:8px;margin-bottom:28px}
 .summary{border-left:3px solid #d5af6c;padding:12px 20px;background:#192326;margin-bottom:36px}.summary small{color:#aeb9b9}
 .center{text-align:center;margin-bottom:32px}p{margin:0 0 20px}strong{color:#f4f1e8}a{color:#d5af6c;text-decoration:underline}
-li{padding-left:4px;margin:8px 0}ul{padding-left:24px;margin:0 0 24px}.size-6{font-size:32px;line-height:1.3}.size-4{font-size:23px;line-height:1.4}.size-2{font-size:13px;color:#aeb9b9}
+li{padding-left:4px;margin:8px 0}ul{padding-left:24px;margin:0 0 24px}.size-6{font-size:32px;line-height:1.3}.size-4{display:block;font-size:23px;line-height:1.4;margin-top:38px;padding-top:20px;border-top:1px solid #344143}.size-2{font-size:14px;line-height:1.6;color:#aeb9b9}
+@media(max-width:600px){main{padding:20px 20px 48px}.size-6{font-size:28px}.size-4{font-size:22px}.summary{padding:10px 14px}}
 </style></head><body><main>
 <img src="FavoriteWheel-cover-1280.png" alt="Favorite Wheel - Radial Actions cover">
 <div class="summary"><small>Nexus summary</small><br>${escape(summary)}</div>
