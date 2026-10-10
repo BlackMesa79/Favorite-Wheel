@@ -1,6 +1,6 @@
 # Favorite Wheel language files
 
-The current 0.5.2 development build includes English (`en.ini`), Simplified Chinese (`zh_CN.ini`), French (`fr.ini`), Brazilian Portuguese (`pt_BR.ini`), Russian (`ru.ini`), Japanese (`ja.ini`), Korean (`ko.ini`), and German (`de.ini`). Its default language mode follows your **Windows display language**, independently of Skyrim's language or the active keyboard/IME. The French base was supplied by a community user; the other new translations and French additions are initial translations awaiting native-speaker feedback.
+The current 0.5.2 release includes English (`en.ini`), Simplified Chinese (`zh_CN.ini`), French (`fr.ini`), Brazilian Portuguese (`pt_BR.ini`), Russian (`ru.ini`), Japanese (`ja.ini`), Korean (`ko.ini`), and German (`de.ini`). Its default language mode follows your **Windows display language**, independently of Skyrim's language or the active keyboard/IME. The French base was contributed by [Ardios](https://next.nexusmods.com/profile/Ardios); the other new translations and French additions are initial translations awaiting native-speaker feedback.
 
 ## Automatic selection
 

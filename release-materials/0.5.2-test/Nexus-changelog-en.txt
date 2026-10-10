@@ -1,0 +1,4 @@
+0.5.2 test build
+- Add Skyrim GOG 1.6.1179 support to the same DLL. Requires the GOG SKSE64 build and matching 1179 Address Library; in-game confirmation is pending.
+- Add GOG runtime-layout, actor-dispatch, and actual address-library checks. Other GOG runtimes remain unsupported.
+- Includes the 0.5.1 contextual-entry fix and effective-binding diagnostics; reporting-user confirmation remains pending.

@@ -51,7 +51,7 @@ main{max-width:900px;margin:0 auto;padding:32px 28px 72px}img{display:block;widt
 .center{text-align:center;margin-bottom:32px}p{margin:0 0 20px}strong{color:#f4f1e8}a{color:#d5af6c;text-decoration:underline}
 li{padding-left:4px;margin:8px 0}ul{padding-left:24px;margin:0 0 24px}.size-6{font-size:32px;line-height:1.3}.size-4{font-size:23px;line-height:1.4}.size-2{font-size:13px;color:#aeb9b9}
 </style></head><body><main>
-<img src="FavoriteWheel-cover-1280.png" alt="Favorite Wheel - Radial Actions cover">
+<img src="../0.3.15/FavoriteWheel-cover-1280.png" alt="Favorite Wheel - Radial Actions cover">
 <div class="summary"><small>Nexus summary</small><br>${escape(summary)}</div>
 ${blocks.join('\n')}
 </main></body></html>\n`;

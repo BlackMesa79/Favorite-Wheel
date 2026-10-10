@@ -47,14 +47,15 @@ D-Pad paging follows physical press edges. Release the opening key before
 paging; a category needs more than ten entries for multiple pages. Paging
 diagnostics are recorded in FavoriteWheel.log.
 The separate Controller tab configures its main key, modifiers and category
-button scheme. LB/RB always cycles settings tabs; A/X remains available. In settings, the left stick
+button scheme. LB/RB always cycles settings tabs; A/X remains available. In settings, the selection stick
 moves the pointer, A clicks and X resets. Preset names need keyboard/IME input.
 
 The built-in defaults follow your Windows display language. If no
 translation matches, it falls back to English. Bundled languages are English,
 Simplified Chinese, French, Brazilian Portuguese, Russian,
-Japanese, Korean and German. French is based on a community contribution;
-the contributor's name was not included in the supplied translation archive.
+Japanese, Korean and German. Thanks to Ardios for the French base translation:
+https://next.nexusmods.com/profile/Ardios
+Current-version additions are maintained by the project.
 Windows fonts are loaded locally and are not redistributed. Japanese/Korean
 use automatic installed fonts; missing requested glyphs use system fallbacks.
 F2 settings offer System mode
@@ -74,6 +75,10 @@ Existing manual language choices stay unchanged; select System to opt in.
 Translation guide: https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md
 Outfit edits require a game save. Preserve matching .skse co-saves.
 Weapons, shields, and ammunition are excluded from outfit presets.
+Applying/removing an outfit always closes the wheel. Shared pieces stay worn;
+new pieces equip first (body slot first), then old leftover apparel is removed.
+An exact already worn outfit is removed instead. Native model updates and other
+equipment scripts can still affect the transition.
 The equipped badge checks that every saved outfit instance is worn, including
 manual equipment changes; additional apparel does not hide the badge.
 Selecting a preset still removes an exact outfit, or replaces the complete
@@ -82,6 +87,9 @@ Outfits allow up to 64 worn pieces. Equivalent spare copies without a unique ID
 are accepted only when all saved signature fields match. Unique-ID collisions
 remain invalid. Unavailable preset details name the failing piece and reason;
 comparison diagnostics are written to FavoriteWheel.log.
+Gameplay / Hide empty categories (HideEmptyCategories=1 by default) skips empty
+item types; disable it to show all eight. Fresh defaults place the wheel at
+X 72%, Y 46% on the right; existing saved positions are retained.
 Item source defaults to Favorites only (General / AllInventory=0).
 Q -> F2 -> Gameplay -> Item source -> All inventory -> Apply shows carried items.
 Spells, shouts and active powers have separate top-level categories and remain
@@ -93,17 +101,22 @@ inventory scanning/sorting and new font glyphs can still cost time in large save
 F2 -> Gameplay -> Time behavior offers Pause (default), Slow time and Normal speed.
 SlowTimePercent defaults to 20 (5..100), relative to the existing game speed.
 Gameplay / Keep open after equip (General / KeepOpen=1 by default) retains the
-wheel for gear, spells, powers, shouts and actions. Potions and food always close.
+wheel for gear, spells, powers, shouts and other actions. Potions, food and
+outfit presets always close.
 In Pause mode equipment processing briefly releases the wheel pause, then
-restores it; outfit jobs run until complete. Slow/Normal speed is preserved.
+restores it. Outfit presets close before processing. Slow/Normal speed is preserved.
 Settings and outfit dialogs pause in every mode; UI animation timing is unchanged.
 The world keeps running in live modes. Detected external time changes close the
 wheel without overwriting the other source.
 In live modes, a direction held before opening remains active until released.
 New movement presses inside the wheel only operate its UI. Movement keys still
 held when both wheel menus close resume immediately; gameplay remaps are respected.
-Left-stick movement keeps the opening vector until centered; new aim from rest
-only selects entries. Attacks and opening keys retain release protection.
+By default the left stick keeps the opening movement vector until centered;
+new aim from rest only selects entries. Optional Controller / Left stick movement
+(GamepadMoveWhileOpen=1) enables free left-stick movement in Slow/Normal speed
+while the right stick selects. The scheme changes only after successful Apply.
+Pause and dialogs block movement; the right stick also controls dialog pointers
+when enabled. Center the right stick after closing before camera control resumes. Attacks and opening keys retain release protection.
 Wheel buttons do not activate gameplay actions while the wheel is open,
 including RB voice-slot powers. Normal controls remain available outside it.
 An entrance disabled by native control groups yields to contextual interactions.

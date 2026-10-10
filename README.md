@@ -1,12 +1,12 @@
 # Favorite Wheel - Radial Actions
 
-![Favorite Wheel - Radial Actions](release-materials/0.3.15/FavoriteWheel-cover-1280.png)
+![Favorite Wheel - Radial Actions](release-materials/0.5.2/FavoriteWheel-cover-1280.png)
 
 **Your favorites and actions, at your fingertips.**
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
 
-Current development build: **0.5.2 (test)**. Latest public release: **0.5.1**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Latest release: **0.5.2**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 ## Features
 
@@ -96,9 +96,9 @@ Controller controls (Xbox names; equivalent PlayStation buttons use the same pos
 | Back / close | B |
 | Settings | Start while open |
 
-The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the left stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB cycle appearance, controls, and gameplay tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
+The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the selection stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB cycle appearance, controls, and gameplay tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
 
-Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. With Keep open after equip enabled, equipment and actions retain the wheel while its own pause briefly yields for processing. Potions and food always close before use. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
+Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 20%. Settings and outfit dialogs temporarily pause in every mode. With Keep open after equip enabled, equipment and other actions retain the wheel while its own pause briefly yields for processing. Potions, food, and outfit presets always close before use. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
 
 Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
 
@@ -126,7 +126,7 @@ Missing or ambiguous items, protected quest equipment, and shield-slot conflicts
 
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
 
-## Version 0.5.2 test build
+## Version 0.5.2
 
 Optional **Controller / Left stick movement** (`Controls / GamepadMoveWhileOpen=1`, off by default) lets the left stick move freely in Slow/Normal speed while the right stick selects wheel entries. The stick scheme changes only after a successful **Apply**; pending edits, Cancel, and failed saves retain the current selection stick. Pause and dialogs block movement; the right stick also moves dialog pointers. After closing, center the right stick before it resumes camera control. Ordinary analog walking/running is supported; sprint buttons remain wheel controls. See [controller scheme notes](docs/CONTROLLER_SPLIT_STICKS.md).
 
@@ -135,6 +135,10 @@ Optional **Controller / Left stick movement** (`Controls / GamepadMoveWhileOpen=
 Fresh installs and restored defaults place the wheel on the right at **X 72%, Y 46%**, leaving the left side clearer for the player character. Existing saved positions are preserved; adjust **Appearance / Horizontal position** to 72% to try the new placement.
 
 Outfit switching now preserves shared worn instances, equips the new outfit first (body-slot pieces first), then removes old leftover apparel. Clicking an exact already worn preset still removes the complete managed outfit. Applying or removing a preset always closes the wheel before processing, regardless of Keep open after equip, so the transition is visible. Each update submits at most two equipment calls with a soft 3 ms work budget; delayed engine state changes are still verified. This avoids the deliberate all-undressed phase, but native model updates and third-party equipment scripts cannot be made atomic. See [implementation and test notes](docs/EMPTY_CATEGORIES_AND_OUTFITS_0.5.2.md).
+
+Bundled languages now include English, Simplified Chinese, French, Brazilian Portuguese, Russian, Japanese, Korean, and German. Thanks to [Ardios](https://next.nexusmods.com/profile/Ardios) for the French base translation. Automatic system-language selection and English fallback remain available.
+
+Installation ZIPs now omit the main settings INI. Missing configurations use built-in defaults; Apply creates the file. Initialization and first-save checks were strengthened. The user confirmed the preceding features and localizations passed testing. See the [short changelog](release-materials/0.5.2/Nexus-changelog-en.txt) and [release record](docs/RELEASE_0.5.2.md).
 
 ## Version 0.5.1
 

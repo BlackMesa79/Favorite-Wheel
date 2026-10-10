@@ -1,4 +1,7 @@
-0.5.2 test build
-- Add Skyrim GOG 1.6.1179 support to the same DLL. Requires the GOG SKSE64 build and matching 1179 Address Library; in-game confirmation is pending.
-- Add GOG runtime-layout, actor-dispatch, and actual address-library checks. Other GOG runtimes remain unsupported.
-- Includes the 0.5.1 contextual-entry fix and effective-binding diagnostics; reporting-user confirmation remains pending.
+0.5.2
+- Added an option to hide empty item categories (enabled by default).
+- Improved outfit changes: keep shared gear, equip new pieces first, then remove old leftovers. Outfit selections now close the wheel.
+- Added optional left-stick movement with right-stick selection in Slow/Normal speed. The scheme changes only after Apply.
+- Moved the default wheel position to the right; existing saved positions are preserved.
+- Bundled French, Brazilian Portuguese, Russian, Japanese, Korean and German alongside English and Simplified Chinese. Thanks to Ardios for the French base translation: https://next.nexusmods.com/profile/Ardios
+- Installation ZIPs no longer include the main configuration INI. Improved first-save handling and preservation of existing configuration/resources.
