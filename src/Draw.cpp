@@ -140,11 +140,73 @@ namespace Wheel
             const ImVec2 p[] = {{c.x, c.y - r}, {c.x + r, c.y}, {c.x, c.y + r}, {c.x - r, c.y}};
             d->AddPolyline(p, 4, color, ImDrawFlags_Closed, 1.f);
         }
+        bool Skyrim(const Theme &t) { return t.style == ThemeStyle::Skyrim; }
+        // All skin primitives stay inside the existing layout/hit regions.
+        void Chevron(ImDrawList *d, ImVec2 c, float r, ImU32 ink, bool right, float stroke)
+        {
+            const float x = right ? r : -r;
+            const ImVec2 p[] = {{c.x - x * .5f, c.y - r}, {c.x + x * .5f, c.y}, {c.x - x * .5f, c.y + r}};
+            d->AddPolyline(p, 3, ink, 0, stroke);
+        }
+        void CutFrame(ImDrawList *d, ImVec2 a, ImVec2 b, float cut, ImU32 ink, float stroke)
+        {
+            cut = std::min(cut, std::min(b.x - a.x, b.y - a.y) * .25f);
+            const ImVec2 p[] = {{a.x + cut, a.y}, {b.x - cut, a.y}, {b.x, a.y + cut}, {b.x, b.y - cut},
+                               {b.x - cut, b.y}, {a.x + cut, b.y}, {a.x, b.y - cut}, {a.x, a.y + cut}};
+            d->AddPolyline(p, 8, ink, ImDrawFlags_Closed, stroke);
+        }
+        void SkyrimSurface(ImDrawList *d, ImVec2 a, ImVec2 b, const Theme &t, float s, bool accent)
+        {
+            // Opaque charcoal, clipped corners and restrained original linework.
+            // No material sampling, full-screen effect or external asset load.
+            const float cut = 9 * s;
+            const ImVec2 p[] = {{a.x + cut, a.y}, {b.x - cut, a.y}, {b.x, a.y + cut}, {b.x, b.y - cut},
+                               {b.x - cut, b.y}, {a.x + cut, b.y}, {a.x, b.y - cut}, {a.x, a.y + cut}};
+            d->AddConvexPolyFilled(p, 8, t.panel | 0xFF000000u);
+            CutFrame(d, a, b, cut, Alpha(accent ? t.accent : t.border, .85f), t.borderWidth * s);
+            CutFrame(d, {a.x + 4 * s, a.y + 4 * s}, {b.x - 4 * s, b.y - 4 * s}, 6 * s,
+                     Alpha(t.border, .4f), s);
+            if (t.ornament > 0)
+                for (bool right : {false, true}) for (bool bottom : {false, true})
+                {
+                    const float x = right ? b.x : a.x, y = bottom ? b.y : a.y,
+                                dx = right ? -1.f : 1.f, dy = bottom ? -1.f : 1.f;
+                    const ImU32 ink = Alpha(t.accent, .6f * t.ornament);
+                    const ImVec2 elbow[] = {{x + dx * 10 * s, y + dy * 24 * s},
+                                           {x + dx * 10 * s, y + dy * 14 * s},
+                                           {x + dx * 14 * s, y + dy * 10 * s},
+                                           {x + dx * 24 * s, y + dy * 10 * s}};
+                    d->AddPolyline(elbow, 4, ink, 0, s);
+                }
+        }
+        void SkyrimBlade(ImDrawList *d, ImVec2 c, float inner, float outer, float begin, float end,
+                         const Theme &t, float s, bool occupied, float weight)
+        {
+            Sector(d, c, inner, outer, begin, end, occupied ? Mix(t.sector, t.hover, weight * .7f) : t.empty, 0);
+            const auto edge = Mix(Alpha(t.border, occupied ? .7f : .32f), t.accent, weight);
+            Arc(d, c, outer - s, begin, end, edge, t.borderWidth * s);
+            Arc(d, c, inner + s, begin, end, edge, t.borderWidth * s);
+            for (const float angle : {begin, end})
+                d->AddLine(At(c, inner + s, angle), At(c, outer - s, angle), edge, t.borderWidth * s);
+            if (weight > 0)
+            {
+                const float angle = (begin + end) / 2, radius = outer - 3 * s,
+                            half = std::min(.019f, (end - begin) * .25f),
+                            depth = std::min(5 * s, (outer - inner) * .3f);
+                const ImVec2 p[] = {At(c, radius, angle - half), At(c, radius - depth, angle),
+                                   At(c, radius, angle + half)};
+                d->AddConvexPolyFilled(p, 3, Alpha(t.accent, weight));
+            }
+        }
         void Keycap(ImDrawList *d, ImVec2 at, const char *key, const Theme &t, float s, bool enabled = true)
         {
             const float r = 11 * s, w=std::max(r,static_cast<float>(std::strlen(key))*4.5f*s+4*s);
-            d->AddRectFilled({at.x - w, at.y - r}, {at.x + w, at.y + r}, t.panel | 0xFF000000u, 3 * s);
-            d->AddRect({at.x - w, at.y - r}, {at.x + w, at.y + r}, Alpha(t.border, enabled ? .85f : .35f), 3 * s, 0, s);
+            d->AddRectFilled({at.x - w, at.y - r}, {at.x + w, at.y + r}, t.panel | 0xFF000000u, Skyrim(t) ? 0 : 3 * s);
+            if (Skyrim(t))
+                CutFrame(d, {at.x - w, at.y - r}, {at.x + w, at.y + r}, 3 * s,
+                         Alpha(t.border, enabled ? .85f : .35f), s);
+            else
+                d->AddRect({at.x - w, at.y - r}, {at.x + w, at.y + r}, Alpha(t.border, enabled ? .85f : .35f), 3 * s, 0, s);
             Text(d, at, key, 14 * s, enabled ? t.accent : t.muted, 0, t.textShadow);
         }
         void CategoryStrip(ImDrawList *d, ImVec2 c, float s, const View &v, float pageFade)
@@ -223,6 +285,18 @@ namespace Wheel
             {
                 const ImVec2 at{x, top + i * 34 * s};
                 const bool selected = pages.first + i == current;
+                if (Skyrim(t))
+                {
+                    if (i > 0)
+                        d->AddLine({x, at.y - 26 * s}, {x, at.y - 8 * s}, Alpha(t.border, .5f), s);
+                    Diamond(d, at, selected ? 7 * s : 4 * s, selected ? t.accent : t.muted);
+                    if (selected)
+                    {
+                        Chevron(d, {x - 13 * s, at.y}, 3 * s, t.accent, true, s);
+                        Chevron(d, {x + 13 * s, at.y}, 3 * s, t.accent, false, s);
+                    }
+                    continue;
+                }
                 if (selected)
                 {
                     const float r = 8 * s;
@@ -240,6 +314,7 @@ namespace Wheel
         }
         void Surface(ImDrawList *d, ImVec2 a, ImVec2 b, const Theme &t, float s, bool accent = false)
         {
+            if (Skyrim(t)) { SkyrimSurface(d, a, b, t, s, accent); return; }
             const float radius = t.cornerRadius * s;
             for (int i = 3; i > 0; --i)
             {
@@ -254,6 +329,20 @@ namespace Wheel
         }
         void Rule(ImDrawList *d, ImVec2 c, float half, const Theme &t, float s)
         {
+            if (Skyrim(t))
+            {
+                const float gap = t.ornament > 0 ? 18 * s : 0;
+                d->AddLine({c.x - half, c.y}, {c.x - gap, c.y}, Alpha(t.border, .65f), t.borderWidth * s);
+                d->AddLine({c.x + gap, c.y}, {c.x + half, c.y}, Alpha(t.border, .65f), t.borderWidth * s);
+                if (t.ornament > 0)
+                {
+                    const auto ink = Alpha(t.accent, .85f * t.ornament);
+                    Diamond(d, c, 4 * s, ink);
+                    Chevron(d, {c.x - 10 * s, c.y}, 4 * s, ink, true, s);
+                    Chevron(d, {c.x + 10 * s, c.y}, 4 * s, ink, false, s);
+                }
+                return;
+            }
             d->AddLine({c.x - half, c.y}, {c.x - 7 * s, c.y}, Alpha(t.border, .55f), t.borderWidth * s);
             d->AddLine({c.x + 7 * s, c.y}, {c.x + half, c.y}, Alpha(t.border, .55f), t.borderWidth * s);
             if (t.ornament > 0)
@@ -275,12 +364,24 @@ namespace Wheel
             const auto &t = Style(v.config);
             const bool hover = rect.Contains(v.x * 224, v.y * 224);
             const ImVec2 a{c.x + rect.x * s, c.y + rect.y * s}, b{a.x + rect.w * s, a.y + rect.h * s};
-            const float radius = std::min(t.cornerRadius * .5f, rect.h * .2f) * s;
+            const float radius = Skyrim(t) ? 0 : std::min(t.cornerRadius * .5f, rect.h * .2f) * s;
             const ImU32 edge = danger ? IM_COL32(203, 129, 121, 255) : t.accent;
             const auto fill = accent ? Mix(t.sector, t.accent, .12f) : t.sector;
             d->AddRectFilled(a, b, (hover ? Mix(fill, t.hover, .65f) : fill) | 0xFF000000u, radius);
-            d->AddRect(a, b, hover || accent ? Alpha(edge, .9f) : Alpha(t.border, .6f), radius, 0, t.borderWidth * s);
-            if (hover)
+            if (Skyrim(t))
+            {
+                const auto ink = hover || accent ? Alpha(edge, .9f) : Alpha(t.border, .45f);
+                const float inset = 4 * s;
+                d->AddLine({a.x + inset, a.y}, {b.x - inset, a.y}, ink, t.borderWidth * s);
+                d->AddLine({a.x + inset, b.y}, {b.x - inset, b.y}, ink, t.borderWidth * s);
+                if (hover || accent)
+                {
+                    Chevron(d, {a.x + inset, (a.y + b.y) / 2}, 3 * s, edge, true, s);
+                    Chevron(d, {b.x - inset, (a.y + b.y) / 2}, 3 * s, edge, false, s);
+                }
+            }
+            else d->AddRect(a, b, hover || accent ? Alpha(edge, .9f) : Alpha(t.border, .6f), radius, 0, t.borderWidth * s);
+            if (hover && !Skyrim(t))
                 d->AddLine({a.x + 6 * s, b.y - 2 * s}, {b.x - 6 * s, b.y - 2 * s}, Alpha(edge, .65f), s);
             const float size = 16 * s * t.labelScale;
             Text(d, {(a.x + b.x) / 2, (a.y + b.y) / 2}, Fit(label, size, (rect.w - 12) * s), size,
@@ -295,8 +396,9 @@ namespace Wheel
             const auto &editor = v.outfitName;
             const auto rect = outfitNameButton;
             const ImVec2 a{c.x + rect.x * s, c.y + rect.y * s}, b{a.x + rect.w * s, a.y + rect.h * s};
-            d->AddRectFilled(a, b, t.sector | 0xFF000000u, 5 * s);
-            d->AddRect(a, b, Alpha(t.accent, .8f), 5 * s, 0, t.borderWidth * s);
+            d->AddRectFilled(a, b, t.sector | 0xFF000000u, Skyrim(t) ? 0 : 5 * s);
+            if (Skyrim(t)) CutFrame(d, a, b, 5 * s, Alpha(t.accent, .8f), t.borderWidth * s);
+            else d->AddRect(a, b, Alpha(t.accent, .8f), 5 * s, 0, t.borderWidth * s);
             d->AddLine({a.x + 12 * s, b.y - 3 * s}, {b.x - 12 * s, b.y - 3 * s}, Alpha(t.accent, .25f), s);
             const float size = std::round(18 * s);
             auto font = FontAt(size);
@@ -404,7 +506,7 @@ namespace Wheel
                 const float size = 16 * s * t.labelScale;
                 if (slot % 2 == 0)
                     d->AddRectFilled({c.x - 300 * s, c.y + top * s}, {c.x + 300 * s, c.y + (top + 28) * s},
-                                     Alpha(t.border, .07f), 3 * s);
+                                     Alpha(t.border, .07f), Skyrim(t) ? 0 : 3 * s);
                 LeftText(d, {c.x - 281 * s, c.y + (top + 14) * s - std::round(size) / 2},
                          Fit(tr(keys[row]), size, 300 * s), size, t.text);
                 if (!BindingRow(row))
@@ -624,9 +726,9 @@ namespace Wheel
             if (expansion >= 1.f)
             {
                 d->AddCircle(c, outer + 8 * s, Alpha(t.border, .8f), 192, t.borderWidth * s);
-                d->AddCircle(c, outer + 12 * s, Alpha(t.border, .28f * t.ornament), 192, s);
+                if (!Skyrim(t)) d->AddCircle(c, outer + 12 * s, Alpha(t.border, .28f * t.ornament), 192, s);
             }
-            if (expansion >= 1.f && t.ornament > 0)
+            if (expansion >= 1.f && t.ornament > 0 && !Skyrim(t))
                 for (int i = 0; i < slots * 3; ++i)
                 {
                     const float a = i * step / 3;
@@ -657,9 +759,9 @@ namespace Wheel
                 {
                     Arc(d, c, bladeOuter + 8 * s, a - step * .5f, a - step * .5f + step * blade, Alpha(t.border, .8f),
                         t.borderWidth * s);
-                    Arc(d, c, bladeOuter + 12 * s, a - step * .5f, a - step * .5f + step * blade,
+                    if (!Skyrim(t)) Arc(d, c, bladeOuter + 12 * s, a - step * .5f, a - step * .5f + step * blade,
                         Alpha(t.border, .28f * t.ornament), s);
-                    if (t.ornament > 0)
+                    if (t.ornament > 0 && !Skyrim(t))
                         for (int tick = -1; tick <= 1; ++tick)
                         {
                             const float angle = a + tick * step / 3;
@@ -670,6 +772,8 @@ namespace Wheel
                                        Alpha(t.accent, (tick == 0 ? .65f : .25f) * t.ornament), s);
                         }
                 }
+                if (Skyrim(t)) SkyrimBlade(d, c, inner, bladeOuter, begin, end, t, s, occupied, weight);
+                else {
                 Sector(d, c, inner, bladeOuter, begin, end, occupied ? Mix(t.sector, t.hover, weight * .6f) : t.empty,
                        t.relief);
                 // Insets must stay inside the partial angular span near the hinge.
@@ -682,6 +786,7 @@ namespace Wheel
                         2 * s);
                     Arc(d, c, inner + 3 * s, begin + .05f * blade, end - .05f * blade, Alpha(t.accent, weight * .45f),
                         s);
+                }
                 }
                 const int contentStart = d->VtxBuffer.Size;
                 const auto at = At(c, (189 - 16 * (1 - blade)) * s, bladeAngle);
@@ -701,8 +806,13 @@ namespace Wheel
                     if(ValidQuickSlot(item.quickSlot)) {
                         const auto badge=At(c,bladeOuter-18*s,bladeAngle);
                         const float radius=9*s;
-                        d->AddCircleFilled(badge,radius,t.panel|0xFF000000u,24);
-                        d->AddCircle(badge,radius,Alpha(t.accent,pageFade),24,s);
+                        if (Skyrim(t)) {
+                            d->AddRectFilled({badge.x-radius,badge.y-radius},{badge.x+radius,badge.y+radius},t.panel|0xFF000000u);
+                            CutFrame(d,{badge.x-radius,badge.y-radius},{badge.x+radius,badge.y+radius},3*s,Alpha(t.accent,pageFade),s);
+                        }else {
+                            d->AddCircleFilled(badge,radius,t.panel|0xFF000000u,24);
+                            d->AddCircle(badge,radius,Alpha(t.accent,pageFade),24,s);
+                        }
                         Text(d,badge,std::to_string(item.quickSlot+1),12*s,Alpha(t.accent,pageFade));
                     }
                     if (!item.usable)
@@ -719,7 +829,13 @@ namespace Wheel
             }
             d->AddCircleFilled(c, inner - 9 * s, t.panel | 0xFF000000u, 128);
             d->AddCircle(c, inner - 6 * s, Alpha(t.border, .8f), 128, t.borderWidth * s);
-            Arc(d, c, inner - 10 * s, -.7f, .7f, Alpha(t.accent, .3f * t.ornament), s);
+            if (Skyrim(t))
+            {
+                d->AddCircle(c, inner - 11 * s, Alpha(t.border, .4f), 128, s);
+                Rule(d, {c.x, c.y - 77 * s}, 36 * s, t, s);
+                Rule(d, {c.x, c.y + 77 * s}, 36 * s, t, s);
+            }
+            else Arc(d, c, inner - 10 * s, -.7f, .7f, Alpha(t.accent, .3f * t.ornament), s);
             const int centreStart = d->VtxBuffer.Size;
             const int index = PageItemIndex(v,selected);
             if (selected >= 0 && index>=0 && index < int(v.items.size()))
@@ -763,7 +879,8 @@ namespace Wheel
             {
                 const float left = c.x - 282 * s, right = c.x + 282 * s, top = c.y + 328 * s;
                 const bool quickHint=!v.functions && !v.gamepad;
-                d->AddRectFilled({left, top}, {right, top + (quickHint?68:48) * s}, Alpha(t.panel, .85f), 6 * s);
+                if (Skyrim(t)) Surface(d,{left,top},{right,top+(quickHint?68:48)*s},t,s);
+                else d->AddRectFilled({left, top}, {right, top + (quickHint?68:48) * s}, Alpha(t.panel, .85f), 6 * s);
                 d->AddLine({left + 12 * s, top}, {right - 12 * s, top}, Alpha(t.border, .45f), s);
                 Text(
                     d, {c.x, top + 14 * s},

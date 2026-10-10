@@ -6,8 +6,10 @@
 #include <vector>
 namespace Wheel {
     struct Language { std::string id, name, font; std::unordered_map<std::string,std::string> text; };
+    enum class ThemeStyle { Etched, Skyrim };
     struct Theme {
         std::string id="classic", name="Classic", font;
+        ThemeStyle style=ThemeStyle::Etched; // Component shapes, independent of colors and layout.
         std::uint32_t accent=0xFF8BC9E7, text=0xFFEAEEED, muted=0xFFB5A89E;
         std::uint32_t sector=0xF02C2017, empty=0xBE1F160F, hover=0xEB3D5B6B;
         std::uint32_t panel=0xFC241C15, background=0xFF000000, border=0xFF70604B;

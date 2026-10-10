@@ -200,6 +200,11 @@ int wmain(int argc,wchar_t** argv) {
     RevertSettings(); Check(Config()==edited,"Failed save remains cancelable");
     LoadResources("assets");
     Check(Languages().size()==8 && Themes().size()>=2,"All eight bundled languages load");
+    auto skin=Config();skin.theme="skyrim";
+    Check(Themes().size()==5 && Style(skin).style==ThemeStyle::Skyrim,"Bundled Skyrim skin selects its component renderer");
+    for(const auto& id:{"classic","frost","engraved","minimal"}) {
+        skin.theme=id;Check(Style(skin).style==ThemeStyle::Etched,"Existing themes retain the original component renderer");
+    }
     for(const auto& language:Languages())for(const auto& [key,value]:Languages().front().text) {
         Check(language.text.contains(key),"Every bundled catalog contains the current English keys");
         Check(key=="Font" || !language.text.at(key).empty(),"Bundled translations do not silently fall back through empty values");
@@ -233,7 +238,8 @@ int wmain(int argc,wchar_t** argv) {
     {std::ofstream file(extra/"de.ini",std::ios::binary);file<<std::string(256*1024+1,'x');}
     {std::ofstream file(extra/"es.ini",std::ios::binary);file<<"Name=Embedded NUL\nsettings=";file.put('\0');}
     const auto themeDir=root/"Resources"/"Themes";std::filesystem::create_directories(themeDir);
-    {std::ofstream file(themeDir/"custom.ini");file<<"Accent=12AB34FF\nPanel=not-a-color\nBorderWidth=999\nOrnament=-2\nIconScale=nan\nTitleScale=1.1\nLabelScale=1x\nHoverDuration=inf\nPageDuration=0\n";}
+    {std::ofstream file(themeDir/"custom.ini");file<<"Style=unknown\nAccent=12AB34FF\nPanel=not-a-color\nBorderWidth=999\nOrnament=-2\nIconScale=nan\nTitleScale=1.1\nLabelScale=1x\nHoverDuration=inf\nPageDuration=0\n";}
+    {std::ofstream file(themeDir/"skin.ini");file<<"Style= SkYrIm \nName=Custom Nordic\nAccent=AABBCCFF\n";}
     LoadResources((root/"Resources").string());
     Check(ResolveLanguage("auto","fr-CA")=="fr-CA" && ResolveLanguage("auto","fr-FR")=="fr","Exact locale takes priority over generic-language fallback");
     Check(CycleLanguage("fr-FR",-1)=="fr-CA","Language cycling starts from the displayed resolved choice");
@@ -243,8 +249,11 @@ int wmain(int argc,wchar_t** argv) {
     edited.language="partial";Check(Tr(edited,"settings")=="Custom" && Tr(edited,"apply")=="APPLY" && Tr(edited,"cancel")=="CANCEL","Partial/empty translation fallback");
     Check(Tr(edited,"spells")=="SPELLS" && Tr(edited,"shouts")=="SHOUTS" && Tr(edited,"powers")=="POWERS","Older partial translations fall back for the new magic categories");
     edited.theme="custom";Check(Style(edited).accent==0xFF34AB12 && Style(edited).panel==Theme{}.panel,"RGBA color parsing and invalid color fallback");
+    Check(Style(edited).style==ThemeStyle::Etched,"Unknown drawing styles fall back without disabling custom theme colors");
     const auto& visual=Style(edited);
     Check(visual.borderWidth==2 && visual.ornament==0 && visual.iconScale==1 && visual.titleScale==1.1f && visual.labelScale==1 && visual.hoverDuration==.1f && visual.pageDuration==0,"Visual theme bounds, invalid/nonfinite fallback and zero-duration transitions");
+    edited.theme="skin";Check(Style(edited).style==ThemeStyle::Skyrim && Style(edited).accent==0xFFCCBBAA && Style(edited).name=="Custom Nordic",
+        "Custom skin Style accepts whitespace/case and keeps independent color/name customization");
     LoadResources((root/"missing").string());
     Check(Languages().size()==1 && Themes().size()==1 && Tr(edited,"apply")=="APPLY","Missing resource folder remains usable");
     edited.language="auto";

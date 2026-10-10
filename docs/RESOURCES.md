@@ -22,6 +22,8 @@ Font 可留空，也可以指定本机字体的绝对路径。字体优先级为
 
 ## 主题
 
+0.5.3开发版新增绘制风格字段 `Style=etched` / `Style=skyrim`。缺失或未知值沿用原Etched风格，不影响旧四主题。新 `skyrim.ini` 提供整套黑白灰组件皮肤，覆盖轮盘、导航、详情卡、设置、命名/管理及确认窗口；不是仅换色。见 [Skyrim皮肤说明](SKYRIM_SKIN_0.5.3.md)。第一层保持原布局和命中区域，不支持图片替换。
+
 复制 classic.ini；支持 Accent、Text、Muted、Sector、Empty、Hover、Panel、Border。颜色格式是八位十六进制 RRGGBBAA，例如 E7C98BFF。非法颜色保留该项默认值，缺失主题回退 classic。旧 Background 字段仍可读取，但当前全屏遮罩固定黑色，由主 INI 的 OverlayOpacityPercent 控制；旧 DimPercent 不再生效。普通、空格、高亮扇区强制 alpha=255，以提高辨识度；主题 RGB 仍生效，轮盘间隙不填充。
 
 Font 为可选字体路径。0.3.3 开放下列视觉参数，旧主题不需要补键即可继承默认值。非法、非有限值或带杂字符的数字回退默认；有效超范围值会限制到安全范围。图标纹理、图片背景和自由布局尚未支持；刻纹/金属效果由原创几何和顶点颜色生成，不载入第三方素材。旧 BlurStrength 已忽略，背景模糊及其设置已移除。

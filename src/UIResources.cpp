@@ -268,6 +268,9 @@ namespace Wheel {
         for (const auto& path:Files(std::filesystem::u8path(root)/"Themes")) {
             auto values=Read(path); Theme entry;
             entry.id=path.stem().string(); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
+            auto style=Trim(values["Style"]);
+            std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+            entry.style=style=="skyrim"?ThemeStyle::Skyrim:ThemeStyle::Etched;
             for (auto [key,field]:{std::pair{"Accent",&entry.accent},{"Text",&entry.text},{"Muted",&entry.muted},
                 {"Sector",&entry.sector},{"Empty",&entry.empty},{"Hover",&entry.hover},{"Panel",&entry.panel},{"Background",&entry.background},{"Border",&entry.border}})
                 if (values.contains(key)) *field=Color(values[key],*field);

@@ -8,6 +8,8 @@ An independently implemented SKSE plugin for Skyrim Special Edition. Replace the
 
 Latest release: **0.5.2**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
+Current development build: **0.5.3**, adding an optional **Skyrim** skin. Choose it under Appearance / Theme. Its charcoal panels, clipped frames, white selection outlines, and angular controls cover the wheel, details, settings, and outfit dialogs. Existing themes keep their original style; this build awaits in-game testing. See [skin notes](docs/SKYRIM_SKIN_0.5.3.md).
+
 ## Features
 
 - **Categorized favorites:** weapons, equipment, potions, food, spells, shouts, powers, and other items. Ten entries per page, with additional pages as needed.
@@ -178,7 +180,7 @@ See [input bindings and testing](docs/INPUT_CONTROLS.md) for INI codes and regre
 
 Preserve your INI and customized resources when upgrading. With MO2, also check Overwrite or the configured output mod for files written by the game.
 
-Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. Themes control colors and supported geometric styling, not arbitrary layouts or image replacement. Background blur is not used.
+Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. In 0.5.3 development builds, `Style=skyrim` selects a complete geometric skin, while omitted/unknown Style keeps the original `etched` components. Colors and supported styling remain configurable; arbitrary layouts and image replacement are not supported. Background blur is not used.
 
 See the [resource guide](docs/RESOURCES.md) and [item information notes](docs/ITEM_INFORMATION.md).
 

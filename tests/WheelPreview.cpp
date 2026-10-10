@@ -248,7 +248,12 @@ int main(int argc, char** argv) {
     // Optional last argument captures the same render-only pose in either direction.
     const float expansion=argc>11?std::clamp(std::stof(argv[11]),0.f,1.f):1.f;
     const float opacity=Wheel::preview.config.animations?Wheel::TransitionOpacity(expansion):1.f;
-    ImGui_ImplDX11_NewFrame(); ImGui::NewFrame(); Wheel::DrawWheel(Wheel::preview,opacity,expansion);
+    // Optional frame count settles hover feedback without sleeping or touching game state.
+    const int frames=argc>12?std::clamp(std::atoi(argv[12]),1,30):1;
+    for(int frame=0;frame<frames;++frame) {
+        ImGui_ImplDX11_NewFrame(); ImGui::NewFrame(); Wheel::DrawWheel(Wheel::preview,opacity,expansion);
+        if(frame+1<frames)ImGui::Render();
+    }
     if(argc>4 && std::string(argv[4])=="icons") {
         auto d=ImGui::GetBackgroundDrawList();
         const float sheetScale=height/1440.f;
