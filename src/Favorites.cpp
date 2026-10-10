@@ -13,6 +13,19 @@
 
 namespace Wheel {
     namespace {
+        bool ImportantProvider() {
+            // Inventory collection starts in-game, after all SKSE plugins load.
+            // Cache presence once; do not inspect modules per item or per frame.
+            static const bool loaded=[] {
+                const bool found=GetModuleHandleW(L"DoubleFavoriteAsImportant.dll")!=nullptr;
+                if(found)SKSE::log::info("Double Favorite As Important detected: Important items excluded from favorites; protection markers preserved");
+                return found;
+            }();
+            return loaded;
+        }
+        bool IsFavorite(const RE::ExtraHotkey* hotkey) {
+            return InventoryFavorite(hotkey!=nullptr,hotkey?static_cast<int>(hotkey->hotkey.underlying()):-1,ImportantProvider());
+        }
         ItemKey Key(RE::TESBoundObject* object, RE::ExtraDataList* extra) {
             ItemKey key{object->GetFormID(), reinterpret_cast<std::uintptr_t>(extra)};
             if (extra) {
@@ -81,22 +94,23 @@ namespace Wheel {
             auto append=[&](RE::ExtraDataList* extra,int amount) {
                 if(amount<=0)return;
                 const auto hotkey=extra?extra->GetByType<RE::ExtraHotkey>():nullptr;
-                if(!InventoryVisible(allInventory,hotkey!=nullptr))return;
+                const bool favorite=IsFavorite(hotkey);
+                if(!InventoryVisible(allInventory,favorite))return;
                 if(exact && (reinterpret_cast<std::uintptr_t>(extra)!=exact->key.extra ||
-                    Key(object,extra)!=exact->key || (exact->favorited && !hotkey)))return;
+                    Key(object,extra)!=exact->key || (exact->favorited && !favorite)))return;
                 const char* name=extra?extra->GetDisplayName(object):object->GetName();
                 if(!name || !*name)name=object->GetName();
                 result.push_back({Key(object,extra),category,name && *name?name:"?",amount,
                     extra && (extra->HasType<RE::ExtraWorn>() || extra->HasType<RE::ExtraWornLeft>()),
                     false,usable,ActionKind::Favorite,0,icon});
-                auto& item=result.back();item.favorited=hotkey!=nullptr;item.inventoryWide=allInventory;
+                auto& item=result.back();item.favorited=favorite;item.inventoryWide=allInventory;
                 if(hotkey){const int assigned=static_cast<int>(hotkey->hotkey.underlying());item.quickSlot=ValidQuickSlot(assigned)?assigned:-1;}
             };
             InventoryBudget budget{count};
             RE::ExtraDataList* anchor=nullptr;bool anchorFavorite=false;
             if(entry && entry->extraLists)for(auto extra:*entry->extraLists)if(extra) {
                 const int amount=budget.Take(extra->GetCount());
-                const bool favorite=extra->HasType<RE::ExtraHotkey>();
+                const bool favorite=IsFavorite(extra->GetByType<RE::ExtraHotkey>());
                 if(amount>0 && (!anchor || (!anchorFavorite && favorite)) && InventoryVisible(allInventory,favorite) && Plain(extra)) {
                     // Preserve native favorites behavior; all-inventory merging
                     // additionally protects ownership/charge/poison/soul differences.

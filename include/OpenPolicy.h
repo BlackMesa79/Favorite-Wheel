@@ -1,7 +1,19 @@
 #pragma once
 #include <cstdint>
+#include <initializer_list>
 #include <string_view>
 namespace Wheel {
+    // Name-based gates also apply when Skyrim Souls removes kPausesGame.
+    // Shared by entrance, queued opening, live wheel and menu observer checks.
+    template<class IsOpen>
+    const char* BlockingWheelMenu(IsOpen&& isOpen) {
+        for(auto name : {"Main Menu", "Loading Menu", "Console", "Dialogue Menu", "InventoryMenu", "MagicMenu",
+                "ContainerMenu", "BarterMenu", "GiftMenu", "Crafting Menu", "Book Menu", "Journal Menu", "MapMenu",
+                "RaceSex Menu", "MessageBoxMenu", "Lockpicking Menu", "Training Menu", "Sleep/Wait Menu", "FavoritesMenu",
+                "TweenMenu", "StatsMenu", "LevelUp Menu"})
+            if(isOpen(name))return name;
+        return nullptr;
+    }
     // Invalid is the engine's sentinel for an ungrouped mapping. Valid custom
     // groups (e.g. contextual looting) must be enabled alongside native groups.
     inline bool EntryControlGroupEnabled(std::uint32_t group, std::uint32_t enabled) {

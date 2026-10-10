@@ -166,6 +166,8 @@ Controls cover the player, the NPC targeted before opening the wheel, the follow
 
 Ultimate Animated Potions NG and Eating Animations and Sounds SE worked in user testing. Consumables use the game's equipment path so those mods can receive their usual triggers. Specific animation and rendering combinations still require testing.
 
+The 0.5.3 development build adds explicit unpaused Tween/skills/level-up menu guards for Skyrim Souls RE and excludes Double Favorite As Important's protected items from favorites mode. STB Hotkey System can coexist with wheel item use, but replaces native hotkeys: assign its bindings through Inventory/Magic, and avoid the wheel's native 1–8 assignment. These combinations await in-game verification; see the [compatibility review](docs/MOD_COMPATIBILITY_0.5.3.md).
+
 Poison application is not implemented; use poisons through the inventory. Beast-form controls fall back to the original Favorites menu.
 
 ## Settings, themes, and translations

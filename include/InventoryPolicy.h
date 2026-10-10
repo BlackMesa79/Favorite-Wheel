@@ -14,4 +14,10 @@ namespace Wheel {
         int Spare() const {return static_cast<int>(std::clamp<std::int64_t>(remaining,0,std::numeric_limits<int>::max()));}
     };
     inline bool InventoryVisible(bool all,bool favorited){return all || favorited;}
+    // Double Favorite As Important preserves ExtraHotkey for item protection,
+    // using 0xFA for an Important item that must be excluded from favorites.
+    // Interpret that private marker only while its provider is actually loaded.
+    inline bool InventoryFavorite(bool hasHotkey,int slot,bool importantProvider) {
+        return hasHotkey && !(importantProvider && slot==0xFA);
+    }
 }

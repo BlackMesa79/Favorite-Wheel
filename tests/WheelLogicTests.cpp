@@ -234,6 +234,20 @@ int main() {
     Check(PlayerEligible(true,true,true,false,false), "normal player and humanoid vampire/custom race eligible without race playable flag");
     Check(!PlayerEligible(true,true,true,false,true), "beast form yields to vanilla");
     Check(!PlayerEligible(false,true,true,false,false) && !PlayerEligible(true,true,true,true,false), "loading and dead player cannot open");
+    {
+        for(std::string_view openMenu:{"TweenMenu","StatsMenu","LevelUp Menu","InventoryMenu","MagicMenu","FavoritesMenu"}) {
+            // Simulate Souls with no pause flag and menu controls still enabled.
+            const auto blocked=BlockingWheelMenu([&](const char* name){return openMenu==name;});
+            Check(blocked && openMenu==blocked,"Unpaused navigation/skills/item menus independently block both wheel entrances and queued opens");
+            InputGate menuInput;
+            for(bool pressed:{true,true,false})
+                Check(menuInput.Filter(16,pressed,!pressed,!blocked)==InputGate::Result::Pass,
+                    "An idle blocked entrance preserves native menu down/hold/up events");
+        }
+        for(std::string_view overlay:{"HUD Menu","Cursor Menu","FavoriteWheelMenu","FavoriteWheelPauseGuard",""})
+            Check(!BlockingWheelMenu([&](const char* name){return overlay==name;}),
+                "Gameplay HUD, cursor and the wheel's own menus do not block opening or its time session");
+    }
     Check(FavoritesKeyMatches(-1,16,16,"") && FavoritesKeyMatches(-1,33,33,""), "default and rebound physical favorites key");
     Check(ResolveFavoritesKey(-1,51)==51 && !FavoritesKeyMatches(-1,51,16,""),"Reported mapped=51 follows comma, not physical Q");
     Check(KeyboardOpening(51,0,51,0,51,1)==Opening::Favorites && KeyboardOpening(51,1,51,0,51,1)==Opening::Actions,

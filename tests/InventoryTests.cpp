@@ -14,6 +14,17 @@ int main() {
     InventoryBudget oversubscribed{2};Check(oversubscribed.Take(5)==2 && oversubscribed.Take(1)==0 && oversubscribed.Spare()==0,"Tracked counts cannot exceed physical inventory");
     InventoryBudget damaged{3};Check(damaged.Take(0)==1 && damaged.Take(-2)==1 && damaged.Spare()==1,"Invalid per-instance counts remain bounded");
     Check(!InventoryVisible(false,false) && InventoryVisible(false,true) && InventoryVisible(true,false),"Item source preserves the original favorites gate by default");
+    for(int slot=0;slot<256;++slot) {
+        Check(InventoryFavorite(true,slot,false),"Without the Important provider, extension marker values keep their original favorite semantics");
+        Check(InventoryFavorite(true,slot,true)==(slot!=0xFA),"Only the provider's Important marker is excluded, preserving unbound and extension favorites");
+    }
+    Check(!InventoryFavorite(false,-1,true) && !InventoryFavorite(false,-1,false),"Unfavorited copies stay unfavorited with either integration state");
+    const bool important=InventoryFavorite(true,0xFA,true);
+    Check(!InventoryVisible(false,important) && InventoryVisible(true,important),"Important items are hidden from favorites but usable in all-inventory mode");
+    Check(!important,"Important copies cannot pass the favorite-only quick-slot mutation guard");
+    InventoryBudget protectedCopies{5};
+    protectedCopies.Take(2);protectedCopies.Take(1);
+    Check(protectedCopies.Spare()==2,"Hidden Important copies still consume the physical count budget before visibility filtering");
     InventoryPages catalog;std::vector<Item> items;
     for(int category=0;category<categoryCount;++category)for(int i=0;i<10003;++i) {
         Item item;item.key.form=static_cast<unsigned>(category*10003+i+1);item.category=static_cast<Category>(category);

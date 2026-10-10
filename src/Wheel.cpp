@@ -111,12 +111,7 @@ namespace Wheel {
         const char* BlockingMenu() {
             auto ui = RE::UI::GetSingleton();
             if (!ui) return "UI unavailable";
-            // Includes unpaused inventory/dialogue mods; checking GameIsPaused alone is insufficient.
-            for (auto name : {"Main Menu", "Loading Menu", "Console", "Dialogue Menu", "InventoryMenu", "MagicMenu",
-                     "ContainerMenu", "BarterMenu", "GiftMenu", "Crafting Menu", "Book Menu", "Journal Menu", "MapMenu",
-                     "RaceSex Menu", "MessageBoxMenu", "Lockpicking Menu", "Training Menu", "Sleep/Wait Menu", "FavoritesMenu"})
-                if (ui->IsMenuOpen(name)) return name;
-            return nullptr;
+            return BlockingWheelMenu([&](const char* name){return ui->IsMenuOpen(name);});
         }
         bool BlockedMenu() { return BlockingMenu() != nullptr; }
         bool ValidPlayer() {
