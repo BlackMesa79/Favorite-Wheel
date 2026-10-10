@@ -214,8 +214,11 @@ int wmain(int argc,wchar_t** argv) {
     Check(Languages().size()==8 && Themes().size()>=2,"All eight bundled languages load");
     auto skin=Config();skin.theme="skyrim";
     Check(Themes().size()==5 && Style(skin).style==ThemeStyle::Skyrim,"Bundled Skyrim skin selects its component renderer");
+    Check(Style(skin).frameStyle==FrameStyle::Nordic && Style(skin).surfaceTexture.ends_with("Textures/skyrim-charcoal.png") &&
+        Style(skin).materialStrength==.9f,"Skyrim skin enables its external material and Nordic framing");
     for(const auto& id:{"classic","frost","engraved","minimal"}) {
-        skin.theme=id;Check(Style(skin).style==ThemeStyle::Etched,"Existing themes retain the original component renderer");
+        skin.theme=id;Check(Style(skin).style==ThemeStyle::Etched && Style(skin).surfaceTexture.empty() && Style(skin).frameStyle==FrameStyle::Plain,
+            "Existing themes retain the original untextured component renderer");
     }
     for(const auto& language:Languages())for(const auto& [key,value]:Languages().front().text) {
         Check(language.text.contains(key),"Every bundled catalog contains the current English keys");
@@ -251,7 +254,10 @@ int wmain(int argc,wchar_t** argv) {
     {std::ofstream file(extra/"es.ini",std::ios::binary);file<<"Name=Embedded NUL\nsettings=";file.put('\0');}
     const auto themeDir=root/"Resources"/"Themes";std::filesystem::create_directories(themeDir);
     {std::ofstream file(themeDir/"custom.ini");file<<"Style=unknown\nAccent=12AB34FF\nPanel=not-a-color\nBorderWidth=999\nOrnament=-2\nIconScale=nan\nTitleScale=1.1\nLabelScale=1x\nHoverDuration=inf\nPageDuration=0\n";}
-    {std::ofstream file(themeDir/"skin.ini");file<<"Style= SkYrIm \nName=Custom Nordic\nAccent=AABBCCFF\n";}
+    {std::ofstream file(themeDir/"skin.ini");file<<"Style= SkYrIm \nName=Custom Nordic\nAccent=AABBCCFF\nFrameStyle= NoRdIc \nSurfaceTexture=Textures/custom.png\nMaterialStrength=99\nMaterialZoom=0\n";}
+    for(const auto& [id,texture]:{std::pair{"escape","../outside.png"},std::pair{"absolute","C:/outside.png"},
+        std::pair{"rooted","/outside.png"},std::pair{"wrong-format","Textures/file.dds"}})
+        {std::ofstream file(themeDir/(std::string(id)+".ini"));file<<"SurfaceTexture="<<texture<<"\nFrameStyle=unknown\nMaterialStrength=nan\nMaterialZoom=inf\n";}
     LoadResources((root/"Resources").string());
     Check(ResolveLanguage("auto","fr-CA")=="fr-CA" && ResolveLanguage("auto","fr-FR")=="fr","Exact locale takes priority over generic-language fallback");
     Check(CycleLanguage("fr-FR",-1)=="fr-CA","Language cycling starts from the displayed resolved choice");
@@ -266,6 +272,13 @@ int wmain(int argc,wchar_t** argv) {
     Check(visual.borderWidth==2 && visual.ornament==0 && visual.iconScale==1 && visual.titleScale==1.1f && visual.labelScale==1 && visual.hoverDuration==.1f && visual.pageDuration==0,"Visual theme bounds, invalid/nonfinite fallback and zero-duration transitions");
     edited.theme="skin";Check(Style(edited).style==ThemeStyle::Skyrim && Style(edited).accent==0xFFCCBBAA && Style(edited).name=="Custom Nordic",
         "Custom skin Style accepts whitespace/case and keeps independent color/name customization");
+    Check(Style(edited).frameStyle==FrameStyle::Nordic && Style(edited).surfaceTexture.ends_with("Textures/custom.png") &&
+        Style(edited).materialStrength==1 && Style(edited).materialZoom==1,"Skin material bounds and relative resource resolution");
+    for(const auto id:{"escape","absolute","rooted","wrong-format"}) {
+        edited.theme=id;const auto& rejected=Style(edited);
+        Check(rejected.surfaceTexture.empty() && rejected.frameStyle==FrameStyle::Plain && rejected.materialStrength==.85f && rejected.materialZoom==1,
+            "Escaping/absolute/unsupported texture paths and invalid material numbers safely fall back");
+    }
     LoadResources((root/"missing").string());
     Check(Languages().size()==1 && Themes().size()==1 && Tr(edited,"apply")=="APPLY","Missing resource folder remains usable");
     edited.language="auto";

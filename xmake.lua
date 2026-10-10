@@ -29,7 +29,7 @@ target("FavoriteWheel")
     add_includedirs("include")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
     set_pcxxheader("include/PCH.h")
-    add_syslinks("d3d11", "dxgi", "d3dcompiler", "user32")
+    add_syslinks("d3d11", "dxgi", "d3dcompiler", "user32", "windowscodecs", "ole32")
     after_build(function(target)
         local moddir = get_config("deploy_dir")
         if not moddir or moddir == "" then return end
@@ -45,12 +45,13 @@ target("FavoriteWheel")
                 local file = path.join(destination, path.filename(source))
                 -- Keep locally customized language/theme files on subsequent deployments.
                 if not os.isfile(file) then os.cp(source, file) end
-                if kind == "Languages" then
+                if kind == "Languages" or kind == "Themes" then
                     local current = io.readfile(file)
                     local additions = {}
                     for line in io.lines(source) do
                         local key = line:match("^([%w_]+)=")
-                        if key and not ("\n" .. current):find("\n%s*" .. key .. "%s*=") then
+                        local skin_key = key == "FrameStyle" or key == "SurfaceTexture" or key == "MaterialStrength" or key == "MaterialZoom"
+                        if key and (kind == "Languages" or skin_key) and not ("\n" .. current):find("\n%s*" .. key .. "%s*=") then
                             current = current .. "\n" .. line
                             table.insert(additions, line)
                         end
@@ -63,6 +64,12 @@ target("FavoriteWheel")
                     end
                 end
             end
+        end
+        local texturesdir = path.join(pluginsdir, "FavoriteWheel", "Themes", "Textures")
+        os.mkdir(texturesdir)
+        for _, source in ipairs(os.files("assets/Themes/Textures/*.png")) do
+            local file = path.join(texturesdir, path.filename(source))
+            if not os.isfile(file) then os.cp(source, file) end
         end
         os.mkdir(path.join(moddir, "docs"))
         os.mkdir(path.join(moddir, "licenses"))
@@ -95,10 +102,10 @@ target("WheelPreview")
     set_default(false)
     set_rundir(os.projectdir())
     add_deps("wheel-imgui")
-    add_files("tests/WheelPreview.cpp", "src/Draw.cpp", "src/WheelFonts.cpp", "src/UIResources.cpp", "src/Settings.cpp", "src/ItemInfo.cpp")
+    add_files("tests/WheelPreview.cpp", "src/Draw.cpp", "src/WheelFonts.cpp", "src/UIResources.cpp", "src/Settings.cpp", "src/ItemInfo.cpp", "src/SkinTextures.cpp")
     add_includedirs("include")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
-    add_syslinks("d3d11", "dxgi", "d3dcompiler")
+    add_syslinks("d3d11", "dxgi", "d3dcompiler", "windowscodecs", "ole32")
 
 target("SettingsTests")
     set_kind("binary")
@@ -152,3 +159,12 @@ target("TimeTests")
     set_default(false)
     add_includedirs("include")
     add_files("tests/TimeTests.cpp")
+
+target("SkinTextureTests")
+    set_kind("binary")
+    set_default(false)
+    set_rundir(os.projectdir())
+    add_files("tests/SkinTextureTests.cpp", "src/SkinTextures.cpp")
+    add_includedirs("include")
+    add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
+    add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")

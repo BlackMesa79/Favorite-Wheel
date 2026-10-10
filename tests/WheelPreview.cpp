@@ -5,6 +5,7 @@
 #include "WheelFonts.h"
 #include "UIResources.h"
 #include "WheelIcons.h"
+#include "SkinTextures.h"
 #include "Transition.h"
 #include <Windows.h>
 #include <d3d11.h>
@@ -26,7 +27,7 @@ int main(int argc, char** argv) {
     unsigned width = argc > 2 ? std::atoi(argv[2]) : 1600;
     unsigned height = argc > 3 ? std::atoi(argv[3]) : 1000;
     const bool empty = argc > 4 && std::string(argv[4]) == "empty";
-    Wheel::LoadResources("assets");
+    Wheel::LoadResources(argc>13?argv[13]:"assets"); // Optional alternate package root for fallback/style comparisons.
     auto config=Wheel::Config();
     if(argc>5)config.language=argv[5];
     if(argc>6)config.theme=argv[6];
@@ -61,6 +62,10 @@ int main(int argc, char** argv) {
     ComPtr<ID3D11DeviceContext> context;
     D3D_FEATURE_LEVEL level;
     Check(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
+    const auto materials=Wheel::SkinTextures::Initialize(device.Get(),context.Get(),Wheel::Themes());
+    std::cout<<"Skin materials: textures="<<materials.textures<<", texels="<<materials.texels<<'\n';
+    for(const auto& warning:materials.warnings)std::cout<<warning<<'\n';
+    if(!materials.warnings.empty() && !(argc>4 && std::string(argv[4])=="material-fallback"))return 5;
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width=width; desc.Height=height; desc.MipLevels=1; desc.ArraySize=1;
     desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count=1;
@@ -331,7 +336,7 @@ int main(int argc, char** argv) {
         out.write(reinterpret_cast<char*>(row.data()),row.size());
     }
     context->Unmap(staging.Get(),0);
-    ImGui_ImplDX11_Shutdown(); ImGui::DestroyContext();
+    Wheel::SkinTextures::Reset();ImGui_ImplDX11_Shutdown(); ImGui::DestroyContext();
     if (!out) return 4;
     std::cout << "Rendered actual wheel UI at " << width << "x" << height << '\n';
 }

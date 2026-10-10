@@ -272,6 +272,19 @@ namespace Wheel {
             auto style=Trim(values["Style"]);
             std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
             entry.style=style=="skyrim"?ThemeStyle::Skyrim:ThemeStyle::Etched;
+            auto frame=Trim(values["FrameStyle"]);
+            std::transform(frame.begin(),frame.end(),frame.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+            entry.frameStyle=frame=="nordic"?FrameStyle::Nordic:FrameStyle::Plain;
+            // Resource paths belong to the theme package, not arbitrary absolute files.
+            const auto texture=std::filesystem::u8path(values["SurfaceTexture"]);
+            const bool traversal=std::any_of(texture.begin(),texture.end(),[](const auto& part){return part=="..";});
+            if(!texture.empty() && !texture.has_root_path() && !traversal &&
+                values["SurfaceTexture"].find(':')==std::string::npos && texture.extension()==".png") {
+                const auto resolved=(path.parent_path()/texture).lexically_normal().generic_u8string();
+                entry.surfaceTexture.assign(resolved.begin(),resolved.end());
+            }
+            entry.materialStrength=Number(values,"MaterialStrength",entry.materialStrength,0.f,1.f);
+            entry.materialZoom=Number(values,"MaterialZoom",entry.materialZoom,1.f,4.f);
             for (auto [key,field]:{std::pair{"Accent",&entry.accent},{"Text",&entry.text},{"Muted",&entry.muted},
                 {"Sector",&entry.sector},{"Empty",&entry.empty},{"Hover",&entry.hover},{"Panel",&entry.panel},{"Background",&entry.background},{"Border",&entry.border}})
                 if (values.contains(key)) *field=Color(values[key],*field);

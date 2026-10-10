@@ -1,6 +1,7 @@
 #include "Wheel.h"
 #include "Settings.h"
 #include "WheelFonts.h"
+#include "SkinTextures.h"
 #include "Transition.h"
 #include <Windows.h>
 #include <d3d11.h>
@@ -39,6 +40,9 @@ namespace Wheel {
                 SKSE::log::warn("CJK font unavailable: {}. Configure Display/Font if Chinese text is missing.", font);
             }
             if (!ImGui_ImplDX11_Init(device.Get(), context.Get()) || !ImGui_ImplDX11_CreateDeviceObjects()) return false;
+            const auto materials=SkinTextures::Initialize(device.Get(),context.Get(),Themes());
+            for(const auto& warning:materials.warnings)SKSE::log::warn("{}",warning);
+            SKSE::log::info("Skin materials ready: textures={} texels={} (mipmapped, startup only)",materials.textures,materials.texels);
             ready = true;
             SKSE::log::info("Independent D3D11 renderer ready");
             return true;
@@ -130,6 +134,7 @@ namespace Wheel {
                     }
                     if (ready && (IsOpen() || fading)) Render(chain);
                 } catch (const std::exception& e) {
+                    SkinTextures::Reset();
                     ready = false; failed = true;
                     SKSE::log::error("Wheel rendering disabled: {}", e.what());
                     if (auto tasks = SKSE::GetTaskInterface()) tasks->AddTask([] { Cancel(); });

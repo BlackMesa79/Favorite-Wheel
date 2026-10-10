@@ -8,7 +8,7 @@ An independently implemented SKSE plugin for Skyrim Special Edition. Replace the
 
 Latest release: **0.5.2**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
-Current development build: **0.5.3**, adding an optional **Skyrim** skin. Choose it under Appearance / Theme. Its charcoal panels, clipped frames, white selection outlines, and angular controls cover the wheel, details, settings, and outfit dialogs. Existing themes keep their original style; this build awaits in-game testing. See [skin notes](docs/SKYRIM_SKIN_0.5.3.md).
+Current development build: **0.5.3**, extending the optional **Skyrim** skin with an original charcoal material, layered blade rims and Nordic panel borders. Choose it under Appearance / Theme. The first layer and slow-time physics guard have passed the user's game test; these new materials still need a game test. Existing themes keep their original style. See [material skin notes](docs/SKIN_MATERIALS_0.5.3.md).
 
 ## Features
 
@@ -52,6 +52,7 @@ Install the packaged ZIP with your mod manager, enable it, and launch through SK
 SKSE/Plugins/FavoriteWheel.dll
 SKSE/Plugins/FavoriteWheel/Languages/*.ini
 SKSE/Plugins/FavoriteWheel/Themes/*.ini
+SKSE/Plugins/FavoriteWheel/Themes/Textures/*.png
 ```
 
 The installation ZIP omits the player-owned `FavoriteWheel.ini`, so upgrades cannot replace it. Without this file, the plugin uses built-in defaults; the first successful **Apply** creates it at `Data/SKSE/Plugins/FavoriteWheel.ini` relative to `SkyrimSE.exe`, creating missing parent directories. Startup only reads existing files; missing keys use defaults without rewriting them. Mod managers may place a newly created INI in their writable override area. The repository's main INI is a reference example for manual configuration, not an installation file.
@@ -182,7 +183,7 @@ See [input bindings and testing](docs/INPUT_CONTROLS.md) for INI codes and regre
 
 Preserve your INI and customized resources when upgrading. With MO2, also check Overwrite or the configured output mod for files written by the game.
 
-Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. In 0.5.3 development builds, `Style=skyrim` selects a complete geometric skin, while omitted/unknown Style keeps the original `etched` components. Colors and supported styling remain configurable; arbitrary layouts and image replacement are not supported. Background blur is not used.
+Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. In 0.5.3 development builds, `Style=skyrim` selects the Skyrim component skin, while omitted/unknown Style keeps the original `etched` components. `FrameStyle=nordic` adds layered framing; `SurfaceTexture` accepts a local PNG material with configurable strength and zoom. See the [skin authoring guide](docs/SKIN_MATERIALS_0.5.3.md). Missing images use solid fills. Arbitrary layouts and icon replacement are not supported. Background blur is not used.
 
 See the [resource guide](docs/RESOURCES.md) and [item information notes](docs/ITEM_INFORMATION.md).
 
