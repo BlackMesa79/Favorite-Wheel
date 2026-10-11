@@ -1,10 +1,16 @@
 # Material skins — layer 2 (0.5.3 development)
 
-The first-layer Skyrim skin and the low-speed physics mitigation have received a successful user test. This second layer adds actual local image materials and a distinct Nordic frame treatment. Its gameplay rendering still needs a new in-game test. The previous Double Favorite / Skyrim Souls combined compatibility tests remain outstanding.
+The first-layer Skyrim skin and the low-speed physics mitigation have received a successful user test. This second layer adds actual local image materials and a distinct Nordic frame treatment. The October 11 frame and detail-card refinements still need a new in-game test. The previous Double Favorite / Skyrim Souls combined compatibility tests remain outstanding.
 
 ## Visible changes
 
-Skyrim now uses an original charcoal/fibrous-grain material for wheel blades, the center disk, detail cards, settings and outfit windows, inputs and buttons. A broader, shaded rim separates each blade from the dark inset. Panel edges have layered dark/light bands, interlocking angular corner ribbons and side inlays. Center edges and blade tips use restrained carved accents. Decorations scale down on detail cards and help strips so they stay in the reserved margins.
+Skyrim uses an original charcoal/fibrous-grain material for wheel blades, the center disk, detail cards, settings and outfit windows, inputs and buttons. Thin silver-gray outlines surround dark, subtly shaded surfaces. Small interwoven corner glyphs replace the previous broad rim and side inlays. Narrow blade rims, tiny inner diamonds and angled selection markers keep attention on icons and text. Corner glyphs scale down on short panels and help strips.
+
+### October 11 vanilla-UI reference and spacing refinement
+
+The reference is the **first, original Skyrim inventory screenshot** (Baked Potatoes) in Becky Schmader's [Upgrading Skyrim UI](https://medium.com/@bschmader/upgrading-skyrim-ui-5b8689bc1524), published August 14, 2020. The later images in that article are redesigns and were not treated as vanilla references. The original screenshot informed the thin double frames, small angular corner ornaments, restrained monochrome hierarchy, selection arrows and space between the name, attributes and effect text. No reference images or Bethesda assets are included in the mod.
+
+Nordic detail cards now reserve **30 layout units** at each side, beyond the 23-unit corner decoration, rather than the old 18-unit inset. Cards widen from 278 to 302 units and receive matching extra vertical space, keeping the original 242-unit body width. Plain Skyrim cards use 24 units of inset and a 290-unit width; Etched cards retain their original size. Header, rules, names, status, both stat columns, effect descriptions and action hints share the same content boundary. Existing screen-fit checks still move the card to the opposite side or use the center-detail fallback if it cannot fit. Other panel sizes, hit areas and animation timing are unchanged.
 
 This is an independent design inspired by Skyrim menus, not a reproduction of Bethesda's SWF or textures. The existing North Etch icons, typography, layout, hit areas and animation timing remain in use. The four original themes remain untextured unless their author explicitly adds a material.
 
@@ -31,7 +37,7 @@ MaterialZoom=1
 
 RGBA values and the first-layer theme tokens remain available. The image multiplies those colors: white preserves the chosen color; darker pixels darken it. PNG alpha changes the **material intensity**, not surface transparency. The resulting texture is opaque, preserving readable solid backgrounds. Full-color materials are allowed; their RGB tint multiplies the theme's RGB.
 
-`SurfaceTexture` applies to filled surfaces in either component style. `FrameStyle=nordic` changes borders only with `Style=skyrim`. `Ornament=0` removes ornamental ribbons/notches while retaining functional framing and selection marks. Set `SurfaceTexture=` or `MaterialStrength=0` to retain geometry with flat fills. Use `FrameStyle=plain` to retain the first-layer Skyrim silhouette.
+`SurfaceTexture` applies to filled surfaces in either component style. `FrameStyle=nordic` changes borders only with `Style=skyrim`. `Ornament=0` removes ornamental corner glyphs/diamonds while retaining functional framing and selection marks. Set `SurfaceTexture=` or `MaterialStrength=0` to retain geometry with flat fills. Use `FrameStyle=plain` to retain the first-layer Skyrim silhouette, with the updated detail-card inset.
 
 No icon overrides, scriptable layouts, custom shaders, scene blur or hot-reload are introduced. Edit the skin files and restart Skyrim to reload. The image fills are clipped by each existing shape mesh rather than an image rectangle over the whole wheel; animated blades carry their own clipped material. This layer uses scalable geometric borders, not a nine-slice image frame.
 
@@ -52,3 +58,13 @@ Automatic deployment retains all existing theme/main INI contents. Only missing 
 SettingsTests verify old themes, style selection, path resolution/rejection and numeric fallback. SkinTextureTests use a WARP device and actual WIC decoding to verify damaged/missing/oversized fallback, opaque alpha conversion, RGBA order, mip creation, deduplicated uploads, texture budgets and cache reset. WheelPreview shares the production texture path; its optional final package-root argument supports first-layer and missing-image comparisons.
 
 Game checks: select Skyrim and Apply, inspect materials/borders at 1440p, switch back to Classic and cancel a preview, open details/settings/outfit naming, check fan animation at small and large scales, then repeat in the Community Shaders UI layer and Slow/Normal modes. Compare frame time at the same location. Missing images should log a warning and show solid surfaces rather than disable the wheel.
+
+### October 11 delivery checks
+
+- Release build and automatic deployment succeeded, retaining development version 0.5.3. No release ZIP was generated.
+- 24 production-path D3D11 WARP previews passed: eight languages with long effect lists, 1440p long names/armor details, 1080p small-scale Japanese and French details on opposite sides, 3440×1440 at 150% scale, Russian settings, Chinese preset naming, function and empty wheels, three intermediate animation poses and four original themes. Representative details, settings, boundary sizes, animation and Classic images were also visually inspected; decoration and content remained separated in those cases.
+- SettingsTests, SkinTextureTests and WheelLogicTests passed. RuntimeLayoutTests passed six runtime fixtures, Address Library formats 1/2/5 and the built DLL metadata; this is not six in-game runtime tests.
+- All 16 recorded installation INI/material/meta files retained their original SHA256. The installed DLL matches the build: `0BA402D9FEC6AFB0CE6CE635D3FD69905769D367233E8D0A60654E7492BE09D6`.
+- Local records: `build/vanilla053-build.txt`, `build/vanilla053-previews.txt`, `build/vanilla053-tests.txt` and `build/vanilla053-preservation-check.json`. Previous DLL backup: `build/FavoriteWheel-before-vanilla053.dll`.
+
+WARP checks confirm offline layout and rendering behavior, not game FPS or GPU power. The new visual treatment still needs the user's in-game review, including real item names/effects and the Community Shaders layer. No gameplay, time-mode or input behavior changed in this refinement.

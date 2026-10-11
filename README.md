@@ -8,7 +8,7 @@ An independently implemented SKSE plugin for Skyrim Special Edition. Replace the
 
 Latest release: **0.5.2**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
-Current development build: **0.5.3**, extending the optional **Skyrim** skin with an original charcoal material, layered blade rims and Nordic panel borders. Choose it under Appearance / Theme. The first layer and slow-time physics guard have passed the user's game test; these new materials still need a game test. Existing themes keep their original style. See [material skin notes](docs/SKIN_MATERIALS_0.5.3.md).
+Current development build: **0.5.3**, extending the optional **Skyrim** skin with an original charcoal material, thin silver-gray framing and small Nordic corner ornaments inspired by the vanilla inventory UI. Detail cards reserve extra space for decorations while keeping their text width. Choose it under Appearance / Theme. The first layer and slow-time physics guard have passed the user's game test; the latest skin refinements still need a game test. Existing themes keep their original style. See [material skin notes](docs/SKIN_MATERIALS_0.5.3.md).
 
 ## Features
 

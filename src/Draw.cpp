@@ -162,14 +162,25 @@ namespace Wheel
         void NordicCorner(ImDrawList* d,ImVec2 at,float dx,float dy,float s,const Theme& t)
         {
             if(t.ornament<=0)return;
-            const auto ink=Alpha(t.accent,.7f*t.ornament);
+            const auto ink=Alpha(t.accent,.8f*t.ornament);
             const auto point=[&](float x,float y){return ImVec2{at.x+dx*x*s,at.y+dy*y*s};};
-            // Original interlocking angular ribbons, drawn inside the frame margin.
-            const ImVec2 ribbon[]={point(9,39),point(9,17),point(17,9),point(39,9),
-                                  point(32,16),point(21,16),point(16,21),point(16,32),point(9,39)};
-            d->AddPolyline(ribbon,9,ink,0,1.3f*s);
-            const ImVec2 knot[]={point(14,24),point(24,14),point(29,19),point(19,29),point(14,24)};
-            d->AddPolyline(knot,5,ink,0,s);
+            // Small interwoven corner glyphs, inspired by vanilla item cards.
+            // Short broken ribbons read as ornament rather than a thick metal frame.
+            const ImVec2 outer[]={point(5,23),point(5,5),point(23,5),point(23,12),point(12,12),point(12,23),point(5,23)};
+            const ImVec2 inner[]={point(9,19),point(9,9),point(19,9),point(19,16),point(16,19),point(9,19)};
+            d->AddPolyline(outer,7,Alpha(IM_COL32_BLACK,.9f),0,3*s);
+            d->AddPolyline(outer,7,ink,0,s);
+            d->AddPolyline(inner,6,ink,0,s);
+        }
+        void NordicTone(ImDrawList* d,int first,ImVec2 a,ImVec2 b)
+        {
+            // Quiet top-to-bottom shading on the existing mesh; no new GPU pass.
+            for(int i=first;i<d->VtxBuffer.Size;++i) {
+                auto& vertex=d->VtxBuffer[i];
+                const float y=std::clamp((vertex.pos.y-a.y)/(b.y-a.y),0.f,1.f);
+                vertex.col=(Mix(vertex.col,IM_COL32(2,3,4,255),.24f+.10f*y)&0x00FFFFFFu) |
+                           (vertex.col&0xFF000000u);
+            }
         }
         // All skin primitives stay inside the existing layout/hit regions.
         void Chevron(ImDrawList *d, ImVec2 c, float r, ImU32 ink, bool right, float stroke)
@@ -180,34 +191,29 @@ namespace Wheel
         }
         void CutFrame(ImDrawList *d, ImVec2 a, ImVec2 b, float cut, ImU32 ink, float stroke)
         {
-            cut = std::min(cut, std::min(b.x - a.x, b.y - a.y) * .25f);
+            if (b.x <= a.x || b.y <= a.y) return;
+            cut = std::clamp(cut, 0.f, std::min(b.x - a.x, b.y - a.y) * .25f);
             const ImVec2 p[] = {{a.x + cut, a.y}, {b.x - cut, a.y}, {b.x, a.y + cut}, {b.x, b.y - cut},
                                {b.x - cut, b.y}, {a.x + cut, b.y}, {a.x, b.y - cut}, {a.x, a.y + cut}};
             d->AddPolyline(p, 8, ink, ImDrawFlags_Closed, stroke);
         }
         void SkyrimSurface(ImDrawList *d, ImVec2 a, ImVec2 b, const Theme &t, float s, bool accent)
         {
-            const float cut = (Nordic(t)?16.f:9.f) * s;
+            const float cut = (Nordic(t)?3.f:9.f) * s;
             const ImVec2 p[] = {{a.x + cut, a.y}, {b.x - cut, a.y}, {b.x, a.y + cut}, {b.x, b.y - cut},
                                {b.x - cut, b.y}, {a.x + cut, b.y}, {a.x, b.y - cut}, {a.x, a.y + cut}};
-            Material(d,a,b,t,[&]{d->AddConvexPolyFilled(p, 8, (Nordic(t)?Mix(t.panel,t.border,.11f):t.panel) | 0xFF000000u);});
+            const int fillStart=d->VtxBuffer.Size;
+            Material(d,a,b,t,[&]{d->AddConvexPolyFilled(p, 8, (Nordic(t)?Mix(t.panel,t.border,.09f):t.panel) | 0xFF000000u);});
             if(Nordic(t)) {
-                CutFrame(d,{a.x+s,a.y+s},{b.x-s,b.y-s},cut,Alpha(IM_COL32_BLACK,.9f),7*s);
-                CutFrame(d,{a.x+3*s,a.y+3*s},{b.x-3*s,b.y-3*s},cut-2*s,
-                         Alpha(t.border,.68f),2.3f*t.borderWidth*s);
-                CutFrame(d,{a.x+6*s,a.y+6*s},{b.x-6*s,b.y-6*s},cut-4*s,
-                         Alpha(t.accent,.24f),s);
-                const float cornerScale=s*std::clamp(std::min((b.x-a.x)/(700*s),(b.y-a.y)/(180*s)),.3f,1.f);
+                NordicTone(d,fillStart,a,b);
+                CutFrame(d,a,b,cut,Alpha(IM_COL32_BLACK,.85f),3*s);
+                CutFrame(d,{a.x+2*s,a.y+2*s},{b.x-2*s,b.y-2*s},2*s,
+                         Alpha(accent?t.accent:t.border,accent?.68f:.65f),t.borderWidth*s);
+                CutFrame(d,{a.x+6*s,a.y+6*s},{b.x-6*s,b.y-6*s},s,
+                         Alpha(t.border,.24f),s);
+                const float cornerScale=s*std::clamp((b.y-a.y)/(100*s),.45f,1.f);
                 for(bool right:{false,true})for(bool bottom:{false,true})
                     NordicCorner(d,{right?b.x:a.x,bottom?b.y:a.y},right?-1.f:1.f,bottom?-1.f:1.f,cornerScale,t);
-                // Bracketed side inlays distinguish panels without covering their content.
-                if(b.y-a.y>200*s)for(bool right:{false,true}) {
-                    const float x=right?b.x-11*s:a.x+11*s,dir=right?-1.f:1.f;
-                    for(float y:{a.y+52*s,b.y-52*s}) {
-                        const ImVec2 line[]={{x,y-10*s},{x+dir*3*s,y-6*s},{x+dir*3*s,y+6*s},{x,y+10*s}};
-                        d->AddPolyline(line,4,Alpha(t.border,.65f*t.ornament),0,s);
-                    }
-                }
                 return;
             }
             CutFrame(d, a, b, cut, Alpha(accent ? t.accent : t.border, .85f), t.borderWidth * s);
@@ -231,13 +237,13 @@ namespace Wheel
         {
             const auto fill=occupied ? Mix(t.sector,t.hover,weight*.7f) : t.empty;
             const ImVec2 lo{c.x-outer,c.y-outer},hi{c.x+outer,c.y+outer};
-            const float band=std::min(8*s,(outer-inner)*.2f);
+            const float band=std::min(3.5f*s,(outer-inner)*.15f);
             Material(d,lo,hi,t,[&]{
                 if(Nordic(t)) {
-                    Sector(d,c,inner,outer,begin,end,Mix(t.border,t.sector,.45f),.7f);
+                    Sector(d,c,inner,outer,begin,end,Mix(t.border,t.sector,.65f),.25f);
                     const float inset=std::min(.012f,(end-begin)*.15f);
                     Sector(d,c,inner+band,outer-band,begin+inset,end-inset,
-                           Mix(fill,t.border,occupied?.16f:.06f),.18f);
+                           Mix(fill,t.border,occupied?.11f:.04f),.12f);
                 } else Sector(d,c,inner,outer,begin,end,fill,0);
             });
             const auto edge = Mix(Alpha(t.border, occupied ? .7f : .32f), t.accent, weight);
@@ -247,16 +253,12 @@ namespace Wheel
                 d->AddLine(At(c, inner + s, angle), At(c, outer - s, angle), edge, t.borderWidth * s);
             if(Nordic(t)) {
                 const float inset=std::min(.017f,(end-begin)*.16f);
-                Arc(d,c,outer-band,begin+inset,end-inset,Alpha(IM_COL32_BLACK,.9f),1.5f*s);
-                Arc(d,c,inner+band,begin+inset,end-inset,Alpha(t.accent,.22f),s);
+                Arc(d,c,outer-band,begin+inset,end-inset,Alpha(IM_COL32_BLACK,.7f),s);
+                Arc(d,c,inner+band,begin+inset,end-inset,Alpha(t.accent,.14f),s);
                 const float mid=(begin+end)/2;
                 if(t.ornament>0 && end-begin>.12f)
-                    for(int i:{-1,0,1}) {
-                        const float angle=mid+i*.025f;
-                        d->AddLine(At(c,outer-2*s,angle),At(c,outer-band+2*s,angle+.012f),
-                                   Alpha(t.accent,.5f*t.ornament),s);
-                    }
-                if(weight>0)Arc(d,c,outer-3*s,begin+inset,end-inset,Alpha(t.accent,weight*.65f),2*s);
+                    Diamond(d,At(c,inner+7*s,mid),2*s,Alpha(t.accent,.4f*t.ornament));
+                if(weight>0)Arc(d,c,outer-2*s,begin+inset,end-inset,Alpha(t.accent,weight*.75f),1.5f*s);
             }
             if (weight > 0)
             {
@@ -664,7 +666,11 @@ namespace Wheel
         {
             const auto &t = Style(v.config);
             const auto viewport = ImGui::GetIO().DisplaySize;
-            const float width = 278 * s, margin = 14 * s, gap = 346 * s;
+            // Nordic corners reach 23 units inward. Reserve a real content gutter
+            // beyond them, while keeping the same usable text width as old themes.
+            const float padding = Nordic(t) ? 30.f : Skyrim(t) ? 24.f : 18.f;
+            const float extra = padding - 18.f;
+            const float width = (278 + 2 * extra) * s, margin = 14 * s, gap = 346 * s;
             float left = c.x + gap;
             if (left + width > viewport.x - margin)
                 left = c.x - 304 * s - width;
@@ -675,57 +681,60 @@ namespace Wheel
             const int statRows = (static_cast<int>(info.stats.size()) + 1) / 2;
             const float infoHeight = statRows * 28.f + (info.heading.empty() ? 0.f : 27.f) +
                                      info.effects.size() * 42.f + (info.more.empty() ? 0.f : 20.f);
-            const float height = hasInfo ? 194.f + infoHeight : 218.f;
+            const float height = (hasInfo ? 194.f + infoHeight : 218.f) + 2 * extra;
             const float top =
                 std::clamp(c.y - height * s * .5f, margin, std::max(margin, viewport.y - height * s - margin));
             const ImVec2 a{left, top}, b{left + width, top + height * s};
+            const float bodyLeft = a.x + padding * s, bodyRight = b.x - padding * s,
+                        bodyWidth = bodyRight - bodyLeft, bodyTop = top + extra * s;
             const int first = d->VtxBuffer.Size;
             Surface(d, a, b, t, s, true);
-            DrawIcon(d, {left + 32 * s, top + 32 * s}, item, .82f * s * t.iconScale, item.usable ? t.accent : t.muted);
-            LeftText(d, {left + 56 * s, top + 25 * s}, Fit(typeTitle, 14 * s, 205 * s), 14 * s, t.muted);
-            d->AddLine({left + 18 * s, top + 56 * s}, {b.x - 18 * s, top + 56 * s}, Alpha(t.border, .65f), s);
-            LeftText(d, {left + 18 * s, top + 72 * s}, Wrapped(item.name, 20 * s, 242 * s, 2), 20 * s, t.text, 242 * s);
-            LeftText(d, {left + 18 * s, top + 122 * s}, Fit(state, 14 * s, 242 * s), 14 * s,
+            DrawIcon(d, {bodyLeft + 14 * s, bodyTop + 32 * s}, item, .82f * s * t.iconScale, item.usable ? t.accent : t.muted);
+            LeftText(d, {bodyLeft + 38 * s, bodyTop + 25 * s}, Fit(typeTitle, 14 * s, bodyWidth - 38 * s), 14 * s, t.muted);
+            d->AddLine({bodyLeft, bodyTop + 56 * s}, {bodyRight, bodyTop + 56 * s}, Alpha(t.border, .65f), s);
+            LeftText(d, {bodyLeft, bodyTop + 72 * s}, Wrapped(item.name, 20 * s, bodyWidth, 2), 20 * s, t.text, bodyWidth);
+            LeftText(d, {bodyLeft, bodyTop + 122 * s}, Fit(state, 14 * s, bodyWidth), 14 * s,
                      item.equipped ? t.accent : t.muted);
             const auto hint = ActionHint(v, item);
             if (hasInfo)
             {
                 float y = 150.f;
+                const float columnGap = 10 * s, columnWidth = (bodyWidth - columnGap) * .5f;
                 for (std::size_t i = 0; i < info.stats.size(); ++i)
                 {
                     const auto &row = info.stats[i];
-                    LeftText(d, {left + (18 + (i % 2) * 126) * s, top + (y + (i / 2) * 28) * s},
-                             Fit(row.label + "  " + row.value, 14 * s, 116 * s), 14 * s, t.text);
+                    LeftText(d, {bodyLeft + (i % 2) * (columnWidth + columnGap), bodyTop + (y + (i / 2) * 28) * s},
+                             Fit(row.label + "  " + row.value, 14 * s, columnWidth), 14 * s, t.text);
                 }
                 y += statRows * 28;
                 if (!info.heading.empty())
                 {
-                    d->AddLine({left + 18 * s, top + (y + 2) * s}, {b.x - 18 * s, top + (y + 2) * s},
+                    d->AddLine({bodyLeft, bodyTop + (y + 2) * s}, {bodyRight, bodyTop + (y + 2) * s},
                                Alpha(t.border, .55f), s);
-                    LeftText(d, {left + 18 * s, top + (y + 9) * s}, Fit(info.heading, 12 * s, 242 * s), 12 * s,
+                    LeftText(d, {bodyLeft, bodyTop + (y + 9) * s}, Fit(info.heading, 12 * s, bodyWidth), 12 * s,
                              t.accent);
                     y += 27;
                 }
                 for (const auto &effect : info.effects)
                 {
-                    LeftText(d, {left + 18 * s, top + y * s}, Fit(effect.label, 14 * s, 242 * s), 14 * s, t.text);
-                    LeftText(d, {left + 18 * s, top + (y + 18) * s}, Wrapped(effect.value, 12 * s, 242 * s, 2), 12 * s,
-                             t.muted, 242 * s);
+                    LeftText(d, {bodyLeft, bodyTop + y * s}, Fit(effect.label, 14 * s, bodyWidth), 14 * s, t.text);
+                    LeftText(d, {bodyLeft, bodyTop + (y + 18) * s}, Wrapped(effect.value, 12 * s, bodyWidth, 2), 12 * s,
+                             t.muted, bodyWidth);
                     y += 42;
                 }
                 if (!info.more.empty())
                 {
-                    LeftText(d, {left + 18 * s, top + y * s}, Fit(info.more, 12 * s, 242 * s), 12 * s, t.muted);
+                    LeftText(d, {bodyLeft, bodyTop + y * s}, Fit(info.more, 12 * s, bodyWidth), 12 * s, t.muted);
                     y += 20;
                 }
-                d->AddLine({left + 18 * s, top + (y + 4) * s}, {b.x - 18 * s, top + (y + 4) * s}, Alpha(t.border, .55f),
+                d->AddLine({bodyLeft, bodyTop + (y + 4) * s}, {bodyRight, bodyTop + (y + 4) * s}, Alpha(t.border, .55f),
                            s);
-                LeftText(d, {left + 18 * s, top + (y + 14) * s}, Fit(hint, 12 * s, 242 * s), 12 * s,
+                LeftText(d, {bodyLeft, bodyTop + (y + 14) * s}, Fit(hint, 12 * s, bodyWidth), 12 * s,
                          item.usable ? t.muted : t.accent);
             }
             else
-                LeftText(d, {left + 18 * s, top + 158 * s}, Wrapped(hint, 14 * s, 242 * s, 3), 14 * s,
-                         item.usable ? t.muted : t.accent, 242 * s);
+                LeftText(d, {bodyLeft, bodyTop + 158 * s}, Wrapped(hint, 14 * s, bodyWidth, 3), 14 * s,
+                         item.usable ? t.muted : t.accent, bodyWidth);
             const float reveal = SmoothPhase(expansion, .42f, 1.f);
             Reveal(d, first, reveal, {(left > c.x ? -1.f : 1.f) * 12 * s * (1 - reveal), 0});
             return true;
@@ -905,8 +914,8 @@ namespace Wheel
             if (Skyrim(t))
             {
                 if(Nordic(t)) {
-                    d->AddCircle(c,inner-12*s,Alpha(t.border,.55f),128,4*s);
-                    d->AddCircle(c,inner-15*s,Alpha(IM_COL32_BLACK,.9f),128,1.5f*s);
+                    d->AddCircle(c,inner-12*s,Alpha(t.border,.5f),128,1.3f*s);
+                    d->AddCircle(c,inner-15*s,Alpha(IM_COL32_BLACK,.7f),128,s);
                     for(int axis=0;axis<4;++axis) {
                         const float angle=axis*std::numbers::pi_v<float>/2;
                         const float r=inner-11*s;
