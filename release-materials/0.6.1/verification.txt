@@ -1,0 +1,18 @@
+Favorite Wheel 0.6.1 — 2026-10-12
+Configuration-save fix accepted after the reporter confirmed successful saving.
+Release DLL and MO2 installation DLL SHA256:
+10DB8E4BB4ABF04EB887C05DC612B2DE1495BA744C41F6273980D496BAAF1BB5
+
+15 local test suites passed:
+SettingsTests, SettingsPersistenceTests, SettingsVfsTests, WheelLogicTests,
+TimeTests, RuntimeLayoutTests, InventoryTests, OutfitTests, NameEditorTests,
+ItemInfoTests, FaceLightClientTests, ActorRuntimeTests, SkinTextureTests,
+LayoutSkinTests, SectorMeshTests.
+
+18 player configuration/resource files remained byte-identical after deployment.
+The original 0.6.0 installation and source ZIPs are retained.
+Nexus BBCode tags validated and preview regenerated; theme guide unchanged.
+Install/source archives are checked by package.ps1 and the release verification
+script, including per-entry SHA256 and source-manifest coverage.
+
+No Nexus upload, Git commit/push or GitHub Release was performed.

@@ -1,0 +1,31 @@
+Favorite Wheel 0.7.2 controller-chord compatibility test
+Date: 2026-10-17 (Asia/Hong_Kong)
+
+Isolated build from the verified released 0.7.2 source archive:
+F94CE96588BA774312274A7B9F46D9A9A7557918F05AA8F459E8CD23DCB02349
+All 3423 original source hashes verified before applying changes.
+Runtime code changes: include/InputBindings.h, src/Wheel.cpp.
+Regression changes: tests/WheelLogicTests.cpp, tests/RuntimeLayoutTests.cpp.
+All other original source hashes remain unchanged, including Renderer.cpp.
+The combat-cycle development feature is absent from this isolated source.
+
+Patch DLL SHA256:
+AA4ECC4EB1F48FC31A3E4A07E2B7EA441293735C053E2099835A28A9E2C499F9
+File/product version remains 0.7.2.0; this is an experimental compatibility patch.
+Identify the new input path by controllerState/state=events+engine-v2.
+
+18 isolated suites passed:
+HandEquipTests, GameSessionTests, SettingsTests, SettingsPersistenceTests,
+SettingsVfsTests (isolated usvfs), WheelLogicTests, TimeTests,
+RuntimeLayoutTests, InventoryTests, OutfitTests, NameEditorTests, ItemInfoTests,
+FaceLightClientTests, ActorRuntimeTests, SkinTextureTests, LayoutSkinTests,
+SectorMeshTests, CombatPresetTests.
+RuntimeLayoutTests used real address libraries for all seven supported runtimes,
+including the reporter's 1.6.1170 and GOG 1.6.659/1.6.1179. New RTTI/dynamic-cast
+IDs and current-vs-previous native controller packet layout were checked.
+The working development branch also passed all 19 suites, including cycles.
+
+Affected-controller validation is still pending. The old log does not contain
+the native XInput packet; the patch records it to test the repair assumption.
+No rendering changes, controller-map edits, external messages or uploads.
+Original installed DLL/resources and earlier distribution files are preserved.

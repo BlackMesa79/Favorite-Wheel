@@ -1,0 +1,32 @@
+Favorite Wheel 0.7.2 - LB+Y controller compatibility TEST PATCH
+
+This patch is for the report where LB+Y opens vanilla Favorites while the
+keyboard opens Favorite Wheel. It is based on the released 0.7.2 build and
+does not include the experimental combat-cycle feature.
+
+INSTALL
+1. Exit Skyrim.
+2. Keep Favorite Wheel 0.7.2 installed. Install this archive as a separate mod
+   and let its FavoriteWheel.dll override the original DLL. In MO2 give this
+   patch higher file priority; in Vortex resolve its DLL conflict in favor
+   of the patch and deploy.
+3. Launch through SKSE again. Keep your current controller map and wheel
+   settings for the first test. The patch supplies no INI or resource files.
+
+TEST
+- Press Y alone: it should keep the action assigned by your controller map
+  (normally Jump), without opening the wheel.
+- Hold LB, then press Y: Favorite Wheel should open instead of vanilla
+  Favorites. Close it, release both buttons and repeat a few times.
+- Release LB, then press Y alone again; check that Jump still works.
+- Check that the keyboard Favorites key still opens the wheel.
+
+If it still fails, please send the complete FavoriteWheel.log from this test
+session, including the Controller entrance lines. The new build records
+engineAvailable, engineMask, openingMask and event, with state=events+engine-v2.
+These fields will tell us whether the native controller packet still contains
+LB while the button-event stream temporarily reports it released.
+
+This is an experimental compatibility fix, not yet confirmed on your setup.
+To roll back, exit the game and disable this patch so the original 0.7.2 DLL
+wins again. No settings reset is required.

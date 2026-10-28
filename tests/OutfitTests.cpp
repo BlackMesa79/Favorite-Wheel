@@ -3,6 +3,7 @@
 #include "OutfitPlan.h"
 #include <cstdlib>
 #include <iostream>
+#include <clocale>
 using namespace Wheel::Outfits;
 void Check(bool result,const char* label){if(!result){std::cerr<<label<<'\n';std::exit(1);}}
 struct Candidate{Piece piece;bool worn=false;std::uint32_t mask=0;};
@@ -16,6 +17,33 @@ int main(){
     Check(DecideStep(false,true,true,.8)==D::Timeout,"Rejected equip times out without repeated calls");
     Check(DecideStep(true,true,true,.8)==D::Advance,"Observed completion wins at timeout boundary");
     Piece armor{{"Skyrim.esm",0x1234},{"",0xFF000ABC},{"Skyrim.esm",0x14},42,1.25f,"旅者 \"甲\"","Armor"};
+    {
+        Check(!PieceDataProblem(armor),"Ordinary armor has no capture-data error");
+        auto piece=armor;piece.health=0;
+        Check(!PieceDataProblem(piece),"Zero health is preserved, not rejected");
+        piece.health=-.1f;
+        Check(std::string(PieceDataProblem(piece))=="health-negative","Negative health remains invalid");
+        for(float bad:{std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}) {
+            piece.health=bad;Check(std::string(PieceDataProblem(piece))=="health-not-finite","Non-finite health remains invalid");
+        }
+        Piece ring{{"Skyrim.esm",0x76F12},{},{},0,0.f,"","Madesi's Silver Ring"};
+        Piece robes{{"DealingwithDaedra.esp",0x5117F0},{},{},80,0.f,"","Cultist Robes"};
+        std::vector<Preset> roundtrip;
+        const Preset reported{1,"Reported outfit",{ring,armor,robes}};
+        Check(Decode(Encode({reported}),roundtrip) && roundtrip[0]==reported,"Reported zero-health apparel survives save/load without normalization");
+        std::vector<Candidate> inventory{{robes,true},{ring,true},{armor,true}};std::vector<int> matched;
+        Check(Resolve(roundtrip[0],inventory,matched) && Wearing(inventory,matched),"Reloaded zero-health pieces resolve to their exact equipped instances");
+        inventory[1].piece.health=1.f;
+        Check(!Resolve(roundtrip[0],inventory,matched),"Zero health is not silently substituted with a different instance signature");
+        auto invalid=reported;invalid.pieces[0].health=-1.f;
+        Check(!Decode(Encode({invalid}),roundtrip) && roundtrip[0]==reported,"Negative health rejects transactionally without replacing loaded outfits");
+        piece=armor;piece.base.id=0;
+        Check(std::string(PieceDataProblem(piece))=="base-id-zero","Missing base reference is diagnosed");
+        piece=armor;piece.customName=std::string(513,'x');
+        Check(std::string(PieceDataProblem(piece))=="custom-name-too-long","Overlong custom names have a distinct reason");
+        piece=armor;piece.label=std::string(513,'x');
+        Check(std::string(PieceDataProblem(piece))=="display-label-too-long","Overlong generated labels have a distinct reason");
+    }
     {
         auto piece=[&](unsigned id){auto value=armor;value.base.id=id;value.unique=static_cast<std::uint16_t>(id);return value;};
         const auto oldBody=piece(1),oldRing=piece(2),commonBoots=piece(3),newRing=piece(4),newBody=piece(5);
@@ -55,11 +83,42 @@ int main(){
     Preset outfit{1,"夜行套装",{armor}};
     std::vector<Preset> decoded;
     Check(Decode(Encode({outfit}),decoded) && decoded==std::vector<Preset>{outfit},"Unicode and instance fields survive serialization");
+    {
+        const auto oldCpp=std::locale();const std::string oldC=std::setlocale(LC_ALL,nullptr);
+        unsigned checked=0;
+        for(const auto name:{"nb-NO","de-DE","fr-FR","en-US"}) {
+            try {
+                std::locale::global(std::locale(name));
+                if(!std::setlocale(LC_ALL,name))continue;
+                std::vector<Preset> restored;
+                Check(Decode(Encode({outfit}),restored) && restored==std::vector<Preset>{outfit},
+                    "Outfit float/Unicode serialization is independent of Norwegian and other process locales");
+                ++checked;
+            }catch(const std::runtime_error&){}
+        }
+        std::locale::global(oldCpp);std::setlocale(LC_ALL,oldC.c_str());
+        Check(checked>0,"Locale regression exercised an installed Windows locale");
+        std::cout<<"Outfit process-locale round trips passed: "<<checked<<'\n';
+    }
     const auto original=decoded;
     Check(!Decode("FWO 9 1",decoded) && decoded==original,"Bad schema is transactional");
     Check(!Decode(Encode({outfit})+"trailing",decoded),"Reject trailing data");
     Check(!Decode("FWO 1 1000000",decoded),"Reject excessive count");
     Check(!Decode(Encode({outfit,outfit}),decoded),"Reject duplicate ids");
+    {
+        std::vector<Preset> atLimit;
+        for(unsigned i=1;i<=100;++i){auto p=outfit;p.id=i;atLimit.push_back(p);}
+        std::vector<Preset> restored;
+        Check(Decode(Encode(atLimit),restored) && restored.size()==100,"The real limit still accepts exactly 100 presets");
+        auto extra=outfit;extra.id=101;atLimit.push_back(extra);
+        Check(!Decode(Encode(atLimit),restored) && restored.size()==100,"An actual 101st preset fails without replacing existing data");
+        auto invalid=outfit;invalid.pieces[0].health=-1.f;
+        Check(!Decode(Encode({invalid}),restored) && restored.size()==100,"One invalid item is rejected transactionally even when the count is below the limit");
+        auto boundary=outfit;boundary.pieces[0].label=std::string(512,'x');
+        Check(Decode(Encode({boundary}),restored),"Maximum supported generated-label length still round-trips");
+        boundary.pieces[0].label+='x';
+        Check(!Decode(Encode({boundary}),restored) && restored.size()==1,"Oversized labels remain rejected without deleting the previous preset");
+    }
     auto bad=outfit;bad.pieces[0].health=std::numeric_limits<float>::infinity();
     Check(!Decode(Encode({bad}),decoded),"Reject invalid health");
     Check(!Portable(outfit),"Dynamic enchantment is character-local");

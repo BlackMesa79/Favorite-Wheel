@@ -14,7 +14,7 @@ int wmain(int argc,wchar_t** argv) {
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
     if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
         SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
-        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && v.swapMouseHands && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
             v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
             v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
             "A fresh process reads all applied settings from disk");
@@ -43,6 +43,14 @@ int wmain(int argc,wchar_t** argv) {
     {std::ofstream file(empty,std::ios::binary);}
     SetSettingsPath(empty.string());LoadSettings();
     Check(Config()==Settings{} && std::filesystem::file_size(empty)==0,"Existing empty INI uses defaults and is never rewritten at startup");
+    Check(SettingsDiagnostic().find("loaded-empty")!=std::string::npos && SettingsDiagnostic().find("bytes=0")!=std::string::npos,
+        "Empty configuration is distinguished from a successful nonempty load");
+    BeginSettings();auto recovered=Config();recovered.font=utf8(L"D:/字体/𠀀.ttf");recovered.positionX=64;EditSettings(recovered);
+    Check(SaveSettings(),"Apply repairs an empty INI even with characters outside ANSI code pages");
+    const auto repairedBytes=bytes(empty);
+    Check(repairedBytes.size()>2 && static_cast<unsigned char>(repairedBytes[0])==0xFF && static_cast<unsigned char>(repairedBytes[1])==0xFE,
+        "Repaired empty INI uses Unicode encoding");
+    LoadSettings();Check(Config()==recovered,"Repaired empty INI round trips Unicode settings");
     const auto blockedParent=root/"NotADirectory";
     {std::ofstream file(blockedParent);file<<"preserve";}
     SetSettingsPath(utf8(blockedParent/"FavoriteWheel.ini"));LoadSettings();BeginSettings();
@@ -71,6 +79,11 @@ int wmain(int argc,wchar_t** argv) {
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==50,"Fresh installs retain pause and a 50% optional slowdown");
     Check(!Config().gamepadMoveWhileOpen,"Split sticks remain opt-in on fresh installs");
+    Check(!Config().rememberLastWheel,"Wheel memory remains opt-in for existing and fresh configurations");
+    BeginSettings();auto remembered=Config();remembered.rememberLastWheel=true;EditSettings(remembered);RevertSettings();
+    Check(!Config().rememberLastWheel,"Cancel does not enable wheel memory");
+    BeginSettings();EditSettings(remembered);Check(SaveSettings(),"Save wheel memory option");LoadSettings();
+    Check(Config().rememberLastWheel,"Wheel memory option persists across configuration reloads");
     Check(Config().positionX==72 && Config().hideEmptyCategories,"Fresh installs use right-side placement and hide empty categories");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
@@ -80,6 +93,7 @@ int wmain(int argc,wchar_t** argv) {
     SetSettingsPath(path.string()); LoadSettings();
     Check(bytes(path)==initialBytes,"Startup leaves partial legacy settings and comments byte-for-byte intact");
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
+    Check(!Config().swapMouseHands,"Old INIs retain LMB right hand without rewriting them");
     Check(!Config().gamepadMoveWhileOpen,"Old INIs keep left-stick wheel selection when the option is missing");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Missing KeepOpen now defaults on without changing controller scheme");
     BeginSettings();auto continuous=Config();continuous.keepOpen=false;continuous.gamepadCategoryButtons=1;
@@ -147,7 +161,7 @@ int wmain(int argc,wchar_t** argv) {
         }
     }
     const auto original=Config();
-    BeginSettings(); auto edited=Config(); edited.gamepadMoveWhileOpen=true;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
+    BeginSettings(); auto edited=Config(); edited.swapMouseHands=true; edited.gamepadMoveWhileOpen=true;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
     Check(Config()==edited,"Live preview");
     Check(!AppliedGamepadMoveWhileOpen(),"Pending toggle does not change the active selection stick");
     RevertSettings(); Check(Config()==original,"Cancel restores every setting");
@@ -213,12 +227,19 @@ int wmain(int argc,wchar_t** argv) {
     LoadResources("assets");
     Check(Languages().size()==8 && Themes().size()>=2,"All eight bundled languages load");
     auto skin=Config();skin.theme="skyrim";
-    Check(Themes().size()==5 && Style(skin).style==ThemeStyle::Skyrim,"Bundled Skyrim skin selects its component renderer");
+    Check(Themes().size()==3 && Style(skin).style==ThemeStyle::Skyrim,"Only the three current bundled themes load");
     Check(Style(skin).frameStyle==FrameStyle::Nordic && Style(skin).surfaceTexture.ends_with("Textures/skyrim-charcoal.png") &&
         Style(skin).materialStrength==.9f,"Skyrim skin enables its external material and Nordic framing");
-    for(const auto& id:{"classic","frost","engraved","minimal"}) {
-        skin.theme=id;Check(Style(skin).style==ThemeStyle::Etched && Style(skin).surfaceTexture.empty() && Style(skin).frameStyle==FrameStyle::Plain,
-            "Existing themes retain the original untextured component renderer");
+    skin.theme="classic";
+    Check(Style(skin).style==ThemeStyle::ClassicGold && Style(skin).name=="Classic Gold" &&
+        Style(skin).accent==Theme{}.accent && Style(skin).panel==Theme{}.panel && Style(skin).surfaceTexture.empty(),
+        "Classic Gold uses the redesigned components and the built-in fallback palette");
+    for(const auto& theme:Themes())Check(theme.id=="classic" || theme.id=="skyrim" || theme.id=="polygon","Retired themes are absent from the bundled selector");
+    skin.theme="polygon";Check(Style(skin).style==ThemeStyle::Skyrim && Style(skin).layout.shape==WheelShape::Polygon,
+        "Skyrim Polygon retains the Nordic renderer and ten-sided shape");
+    for(const auto& id:{"frost","engraved","minimal","ellipse","missing-theme"}) {
+        skin.theme=id;Check(Style(skin).id=="classic" && Style(skin).style==ThemeStyle::ClassicGold,
+            "Unavailable retired theme settings display the new Classic Gold fallback");
     }
     for(const auto& language:Languages())for(const auto& [key,value]:Languages().front().text) {
         Check(language.text.contains(key),"Every bundled catalog contains the current English keys");
@@ -258,6 +279,9 @@ int wmain(int argc,wchar_t** argv) {
     for(const auto& [id,texture]:{std::pair{"escape","../outside.png"},std::pair{"absolute","C:/outside.png"},
         std::pair{"rooted","/outside.png"},std::pair{"wrong-format","Textures/file.dds"}})
         {std::ofstream file(themeDir/(std::string(id)+".ini"));file<<"SurfaceTexture="<<texture<<"\nFrameStyle=unknown\nMaterialStrength=nan\nMaterialZoom=inf\n";}
+    std::ofstream(root/"Resources/Themes/layout-ellipse.ini")<<"WheelShape=  ELLIPSE  \nWheelStretchX=99\nWheelStretchY=0.1\nDetailPosition= LeFt \nDetailGap=-1\n";
+    std::ofstream(root/"Resources/Themes/layout-polygon.ini")<<"WheelShape=polygon\nDetailPosition=center\nWheelStretchX=nan\nDetailGap=inf\n";
+    std::ofstream(root/"Resources/Themes/layout-unknown.ini")<<"WheelShape=unknown\nDetailPosition=invalid\nWheelStretchX=invalid\nWheelStretchY=1.1junk\n";
     LoadResources((root/"Resources").string());
     Check(ResolveLanguage("auto","fr-CA")=="fr-CA" && ResolveLanguage("auto","fr-FR")=="fr","Exact locale takes priority over generic-language fallback");
     Check(CycleLanguage("fr-FR",-1)=="fr-CA","Language cycling starts from the displayed resolved choice");
@@ -270,6 +294,16 @@ int wmain(int argc,wchar_t** argv) {
     Check(Style(edited).style==ThemeStyle::Etched,"Unknown drawing styles fall back without disabling custom theme colors");
     const auto& visual=Style(edited);
     Check(visual.borderWidth==2 && visual.ornament==0 && visual.iconScale==1 && visual.titleScale==1.1f && visual.labelScale==1 && visual.hoverDuration==.1f && visual.pageDuration==0,"Visual theme bounds, invalid/nonfinite fallback and zero-duration transitions");
+    Check(visual.layout.shape==WheelShape::Circle && visual.layout.detailPosition==DetailPosition::Auto,"Legacy themes keep their circular layout and automatic card placement");
+    edited.theme="layout-ellipse";
+    Check(Style(edited).layout.shape==WheelShape::Ellipse && Style(edited).layout.stretchX==1.25f && Style(edited).layout.stretchY==.9f &&
+        Style(edited).layout.detailPosition==DetailPosition::Left && Style(edited).layout.detailGap==16,"Layout tokens accept case/whitespace and numeric bounds");
+    edited.theme="layout-polygon";
+    Check(Style(edited).layout.shape==WheelShape::Polygon && Style(edited).layout.detailPosition==DetailPosition::Center &&
+        Style(edited).layout.stretchX==1.2f && Style(edited).layout.detailGap==20,"Polygon/centre tokens load and nonfinite layout values fall back");
+    edited.theme="layout-unknown";
+    Check(Style(edited).layout.shape==WheelShape::Circle && Style(edited).layout.detailPosition==DetailPosition::Auto &&
+        Style(edited).layout.stretchX==1.2f && Style(edited).layout.stretchY==.94f,"Unknown layout tokens and malformed numbers keep safe defaults");
     edited.theme="skin";Check(Style(edited).style==ThemeStyle::Skyrim && Style(edited).accent==0xFFCCBBAA && Style(edited).name=="Custom Nordic",
         "Custom skin Style accepts whitespace/case and keeps independent color/name customization");
     Check(Style(edited).frameStyle==FrameStyle::Nordic && Style(edited).surfaceTexture.ends_with("Textures/custom.png") &&
@@ -281,6 +315,7 @@ int wmain(int argc,wchar_t** argv) {
     }
     LoadResources((root/"missing").string());
     Check(Languages().size()==1 && Themes().size()==1 && Tr(edited,"apply")=="APPLY","Missing resource folder remains usable");
+    Check(Style(edited).style==ThemeStyle::ClassicGold && Style(edited).name=="Classic Gold","Missing theme files keep the redesigned default usable");
     edited.language="auto";
     Check(ActiveLanguage(edited)=="en" && LanguageLabel(edited)=="System (English)","Missing translations still show a usable automatic-language option");
     const auto automaticRoot=root/"Automatic";
@@ -301,8 +336,8 @@ int wmain(int argc,wchar_t** argv) {
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
-    Check(SettingCount(2)==5 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24,"Gameplay tab includes continuous use and empty category visibility");
-    Check(SettingCount(1)==5 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Controller tab includes separate category and split-stick settings");
+    Check(SettingCount(2)==6 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26,"Gameplay tab includes continuous use, empty categories and wheel memory");
+    Check(SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Keyboard tab includes mouse hands; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
 }

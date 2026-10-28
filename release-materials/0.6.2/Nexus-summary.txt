@@ -1,0 +1,1 @@
+A configurable favorites and action wheel with combat/outfit presets, visible hand states, controller support and three themes. Version 0.6.2 fixes controller modifier chords, adds GOG 1.6.659 support and optional reversed mouse hand assignment.

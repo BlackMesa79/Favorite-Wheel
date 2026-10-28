@@ -1,0 +1,10 @@
+0.6.0 — Changes since 0.5.2
+- Added the Skyrim material/Nordic skin and Skyrim Polygon; rebuilt Classic Gold. Only these three themes are bundled; retired the old themes.
+- Added three-layer theme authoring: colors/components, local PNG materials/frames, and circle/ellipse/polygon shapes with preferred detail-card positions.
+- Improved detail-card padding and sector alignment; moved quick-key numbers inward and equipped diamonds outward, clear of hover arrows.
+- Reduced fan-animation rendering cost and category-switch hitches through linear sector fills and directory-wide font prewarming.
+- Fixed favorite torch equip/unequip and ordinary gear briefly unpausing the game with Keep open enabled.
+- Enabled native poison use and added a separate Poisons category and icon, with labels in all eight languages.
+- Raised optional slow time to 50–100% (default 50%) to mitigate low-speed physics issues; existing external slowdown remains respected.
+- Blocked wheel opening in unpaused Tween/Skills/Level Up menus; protected Double Favorite As Important markers and clarified STB hotkey limitations.
+- Fixed saving an empty INI with Unicode font paths and improved load/save diagnostics. Broader MO2 empty-file reports still need logs.

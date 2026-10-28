@@ -1,0 +1,30 @@
+Favorite Wheel 0.7.0 - COC / controller fixes with ORIGINAL RELEASE RENDERER
+
+This build removes the experimental menu-rendering route from the previous
+test archives. Renderer.cpp is byte-identical to the original 0.7.0 source.
+The native UI render-host menu is no longer registered.
+New startup log marker: route=present-framebuffer-stable-v1
+
+Retained fixes:
+- Initial playable worlds reached through title-screen COC can initialize the
+  wheel without a NewGame/PostLoadGame notification, including its update hook.
+- Native controller Favorites modifiers are inherited with the main key.
+- Identical Favorites/Actions controller chords prefer Favorites.
+
+Install over 0.7.0 and fully restart the game. Keep your INI/controlmap.
+1. Check wheel visibility from a normal saved game.
+2. From a fresh title screen, run coc qasmoke, finish loading, close the console
+   and check wheel visibility and interaction with Q.
+3. Check your usual controller chord and plain Y behavior.
+
+17 current local test suites passed; renderer source equality with the formal
+release is verified. The withdrawn WARP/menu tests are not counted as actual
+game visibility validation. This build has not been game-tested by the agent.
+
+This restores the existing release rendering path. It does NOT claim verified
+compatibility with the reported closed-source frame generator or TRP. Those
+compatibility reports remain separate work requiring actual in-game validation.
+
+Version metadata remains 0.7.0. No player INI/controlmap is included. Earlier
+test archives and the formal release are preserved. Reinstall original 0.7.0
+to remove all test changes.

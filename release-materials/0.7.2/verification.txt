@@ -1,0 +1,15 @@
+Favorite Wheel 0.7.2 - release verification
+Date: 2026-10-16 (Asia/Hong_Kong)
+DLL SHA256: 2A53AB8960C92CDE5B0AF6E553A51F7A92252A5946F571DBBE700C5AB1DC040A
+Export metadata: 0.7.2; RuntimeLayout checked seven real Address Library databases.
+18 automated test suites passed; results in build/release072-tests.txt.
+Gameplay code compared against the accepted weapon-stack-test-v2 source archive: only main.cpp version strings changed; the exported-version test was updated to 0.7.2.
+User confirmed weapon-stack dual wield, native split/merge handling and the cursor fix in local gameplay.
+Gamepad++ controller reports await actual bindings and logs. No new controller behavior was added or declared fixed.
+Closed-source frame-generation and TRP compatibility remain unverified.
+Renderer.cpp matches the stable formal 0.7.0 source: 12CC5D767CB783E823412FC6950978668B10EC9F865752249F79794ABE0CC727
+MO2 DLL matches release build; previous DLL backed up to build/release072-installed-before-20261016-195611.dll
+242 captured player-resource / previous-archive hashes unchanged. Main INI and custom resources preserved.
+Package verification: build/release072-verify-packages.log
+Artifact hashes: dist/FavoriteWheel-0.7.2-SHA256SUMS.txt
+No Nexus upload, Git commit/push or remote release creation performed.

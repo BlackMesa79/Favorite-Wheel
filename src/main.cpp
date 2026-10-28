@@ -9,8 +9,11 @@ namespace {
         switch (message->type) {
         case SKSE::MessagingInterface::kPostPostLoad: Wheel::FaceLight::Discover(); break;
         case SKSE::MessagingInterface::kDataLoaded:
-            if (Wheel::Config().enabled && (!Wheel::InstallRenderer() || !Wheel::InstallWheel()))
-                SKSE::log::error("FavoriteWheel initialization failed. See preceding errors.");
+            if (Wheel::Config().enabled) {
+                if (!Wheel::InstallRenderer() || !Wheel::InstallWheel())
+                    SKSE::log::error("FavoriteWheel initialization failed. See preceding errors.");
+                else SKSE::log::info("Renderer route=present-framebuffer-stable-v1");
+            }
             break;
         case SKSE::MessagingInterface::kPreLoadGame: Wheel::SetGameActive(false); break;
         case SKSE::MessagingInterface::kNewGame: Wheel::SetGameActive(true); break;
@@ -29,7 +32,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
         Wheel::Languages().size(),Wheel::Themes().size(),config.language,Wheel::SystemLanguage(),Wheel::ActiveLanguage(config),config.theme);
     const auto runtime=REL::Module::get().version();
     if (!Wheel::RuntimeSupport::Supported(runtime)) {
-        SKSE::log::error("FavoriteWheel 0.5.3 unsupported runtime {}; supported runtimes: 1.5.97, 1.6.640, 1.6.1170, GOG 1.6.1179, 1.7.99 and 1.7.104",runtime.string());
+        SKSE::log::error("FavoriteWheel 0.9.0 unsupported runtime {}; supported runtimes: 1.5.97, 1.6.640, 1.6.1170, GOG 1.6.659 / 1.6.1179, 1.7.99 and 1.7.104",runtime.string());
         return false;
     }
     SKSE::log::info("FavoriteWheel runtime={} family={}; CommonLibSSE-NG v11.0.0 (94faaed0c60e)",
@@ -38,6 +41,6 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     auto messaging = SKSE::GetMessagingInterface();
     if (!messaging || !SKSE::GetTaskInterface() || !messaging->RegisterListener(OnMessage)) return false;
     if(!Wheel::Outfits::Install())return false;
-    SKSE::log::info("FavoriteWheel 0.5.3 loaded; categorized favorites/actions; optional full inventory and time behavior; controller and native quick slots");
+    SKSE::log::info("FavoriteWheel 0.9.0 loaded; categorized favorites/actions; category/stat sorting and drag arrange; wheel memory; spell toggle and zero-health outfit fix");
     return true;
 }

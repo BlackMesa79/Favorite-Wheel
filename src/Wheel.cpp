@@ -1,6 +1,10 @@
 #include "Wheel.h"
 #include "RuntimeSupport.h"
 #include "Outfits.h"
+#include "CombatPresets.h"
+#include "CombatCycles.h"
+#include "CombatCycleModel.h"
+#include "CombatPresetModel.h"
 #include "Settings.h"
 #include "InputGate.h"
 #include "InputDispatchChain.h"
@@ -8,12 +12,16 @@
 #include "InputBindings.h"
 #include "QuickSlots.h"
 #include "InventoryPages.h"
+#include "InventoryOrder.h"
 #include "TimeControl.h"
 #include "TimePolicy.h"
 #include "QueuedTask.h"
+#include "GameSession.h"
 #include "ActorRuntime.h"
+#include "FormRuntime.h"
 #include "ControllerSticks.h"
 #include "ActionPolicy.h"
+#include "AlchemyCategories.h"
 #include "UIResources.h"
 #include "UILayout.h"
 #include "WheelFonts.h"
@@ -31,7 +39,9 @@ namespace Wheel {
         // required because a time conflict cancels from inside SyncWheelTime.
         std::recursive_mutex lifecycleMutex;
         View view;
+        std::atomic<FormMode> openedForm{FormMode::Human};
         InventoryPages inventoryPages;
+        std::string inventoryFontGlyphs,functionFontGlyphs; // viewMutex held when publishing.
         std::vector<Item> functionItems;
         bool inventoryLoaded=false,inventoryScope=false;
         std::atomic<std::uint64_t> directoryRevision{0};
@@ -42,13 +52,18 @@ namespace Wheel {
         std::optional<ItemKey> hoverKey;
         std::chrono::steady_clock::time_point hoverStarted;
         std::uint64_t hoverSerial=0; // Input pump only; a reopened wheel starts a new dwell.
-        int favoritePage=0,functionPage=0;
+        int favoritePage=0,functionPage=0,combatPage=0,cyclePage=0,cycleMemberPage=0;
+        int FunctionPage(FaceLight::Section section){return section==FaceLight::Section::Outfits?functionPage:section==FaceLight::Section::Combat?combatPage:section==FaceLight::Section::Cycles?cyclePage:section==FaceLight::Section::CycleMembers?cycleMemberPage:0;}
+        WheelOpeningMemory openingMemory; // viewMutex held for all accesses.
+        void RememberFunctionPage(){if(view.functionSection==FaceLight::Section::Outfits)functionPage=view.page;else if(view.functionSection==FaceLight::Section::Combat)combatPage=view.page;else if(view.functionSection==FaceLight::Section::Cycles)cyclePage=view.page;else if(view.functionSection==FaceLight::Section::CycleMembers)cycleMemberPage=view.page;}
         FaceLight::Section functionCategory=FaceLight::Section::Outfits; // Remember the top-level type, not a child list.
         bool shiftHeld[2]{};
-        bool keyboardHeld[256]{}, padHeld[16]{};
+        bool keyboardHeld[256]{};
+        ControllerChordState padChords;
         float padX=0, padY=0;
         float nameRepeatAt[256]{};
-        std::atomic<bool> gameActive{false};
+        GameSession gameSession;
+        std::atomic<bool> sessionProbeQueued{false};
         std::atomic<std::uint64_t> epoch{0};
         std::atomic<bool> closing{false};
         std::atomic<bool> openQueued{false};
@@ -63,7 +78,8 @@ namespace Wheel {
         std::mutex openMutex;
         std::optional<PendingOpen> pendingOpen;
         REL::Relocation<void (*)(RE::PlayerCharacter*, float)> previousPlayerUpdate;
-        bool wheelInstalled=false, playerUpdateInstalled=false;
+        std::atomic<bool> wheelInstalled{false};
+        bool playerUpdateInstalled=false;
         std::atomic<bool> updateLogged{false};
         std::atomic<float> viewportWidth{1280}, viewportHeight{900};
         InputGate inputGate;
@@ -83,23 +99,19 @@ namespace Wheel {
             std::chrono::steady_clock::time_point deadline;
             bool retained=false;
             std::uint64_t serial=0;
+            bool keepPaused=false;
+            FormMode formMode=CurrentFormMode();
         };
         std::mutex actionMutex;
         std::optional<PendingAction> pendingAction;
         std::atomic<bool> actionTaskQueued{false};
         std::uint64_t outfitGeneration=0; // SKSE task thread only.
         std::atomic<bool> retainedAction{false};
+        std::atomic<bool> retainedKeepsPause{false};
         std::atomic<std::uint64_t> playerUpdates{0};
         bool retainedSubmitted=false; // lifecycleMutex held.
         std::chrono::steady_clock::time_point retainedAt;
         std::uint64_t retainedUpdate=0;
-
-        void CompleteRetainedAction(const PendingAction& action) {
-            std::lock_guard lifecycle(lifecycleMutex);
-            if(action.retained && retainedAction && action.serial==openSerial.load() && IsOpen()) {
-                retainedSubmitted=true;retainedAt=std::chrono::steady_clock::now();retainedUpdate=playerUpdates.load();
-            }
-        }
 
         bool HasPendingAction() { std::lock_guard lock(actionMutex); return pendingAction.has_value(); }
 
@@ -117,8 +129,10 @@ namespace Wheel {
         bool ValidPlayer() {
             auto player = RE::PlayerCharacter::GetSingleton();
             auto menus = RE::MenuControls::GetSingleton();
-            return menus && PlayerEligible(gameActive, player != nullptr, player && player->Get3D(),
-                ActorRuntime::IsDead(player), menus->InBeastForm());
+            const auto mode=CurrentFormMode();
+            return menus && (!IsOpen() || mode==openedForm.load()) &&
+                PlayerEligible(gameSession.Active(), player != nullptr, player && player->Get3D(),
+                    ActorRuntime::IsDead(player), mode==FormMode::UnsupportedBeast);
         }
         bool EntryControlsEnabled(RE::INPUT_DEVICE device,std::uint32_t code) {
             auto controls=RE::ControlMap::GetSingleton();
@@ -137,16 +151,17 @@ namespace Wheel {
             if (!Config().enabled) return "disabled";
             if (!RendererReady()) return "renderer not ready";
             if (closing) return "wheel still closing";
-            if(Outfits::Busy())return "outfit changing";
+            if(Outfits::Busy() || Combat::Busy())return "preset changing";
             if (HasPendingAction()) return "item action pending";
-            if (!gameActive) return "game not active";
+            if (!gameSession.Active()) return "game not active";
             auto player = RE::PlayerCharacter::GetSingleton();
             if (!player) return "player unavailable";
             if (!player->Get3D()) return "player 3D unavailable";
             if (ActorRuntime::IsDead(player)) return "player dead";
             auto menus = RE::MenuControls::GetSingleton();
             if (!menus) return "menu controls unavailable";
-            if (menus->InBeastForm()) return "beast form: yielding to vanilla";
+            if (CurrentFormMode()==FormMode::UnsupportedBeast) return "unsupported beast form: yielding to vanilla";
+            if (CurrentFormMode()==FormMode::VampireLord && !VampireSpellList()) return "vampire spell list unavailable: yielding to vanilla";
             if (!Focused()) return "game not foreground";
             if (!ui) return "UI unavailable";
             if (const auto menu = BlockingMenu()) return menu;
@@ -171,7 +186,7 @@ namespace Wheel {
             if(!open){TimeControl::EndSession();RequestPause(false);return;}
             if(!RendererReady() || !Focused() || !ValidPlayer() || BlockedMenu()){Cancel();return;}
             const auto config=Config();
-            const bool pause=PauseForWheel(config.timeMode,settings,dialog) && !retainedAction;
+            const bool pause=PauseForWheel(config.timeMode,settings,dialog) && (!retainedAction || retainedKeepsPause);
             if(!TimeControl::Update(!pause && config.timeMode==1,config.slowPercent)) {
                 SKSE::log::warn("Wheel canceled: time state could not be safely maintained");Cancel();return;
             }
@@ -181,7 +196,7 @@ namespace Wheel {
             SKSE::log::error("Wheel {} task failed: {}",task,error);
             std::lock_guard lifecycle(lifecycleMutex);
             if(generation!=epoch.load())return;
-            if(outfit)Outfits::CancelJob();
+            if(outfit){Outfits::CancelJob();Combat::CancelJob();}
             // A failure belonging to an earlier wheel cannot close a newer one.
             if(serial==openSerial.load()) {
                 if(outfit){std::lock_guard lock(actionMutex);pendingAction.reset();}
@@ -191,30 +206,160 @@ namespace Wheel {
         void PublishPage(ItemPage page) { // viewMutex held
             view.items=std::move(page.items);view.itemOffset=page.offset;view.totalItems=page.total;
         }
-        void FilterItems() { // viewMutex held; O(10), independent of category size.
+        std::vector<Item> unsortedItems;
+        std::optional<InventorySelectionKey> sortingSelection;
+        void CancelSortDrag(){view.sortDrag.Cancel();view.dragItem.reset();} // viewMutex held
+        void FilterItems() { // viewMutex held.
+            view.sortingSelectedSlot=-1;
+            if(!view.sortingEdit){sortingSelection.reset();CancelSortDrag();}
             if(view.functions)PublishPage(SlicePage(functionItems,0,functionItems.size(),view.page));
             else {
                 view.visibleCategories=CategoryVisibility(inventoryPages.visible,Config().hideEmptyCategories);
                 const auto category=view.visibleCategories.Select(view.category);
                 if(category!=view.category){view.category=category;view.page=favoritePage=0;}
                 PublishPage(inventoryPages.Page(view.category,view.page));
+                static constexpr const char* labels[]={"sortDefault","sortAsc","sortDesc","sortEquipped","sortCustom","sortType","sortSlot","sortStatDesc","sortStatAsc","sortWeight","sortValue"};
+                const auto mode=Ordering::Current(view.inventoryWide,view.category);
+                const char* label=mode==Ordering::Mode::Type?
+                    (view.category==Category::Weapons?"sortWeaponType":view.category==Category::Armor?"sortArmorType":"sortSchool"):
+                    labels[static_cast<int>(mode)];
+                if(mode==Ordering::Mode::StatDescending || mode==Ordering::Mode::StatAscending) {
+                    const bool ascending=mode==Ordering::Mode::StatAscending;
+                    label=view.category==Category::Weapons?(ascending?"sortDamageAsc":"sortDamageDesc"):
+                        view.category==Category::Armor?(ascending?"sortArmorAsc":"sortArmorDesc"):(ascending?"sortCostAsc":"sortCostDesc");
+                }
+                view.sortingLabel=Tr(Config(),label);
+                if(view.sortingEdit && sortingSelection) {
+                    bool exists=false;
+                    const auto begin=inventoryPages.boundaries[static_cast<int>(view.category)];
+                    const auto end=inventoryPages.boundaries[static_cast<int>(view.category)+1];
+                    for(auto i=begin;i<end;++i)if(SelectionKey(inventoryPages.items[i])==*sortingSelection) {
+                        exists=true;const int slot=static_cast<int>(i-begin)-view.page*slots;
+                        if(slot>=0 && slot<slots)view.sortingSelectedSlot=slot;
+                        break;
+                    }
+                    if(!exists)sortingSelection.reset();
+                }
             }
         }
-        void PublishDirectory(std::vector<Item> items,bool scope,bool preserveSelection=false) { // viewMutex held
-            const int oldSlot=WheelSlot(view.x,view.y),oldIndex=PageItemIndex(view,oldSlot);
+        void PublishDirectory(std::vector<Item> items,std::string fontGlyphs,bool scope,bool preserveSelection=false) { // viewMutex held
+            CancelSortDrag(); // A refreshed catalog invalidates a pending drop.
+            const int oldSlot=WheelSlot(view.x,view.y,Style(Config()).layout),oldIndex=PageItemIndex(view,oldSlot);
             const auto oldKey=oldSlot>=0 && oldIndex>=0 && oldIndex<int(view.items.size())?
-                std::optional<ItemKey>{view.items[oldIndex].key}:std::optional<ItemKey>{};
+                std::optional<InventorySelectionKey>{SelectionKey(view.items[oldIndex])}:std::optional<InventorySelectionKey>{};
             ++directoryRevision; // Invalidates details for the replaced catalog.
+            unsortedItems=items;
+            if(!view.vampireRestricted)Ordering::Apply(items,scope);
             inventoryPages.Set(std::move(items));inventoryLoaded=true;inventoryScope=scope;view.inventoryLoading=false;
+            inventoryFontGlyphs=std::move(fontGlyphs);
+            view.inventoryGlyphs=inventoryFontGlyphs+functionFontGlyphs;
             view.inventoryWide=scope;
             if(!view.functions) {
                 FilterItems();
                 const int newIndex=PageItemIndex(view,oldSlot);
                 const auto newKey=oldSlot>=0 && newIndex>=0 && newIndex<int(view.items.size())?
-                    std::optional<ItemKey>{view.items[newIndex].key}:std::optional<ItemKey>{};
+                    std::optional<InventorySelectionKey>{SelectionKey(view.items[newIndex])}:std::optional<InventorySelectionKey>{};
                 if(preserveSelection && oldSlot>=0 && oldKey!=newKey)
-                    view.x=view.y=0; // A changing live inventory must never silently replace the selected item.
+                    view.x=view.y=0; // Reset for a different row, not a plain stack's native anchor migration.
             }
+        }
+        void ResortInventory() { // viewMutex held; selection is repositioned by the caller.
+            auto items=unsortedItems;Ordering::Apply(items,view.inventoryWide);
+            inventoryPages.Set(std::move(items));++directoryRevision;FilterItems();
+        }
+        void RequestDirectory(bool refresh);
+        void ChangeSorting(bool edit) {
+            std::lock_guard lifecycle(lifecycleMutex);
+            std::unique_lock lock(viewMutex);
+            if(!view.open || view.functions || view.vampireRestricted || view.settingsOpen || view.outfitDialog ||
+                view.inventoryLoading || !inventoryLoaded || retainedAction)return;
+            CancelSortDrag();
+            if(edit) {
+                view.sortingEdit=!view.sortingEdit;
+                if(view.sortingEdit)Ordering::SetCustom(view.inventoryWide,view.category,inventoryPages.items);
+            }else {view.sortingEdit=false;CancelSortDrag();Ordering::Cycle(view.inventoryWide,view.category);}
+            sortingSelection.reset();
+            if(!edit)view.page=0;
+            ResortInventory();
+            if(!edit && Ordering::Numeric(Ordering::Current(view.inventoryWide,view.category))) {
+                view.inventoryLoading=true;
+                lock.unlock();RequestDirectory(true); // Engine stats belong on the game-thread directory task.
+            }
+        }
+        void SelectSortedItem() {
+            std::lock_guard lock(viewMutex);
+            if(!view.sortingEdit || view.functions || view.vampireRestricted || view.inventoryLoading)return;
+            const int slot=WheelSlot(view.x,view.y,Style(Config()).layout),local=PageItemIndex(view,slot);
+            if(slot>=0 && local>=0 && local<int(view.items.size())) {
+                sortingSelection=SelectionKey(view.items[local]);FilterItems();
+            }
+        }
+        void MoveSortedItem(int direction,bool followPointer=false) {
+            std::lock_guard lock(viewMutex);
+            if(!view.sortingEdit || view.functions || view.vampireRestricted || !inventoryLoaded || view.inventoryLoading)return;
+            if(!sortingSelection)return;
+            const auto begin=inventoryPages.boundaries[static_cast<int>(view.category)];
+            const auto end=inventoryPages.boundaries[static_cast<int>(view.category)+1];
+            const auto selectedIt=std::find_if(inventoryPages.items.begin()+begin,inventoryPages.items.begin()+end,
+                [&](const Item& item){return SelectionKey(item)==*sortingSelection;});
+            if(selectedIt==inventoryPages.items.begin()+end){sortingSelection.reset();FilterItems();return;}
+            const auto at=static_cast<std::size_t>(selectedIt-inventoryPages.items.begin());
+            if((direction<0 && at==begin) || (direction>0 && at+1>=end))return;
+            const auto selected=inventoryPages.items[at];
+            auto neighbor=static_cast<std::ptrdiff_t>(at)+direction;
+            bool moved=false;
+            while(neighbor>=static_cast<std::ptrdiff_t>(begin) && neighbor<static_cast<std::ptrdiff_t>(end)) {
+                if(Ordering::MoveItem(view.inventoryWide,view.category,selected,inventoryPages.items[neighbor])){moved=true;break;}
+                neighbor+=direction;
+            }
+            if(!moved)return;
+            ResortInventory();
+            const auto found=std::find_if(inventoryPages.items.begin()+begin,inventoryPages.items.begin()+end,
+                [&](const Item& item){return SelectionKey(item)==SelectionKey(selected);});
+            if(found==inventoryPages.items.begin()+end)return;
+            const auto index=static_cast<std::size_t>(found-inventoryPages.items.begin())-begin;
+            view.page=static_cast<int>(index/slots);FilterItems();
+            const auto point=ShapePoint(Style(Config()).layout,.75f,float(index%slots)*2*std::numbers::pi_v<float>/slots);
+            if(followPointer){view.x=point.x;view.y=point.y;padX=view.x;padY=view.y;}
+        }
+        void BeginSortDrag() {
+            std::lock_guard lock(viewMutex);
+            CancelSortDrag();
+            if(!view.sortingEdit || view.inventoryLoading || view.functions || view.vampireRestricted || retainedAction)return;
+            const int slot=WheelSlot(view.x,view.y,Style(Config()).layout),local=PageItemIndex(view,slot);
+            if(slot<0 || local<0 || local>=int(view.items.size()))return;
+            sortingSelection=SelectionKey(view.items[local]);view.dragItem=view.items[local];
+            view.sortDrag.Begin(view.x,view.y);FilterItems();
+        }
+        void EndSortDrag() {
+            std::lock_guard lifecycle(lifecycleMutex);
+            // ValidPlayer calls IsOpen(), which acquires viewMutex. Validate
+            // before taking the view lock; lifecycleMutex still guards the session.
+            const bool allowed=Focused() && ValidPlayer() && CurrentFormMode()==FormMode::Human;
+            bool click=false;
+            {
+                std::lock_guard lock(viewMutex);
+                if(!view.sortDrag.held)return;
+                const bool active=view.sortDrag.active;
+                const auto selected=view.dragItem;
+                CancelSortDrag();
+                if(!view.open || !view.sortingEdit || view.functions || view.vampireRestricted || view.settingsOpen ||
+                    view.outfitDialog || view.inventoryLoading || !selected || !sortingSelection ||
+                    !allowed)return;
+                const int slot=WheelSlot(view.x,view.y,Style(Config()).layout),local=PageItemIndex(view,slot);
+                if(slot<0 || local<0 || local>=int(view.items.size()))return;
+                if(!active)click=SelectionKey(view.items[local])==*sortingSelection;
+                else {
+                    const auto begin=inventoryPages.boundaries[static_cast<int>(view.category)];
+                    const auto end=inventoryPages.boundaries[static_cast<int>(view.category)+1];
+                    const auto source=std::find_if(inventoryPages.items.begin()+begin,inventoryPages.items.begin()+end,
+                        [&](const Item& item){return SelectionKey(item)==*sortingSelection;});
+                    if(source==inventoryPages.items.begin()+end)return;
+                    const auto target=view.items[local];
+                    if(Ordering::InsertItem(view.inventoryWide,view.category,*source,target))ResortInventory();
+                }
+            }
+            if(click)MoveSortedItem(-1,true);
         }
         void RequestDirectory(bool refresh=false) {
             // Clear a previous wheel/page even when an older request is still queued.
@@ -231,9 +376,10 @@ namespace Wheel {
                         if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
                             IsOpen() && Focused() && ValidPlayer() && !BlockedMenu()) {
                             auto items=CollectInventory(scope);
+                            auto fontGlyphs=CatalogFontGlyphs(items);
                             std::lock_guard lock(viewMutex);
                             if(generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() && view.open) {
-                                PublishDirectory(std::move(items),scope,refresh);inventoryStamp=stamp;
+                                PublishDirectory(std::move(items),std::move(fontGlyphs),scope,refresh);inventoryStamp=stamp;
                             }
                         }
                     },failed);
@@ -252,19 +398,39 @@ namespace Wheel {
             }
             if(refresh)RequestDirectory(true);
         }
+        void CompleteRetainedAction(const PendingAction& action) {
+            std::lock_guard lifecycle(lifecycleMutex);
+            if(action.retained && retainedAction && action.serial==openSerial.load() && IsOpen()) {
+                if(action.keepPaused) {
+                    // EquipObject applies immediately; a paused player cannot
+                    // supply the update frames used by the live/FaceLight path.
+                    retainedAction=false;retainedKeepsPause=false;retainedSubmitted=false;
+                    bool loaded;{std::lock_guard lock(viewMutex);loaded=inventoryLoaded;}
+                    if(loaded)RequestDirectory(true);
+                }else {
+                    retainedSubmitted=true;retainedAt=std::chrono::steady_clock::now();retainedUpdate=playerUpdates.load();
+                }
+            }
+        }
         void RefreshFunctions() {
-            const auto section=Snapshot().functionSection;
-            auto entries=section==FaceLight::Section::Outfits?Outfits::Entries():FaceLight::Entries(section);
+            if(CurrentFormMode()!=FormMode::Human)return;
+            const auto current=Snapshot();const auto section=current.functionSection;
+            auto entries=section==FaceLight::Section::Outfits?Outfits::Entries():section==FaceLight::Section::Combat?Combat::Entries():
+                section==FaceLight::Section::Cycles || section==FaceLight::Section::CycleMembers?Cycles::Entries(section==FaceLight::Section::CycleMembers?current.cycleGroup:0):FaceLight::Entries(section);
+            Cycles::AnnotateMembership(entries);
+            auto fontGlyphs=CatalogFontGlyphs(entries,Outfits::Names()+Combat::Names()+Cycles::Names()+FaceLight::Names());
             std::lock_guard lock(viewMutex);
+            functionFontGlyphs=std::move(fontGlyphs);view.inventoryGlyphs=inventoryFontGlyphs+functionFontGlyphs;
             functionItems=std::move(entries);FilterItems();
         }
         void SwitchWheel() {
+            if(CurrentFormMode()!=FormMode::Human)return;
             bool functions,needsDirectory=false;
             {std::lock_guard lock(viewMutex);
-                if(view.functions){if(view.functionSection==FaceLight::Section::Outfits)functionPage=view.page;}else favoritePage=view.page;
+                if(view.functions)RememberFunctionPage();else favoritePage=view.page;
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
-                functions=view.functions=!view.functions;view.functionSection=functionCategory;
-                view.page=functions?(functionCategory==FaceLight::Section::Outfits?functionPage:0):favoritePage;view.x=view.y=0;
+                view.sortingEdit=false;CancelSortDrag();functions=view.functions=!view.functions;openingMemory.Observe(functions,true);view.functionSection=functionCategory;
+                view.page=functions?FunctionPage(functionCategory):favoritePage;view.x=view.y=0;
                 if(!functions) {
                     needsDirectory=!inventoryLoaded || inventoryScope!=Config().allInventory;
                     if(!needsDirectory)FilterItems();
@@ -275,30 +441,38 @@ namespace Wheel {
         }
         void Open(bool functions) {
             std::lock_guard lifecycle(lifecycleMutex);
-            FaceLight::Capture(); // After the previous player-update hook, before pause.
+            openedForm=CurrentFormMode();
+            {std::lock_guard lock(viewMutex);
+                functions=openingMemory.Resolve(functions,Config().rememberLastWheel,openedForm==FormMode::Human);
+            }
+            if(openedForm==FormMode::Human)FaceLight::Capture(); // Before pause.
             const bool scope=Config().allInventory;
             const auto stamp=inventoryChanges.load();
             auto items=functions?std::vector<Item>{}:CollectInventory(scope);
+            auto fontGlyphs=CatalogFontGlyphs(items);
             {
                 std::lock_guard lock(viewMutex);
                 view.faceLightAvailable=FaceLight::Available();
+                view.vampireRestricted=openedForm==FormMode::VampireLord;
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
                 ++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
                 view.visibleCategories={0};
                 inventoryStamp=stamp;nextInventoryRefresh=std::chrono::steady_clock::now();
                 PublishPage({});
+                inventoryFontGlyphs.clear();functionFontGlyphs.clear();
                 view.inventoryGlyphs.clear();view.inventoryWide=scope;view.inventoryLoading=false;
-                view.open = true; view.animateClose=false; view.functions=functions;view.functionSection=functionCategory;view.outfitDialog=0; view.settingsOpen = view.capturingKey = view.saveError = false;
-                view.page = functions?(functionCategory==FaceLight::Section::Outfits?functionPage:0):favoritePage; view.x = view.y = 0;
+                openingMemory.Observe(functions,openedForm==FormMode::Human);
+                view.open = true;  view.sortingEdit=false;CancelSortDrag(); view.animateClose=false; view.functions=functions;view.functionSection=functionCategory;view.outfitDialog=0;view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false; view.settingsOpen = view.capturingKey = view.saveError = false;
+                view.page = functions?FunctionPage(functionCategory):favoritePage; view.x = view.y = 0;
                 padX=padY=0;
-                if(!functions)PublishDirectory(std::move(items),scope);
+                if(!functions)PublishDirectory(std::move(items),std::move(fontGlyphs),scope);
             }
             if(functions)RefreshFunctions();
             TimeControl::BeginSession();SyncWheelTime();
             if(!IsOpen())return;
             RE::UIMessageQueue::GetSingleton()->AddMessage(menuName, RE::UI_MESSAGE_TYPE::kShow, nullptr);
             if(Config().sounds) RE::PlaySound("UIMenuOK");
-            SKSE::log::info("Wheel opened: mode={} scope={} entries={} timeMode={} slowPercent={} padMove={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size(),Config().timeMode,Config().slowPercent,Config().gamepadMoveWhileOpen);
+            SKSE::log::info("Wheel opened: mode={} scope={} entries={} timeMode={} slowPercent={} padMove={} formMode={}",functions?"functions":"inventory",scope?"all":"favorites",inventoryPages.items.size(),Config().timeMode,Config().slowPercent,Config().gamepadMoveWhileOpen,static_cast<int>(openedForm.load()));
         }
         void RequestOpen(bool functions,RE::INPUT_DEVICE device,std::uint32_t code) {
             std::lock_guard lifecycle(lifecycleMutex);
@@ -323,16 +497,16 @@ namespace Wheel {
         void FunctionNavigate(FaceLight::Section section,bool preservePointer=false) {
             {std::lock_guard lock(viewMutex);
                 section=FaceLight::VisibleSection(section,view.faceLightAvailable);
-                if(view.functionSection==FaceLight::Section::Outfits)functionPage=view.page;
-                functionCategory=section==FaceLight::Section::Outfits?section:FaceLight::Section::Lighting;
-                view.functionSection=section;view.page=section==FaceLight::Section::Outfits?functionPage:0;
+                RememberFunctionPage();
+                functionCategory=section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section;
+                view.functionSection=section;view.page=FunctionPage(section);
                 if(!preservePointer)view.x=view.y=0;
             }
             RefreshFunctions();
         }
         void FunctionBack() {
             const auto section=Snapshot().functionSection;
-            FunctionNavigate(section==FaceLight::Section::Followers?FaceLight::Section::Lighting:FaceLight::Section::Outfits);
+            FunctionNavigate(section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:FaceLight::Section::Outfits);
         }
         void ChangeCategory(int direction) {
             const auto current=Snapshot();
@@ -345,7 +519,7 @@ namespace Wheel {
             if(!inventoryLoaded || view.inventoryLoading)return;
             const auto category=CategoryVisibility(inventoryPages.visible,Config().hideEmptyCategories).Move(view.category,direction);
             if(category==view.category)return; // One type (or no items) preserves its page.
-            view.category = category;
+            view.sortingEdit=false;CancelSortDrag();view.category = category;
             view.page = 0; // Keep the pointer on the same sector when changing type.
             FilterItems();
         }
@@ -359,24 +533,48 @@ namespace Wheel {
                 ItemCount(view),pages,previous+1,next+1);
             if(next==previous)return;
             view.page = next;
-            view.x = view.y = 0;
+            if(view.sortDrag.held)view.sortDrag.Page();
+            else view.x = view.y = 0;
             FilterItems();
         }
-        void OutfitDialog(int mode,std::uint32_t id,const std::string& name) {
+        void OutfitDialog(int mode,std::uint32_t id,const std::string& name,bool combat=false) {
             if(retainedAction)return;
-            {std::lock_guard lock(viewMutex);view.outfitDialog=mode;view.outfitId=id;view.outfitName.Set(name);view.x=view.y=0;}
+            {std::lock_guard lock(viewMutex);view.outfitDialog=mode;view.combatDialog=combat;view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false;view.outfitId=id;view.outfitName.Set(name);view.x=view.y=0;}
             SyncWheelTime();
         }
         void EndOutfitDialog() {
             if(Snapshot().outfitDialog==1 || Snapshot().outfitDialog==2)TextBridge::Reset();
-            {std::lock_guard lock(viewMutex);view.outfitDialog=0;view.x=view.y=0;}
+            {std::lock_guard lock(viewMutex);view.outfitDialog=0;view.combatDialog=view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false;view.x=view.y=0;}
             SyncWheelTime();RefreshFunctions();
         }
+        void CycleDialog(int mode,std::uint32_t group,const std::string& name,std::uint32_t member=0) {
+            OutfitDialog(mode,group,name);const auto binding=Cycles::Binding(group);
+            std::lock_guard lock(viewMutex);view.cycleDialog=true;view.cycleMemberDialog=member!=0;
+            if(view.cycleGroup!=group)cycleMemberPage=0;
+            view.cycleGroup=group;view.cycleMember=member;view.cycleBinding=binding;
+        }
+        void QueueCycleCapture(std::uint32_t group,std::uint32_t preset=0) {
+            const auto current=Snapshot();if(!current.open)return;
+            Item item;item.action=ActionKind::CycleCapture;item.actionId=group;item.actionIndex=preset;
+            const bool paused=current.config.timeMode==0;
+            {std::lock_guard lock(actionMutex);pendingAction=PendingAction{item,false,epoch.load(),std::chrono::steady_clock::now()+std::chrono::seconds(2),true,openSerial.load(),paused};}
+            retainedAction=true;retainedKeepsPause=paused;retainedSubmitted=false;SyncWheelTime();
+        }
         void Activate(bool left) {
+            if(!ValidPlayer()) {Cancel();return;}
             std::lock_guard lifecycle(lifecycleMutex);
-            if(HasPendingAction() || retainedAction || Outfits::Busy())return;
+            if(HasPendingAction() || retainedAction || Outfits::Busy() || Combat::Busy())return;
             const auto current = Snapshot();
-            const int slot = WheelSlot(current.x, current.y);
+            if(current.sortingEdit){
+                if(current.sortDrag.held)return;
+                const int target=WheelSlot(current.x,current.y,Style(current.config).layout);
+                const int local=PageItemIndex(current,target);
+                if(target>=0 && local>=0 && local<static_cast<int>(current.items.size())) {
+                    SelectSortedItem();MoveSortedItem(left?1:-1,true);
+                }
+                return;
+            }
+            const int slot = WheelSlot(current.x, current.y,Style(current.config).layout);
             const int index = PageItemIndex(current,slot);
             if(current.inventoryLoading && !current.functions)return;
             if (slot < 0 || index < 0 || index >= static_cast<int>(current.items.size())) {
@@ -384,6 +582,7 @@ namespace Wheel {
                 return;
             }
             const auto selected = current.items[index];
+            if(!CurrentActionAllowed(selected))return;
             if(current.functions)SKSE::log::info("Function click: action={} preset={} usable={} equipped={} right={}",static_cast<int>(selected.action),selected.actionId,selected.usable,selected.equipped,left);
             if(selected.action==ActionKind::FunctionBack){FunctionBack();return;}
             if(selected.action==ActionKind::FaceLightMenu || selected.action==ActionKind::FaceLightFollowers) {
@@ -392,51 +591,99 @@ namespace Wheel {
                 return;
             }
             if(selected.action==ActionKind::SaveOutfit){OutfitDialog(1,0,Tr(Config(),"outfitDefault"));return;}
+            if(selected.action==ActionKind::SaveCombat){OutfitDialog(1,0,Tr(Config(),"combatDefault"),true);return;}
+            if(selected.action==ActionKind::CycleCapture){QueueCycleCapture(selected.actionId);return;}
             if(selected.action==ActionKind::ImportOutfits){Outfits::Import();RefreshFunctions();return;}
             if(selected.action==ActionKind::Outfit && left){OutfitDialog(3,selected.actionId,selected.name);return;}
+            if(selected.action==ActionKind::Combat && left){OutfitDialog(3,selected.actionId,selected.name,true);return;}
+            if((selected.action==ActionKind::Cycle || selected.action==ActionKind::CycleMember) && left) {
+                CycleDialog(3,selected.actionId,selected.name,selected.action==ActionKind::CycleMember?selected.actionIndex:0);return;
+            }
             if (!selected.usable) {
-                RE::SendHUDMessage::ShowHUDMessage((selected.action==ActionKind::FaceLightCommand?selected.detail:Tr(Config(),selected.action==ActionKind::Outfit?"outfitMissing":"unsupported")).c_str());
+                RE::SendHUDMessage::ShowHUDMessage((selected.action==ActionKind::Cycle?Tr(Config(),"cycleEmpty"):selected.action==ActionKind::FaceLightCommand || selected.action==ActionKind::Combat || selected.action==ActionKind::CycleMember?selected.detail:Tr(Config(),selected.action==ActionKind::Outfit?"outfitMissing":"unsupported")).c_str());
                 return;
             }
             // Outfit changes close the overlay so the player can observe the full transition.
-            const bool keep=selected.action!=ActionKind::Outfit && KeepWheelAfterUse(current.config.keepOpen,selected.action==ActionKind::Favorite &&
-                (selected.category==Category::Potions || selected.category==Category::Food));
+            const bool consumable=selected.action==ActionKind::Favorite && ConsumableCategory(selected.category);
+            const bool keep=selected.action!=ActionKind::Outfit && selected.action!=ActionKind::Combat && selected.action!=ActionKind::Cycle && selected.action!=ActionKind::CycleMember && KeepWheelAfterUse(current.config.keepOpen,consumable);
+            const bool keepPaused=KeepPausedForUse(keep,selected.action==ActionKind::Favorite,consumable,current.config.timeMode);
             {
                 std::lock_guard lock(actionMutex);
-                pendingAction = PendingAction{selected, left, epoch.load(), std::chrono::steady_clock::now() + std::chrono::seconds(2),keep,openSerial.load()};
+                pendingAction = PendingAction{selected, left, epoch.load(), std::chrono::steady_clock::now() + std::chrono::seconds(2),keep,openSerial.load(),keepPaused};
             }
             if(keep) {
-                retainedAction=true;retainedSubmitted=false;SyncWheelTime();
+                retainedKeepsPause=keepPaused;retainedAction=true;retainedSubmitted=false;SyncWheelTime();
             }else Cancel(true);
         }
         void BindQuickSlot(int slot) {
+            if(CurrentFormMode()!=FormMode::Human)return;
             const auto current=Snapshot();
-            const int radial=WheelSlot(current.x,current.y),index=PageItemIndex(current,radial);
-            if(current.functions || current.settingsOpen || current.outfitDialog || radial<0 || index<0 ||
+            if(current.sortingEdit)return;
+            const int radial=WheelSlot(current.x,current.y,Style(current.config).layout),index=PageItemIndex(current,radial);
+            if(current.settingsOpen || current.outfitDialog || radial<0 || index<0 ||
                 index>=static_cast<int>(current.items.size()) || current.inventoryLoading || !ValidQuickSlot(slot))return;
             const auto selected=current.items[index];
+            const bool combat=selected.action==ActionKind::Combat;
+            if(current.functions && !combat)return;
             if(!selected.favorited){RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),"quickSlotNeedsFavorite").c_str());return;}
             const auto generation=epoch.load(),serial=openSerial.load();
-            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected,slot,generation,serial] {
+            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected,slot,generation,serial,combat] {
+                std::lock_guard lifecycle(lifecycleMutex);
                 const auto now=Snapshot();
-                if(generation!=epoch.load() || serial!=openSerial.load() || !now.open || now.functions ||
-                    now.settingsOpen || now.outfitDialog || !Focused() || !ValidPlayer() || BlockedMenu())return;
+                if(generation!=epoch.load() || serial!=openSerial.load() || !now.open || now.functions!=combat ||
+                    now.settingsOpen || now.outfitDialog || !Focused() || !ValidPlayer() || BlockedMenu() ||
+                    HasPendingAction() || Outfits::Busy() || Combat::Busy())return;
                 int next=-1;
+                if(combat) {
+                    if(now.functionSection!=FaceLight::Section::Combat || !Combat::BindQuickSlot(selected.actionId,slot,&next))return;
+                    if(next>=0) {
+                        std::lock_guard lock(viewMutex);
+                        for(auto& item:inventoryPages.items)if(item.quickSlot==slot)SetQuickSlotSnapshot(item,-1);
+                    }
+                    RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),next<0?"combatQuickUnbound":"combatQuickBound").c_str());
+                    RefreshFunctions();return;
+                }
                 if(!BindFavoriteQuickSlot(selected,slot,&next))return;
+                Combat::ClearQuickSlot(slot);
                 std::lock_guard lock(viewMutex);
                 if(generation!=epoch.load() || serial!=openSerial.load() || !view.open || view.functions)return;
                 // Preserve expensive item-info snapshots and cursor/category state.
-                for(auto& item:inventoryPages.items) {
-                    item.quickSlot=ReassignedQuickSlot(item.quickSlot,item.key==selected.key,slot,next);
+                for(auto* catalog:{&inventoryPages.items,&unsortedItems})for(auto& item:*catalog) {
+                    SetQuickSlotSnapshot(item,ReassignedQuickSlot(item.quickSlot,item.key==selected.key,slot,next));
                 }
                 FilterItems();
             });
+        }
+        bool TryCombatQuickSlot(int slot,bool wheelEntrance,int modifiers) {
+            if(CurrentFormMode()!=FormMode::Human)return false;
+            std::lock_guard lifecycle(lifecycleMutex);
+            if(!ValidQuickSlot(slot) || !Combat::CombatQuickSlotMayRun(IsOpen(),closing,openQueued,
+                OpenBlockReason()!=nullptr,modifiers,wheelEntrance))return false;
+            const auto id=Combat::PresetForQuickSlot(slot);if(!id)return false;
+            // A later SkyUI/vanilla binding owns its native event. Detect only
+            // on a fresh shortcut press, not by scanning inventory every frame.
+            if(RouteQuickSlot(id,FavoriteQuickSlotOccupied(slot))==QuickSlotRoute::Native) {
+                const auto generation=epoch.load();
+                if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([slot,id,generation] {
+                    std::lock_guard lifecycle(lifecycleMutex);
+                    if(generation==epoch.load() && FavoriteQuickSlotOccupied(slot))Combat::ClearQuickSlot(slot,id);
+                });
+                SKSE::log::info("Combat quick slot yielded to later native binding: slot={} preset={}",slot+1,id);
+                return false;
+            }
+            Item item;item.action=ActionKind::Combat;item.actionId=id;
+            {
+                std::lock_guard lock(actionMutex);
+                pendingAction=PendingAction{item,false,epoch.load(),std::chrono::steady_clock::now()+std::chrono::seconds(2),false,openSerial.load(),false};
+            }
+            SKSE::log::info("Combat quick slot activated: slot={} preset={}",slot+1,id);
+            return true;
         }
         void PumpDetails() {
             const auto serial=openSerial.load();
             if(hoverSerial!=serial){hoverSerial=serial;hoverKey.reset();}
             const auto current=Snapshot();
-            const int radial=WheelSlot(current.x,current.y),index=PageItemIndex(current,radial);
+            const int radial=WheelSlot(current.x,current.y,Style(current.config).layout),index=PageItemIndex(current,radial);
             if(!current.open || current.functions || current.settingsOpen || current.outfitDialog || current.inventoryLoading ||
                 radial<0 || index<0 || index>=static_cast<int>(current.items.size())){hoverKey.reset();return;}
             const auto& item=current.items[index];
@@ -453,7 +700,7 @@ namespace Wheel {
                 if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([selected=item,catalogIndex,generation,serial,revision,failed] {
                     RunQueuedTask(detailTaskQueued,[&] {
                         auto stillSelected=[&] {
-                            const auto v=Snapshot();const int slot=WheelSlot(v.x,v.y),i=PageItemIndex(v,slot);
+                            const auto v=Snapshot();const int slot=WheelSlot(v.x,v.y,Style(v.config).layout),i=PageItemIndex(v,slot);
                             return generation==epoch.load() && serial==openSerial.load() && revision==directoryRevision.load() &&
                                 v.open && !v.functions && !v.settingsOpen && !v.outfitDialog && slot>=0 &&
                                 i>=0 && i<static_cast<int>(v.items.size()) && v.items[i].key==selected.key;
@@ -482,18 +729,22 @@ namespace Wheel {
             std::lock_guard lock(actionMutex);
             if(!pendingAction || ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand)!=executor)return {};
             auto ui=RE::UI::GetSingleton();
+            const auto guard=ui?ui->GetMenu(pauseMenuName):nullptr;
+            const bool onlyWheelPause=ui && OnlyWheelPause(ui->IsMenuOpen(pauseMenuName),
+                guard && guard->PausesGame(),ui->numPausesGame);
             const auto decision=DecideRetainedActionOn(executor,
                 ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand),
                 pendingAction->generation,epoch.load(),
-                ui && ValidPlayer() && Focused() && !BlockedMenu(),closing || (!pendingAction->retained && TimeControl::Active()),
+                ui && ValidPlayer() && Focused() && !BlockedMenu() && pendingAction->formMode==CurrentFormMode() &&
+                    CurrentActionAllowed(pendingAction->item),closing || (!pendingAction->retained && TimeControl::Active()),
                 ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)),ui && ui->GameIsPaused(),
                 std::chrono::steady_clock::now()>=pendingAction->deadline,
-                pendingAction->retained,pendingAction->serial==openSerial.load(),IsOpen());
+                pendingAction->retained,pendingAction->serial==openSerial.load(),IsOpen(),pendingAction->keepPaused,onlyWheelPause);
             if(decision==ActionDecision::Wait)return {};
             auto submit=decision==ActionDecision::Submit?std::move(pendingAction):std::optional<PendingAction>{};
             if(decision==ActionDecision::Discard) {
                 SKSE::log::info("Pending action canceled: state changed or close timed out");
-                retainedAction=false;retainedSubmitted=false;
+                retainedAction=false;retainedKeepsPause=false;retainedSubmitted=false;
             }
             pendingAction.reset();return submit;
         }
@@ -501,7 +752,7 @@ namespace Wheel {
             bool taskAction;
             {std::lock_guard lock(actionMutex);taskAction=pendingAction &&
                 ExecutorFor(pendingAction->item.action==ActionKind::FaceLightCommand)==ActionExecutor::TaskQueue;}
-            if ((!taskAction && !Outfits::Busy()) || actionTaskQueued.exchange(true)) return;
+            if ((!taskAction && !Outfits::Busy() && !Combat::Busy()) || actionTaskQueued.exchange(true)) return;
             const auto generation=epoch.load(),serial=openSerial.load();
             auto failed=[generation,serial](const char* error){FailedTask(generation,serial,"action",error,true);};
             // Favorites and outfit jobs retain their existing SKSE task path.
@@ -513,12 +764,19 @@ namespace Wheel {
                         auto submit=TakeAction(ActionExecutor::TaskQueue);
                         if (submit) {
                             if(submit->item.action==ActionKind::Outfit){outfitGeneration=submit->generation;Outfits::Apply(submit->item.actionId);}
+                            else if(submit->item.action==ActionKind::Combat){outfitGeneration=submit->generation;Combat::Apply(submit->item.actionId);}
+                            else if(submit->item.action==ActionKind::Cycle || submit->item.action==ActionKind::CycleMember){outfitGeneration=submit->generation;Cycles::Apply(submit->item.actionId,submit->item.actionIndex);}
+                            else if(submit->item.action==ActionKind::CycleCapture){Cycles::Append(submit->item.actionId,submit->item.actionIndex);RefreshFunctions();}
                             else UseFavorite(submit->item, submit->left);
                             CompleteRetainedAction(*submit);
                         }
                         if(!submit && Outfits::Busy()) {
                             auto ui=RE::UI::GetSingleton();
-                            Outfits::Tick(outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
+                            Outfits::Tick(CurrentFormMode()==FormMode::Human && outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
+                        }
+                        if(!submit && Combat::Busy()) {
+                            auto ui=RE::UI::GetSingleton();
+                            Combat::Tick(CurrentFormMode()==FormMode::Human && outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
                         }
                     },failed);
                 });else actionTaskQueued=false;
@@ -528,9 +786,9 @@ namespace Wheel {
             std::lock_guard lifecycle(lifecycleMutex);
             if(!retainedAction || !retainedSubmitted || !IsOpen())return;
             const double elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-retainedAt).count();
-            if(!RetainedActionSettled(HasPendingAction(),Outfits::Busy(),elapsed,playerUpdates.load()-retainedUpdate))return;
-            retainedAction=false;retainedSubmitted=false;
-            FaceLight::Capture();
+            if(!RetainedActionSettled(HasPendingAction(),Outfits::Busy() || Combat::Busy(),elapsed,playerUpdates.load()-retainedUpdate))return;
+            retainedAction=false;retainedKeepsPause=false;retainedSubmitted=false;
+            if(CurrentFormMode()==FormMode::Human)FaceLight::Capture();
             const auto current=Snapshot();
             if(current.functions)RefreshFunctions();
             // Coalesce one post-action inventory refresh, also in pause mode.
@@ -561,6 +819,38 @@ namespace Wheel {
             playerUpdateInstalled=true;
             SKSE::log::info("Wheel player-update hook installed after DataLoaded");
         }
+        bool StartupMenuOpen(RE::UI* ui) {
+            return !ui || ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) ||
+                ui->IsMenuOpen(RE::Console::MENU_NAME) || ui->IsMenuOpen(RE::RaceSexMenu::MENU_NAME);
+        }
+        void ProbeInitialSession() {
+            // Input dispatch runs even on quiet frames. Only the missing initial
+            // session case schedules work; never inspect actor/cell state here.
+            if(!wheelInstalled || !gameSession.AwaitingWorld() || StartupMenuOpen(RE::UI::GetSingleton()))return;
+            auto tasks=SKSE::GetTaskInterface();
+            if(!tasks || sessionProbeQueued.exchange(true))return;
+            const auto generation=epoch.load();
+            auto failed=[](const char* error){SKSE::log::error("Initial game-session probe failed: {}",error);};
+            ScheduleQueuedTask(sessionProbeQueued,[&] {
+                tasks->AddTask([generation,failed] {
+                    RunQueuedTask(sessionProbeQueued,[&] {
+                        std::lock_guard lifecycle(lifecycleMutex);
+                        if(!gameSession.AwaitingWorld() || generation!=epoch.load())return;
+                        auto ui=RE::UI::GetSingleton();auto player=RE::PlayerCharacter::GetSingleton();
+                        auto cell=player?player->GetParentCell():nullptr;
+                        const StartupWorld world{wheelInstalled.load(),ui!=nullptr,StartupMenuOpen(ui),
+                            player!=nullptr,player && player->Get3D(),cell && cell->IsAttached(),
+                            !player || player->GetPlayerFlags().isLoading};
+                        if(!gameSession.CanBootstrap(world,generation,epoch.load()))return;
+                        SKSE::log::info("Game session recovered: source=attached-player-world startup=implicit-v1 cell={:08X} thread={}",
+                            cell->GetFormID(),GetCurrentThreadId());
+                        // Installs the player update hook too, outside every
+                        // plugin's DataLoaded callback, just like a normal start.
+                        SetGameActive(true);
+                    },failed);
+                });
+            },failed);
+        }
         std::uint32_t FavoritesScanCode(RE::INPUT_DEVICE device=RE::INPUT_DEVICE::kKeyboard) {
             auto controls = RE::ControlMap::GetSingleton();
             return controls ? controls->GetMappedKey("Favorites", device, RE::UserEvents::INPUT_CONTEXT_ID::kGameplay) : 0xFFFFFFFF;
@@ -579,16 +869,28 @@ namespace Wheel {
             const auto key=SKSE::InputMap::GamepadMaskToKeycode(mapped);
             return key>=266 && key<=281?static_cast<int>(key):-1;
         }
-        bool ReplacedEntrance(const RE::ButtonEvent* button) {
+        std::uint16_t NativeGamepadModifiers() {
+            RE::ControlMap::UserEventMapping mapping{};
+            auto controls=RE::ControlMap::GetSingleton();
+            return controls && controls->GetMappingFromEventName("Favorites",RE::UserEvents::INPUT_CONTEXT_ID::kGameplay,
+                RE::INPUT_DEVICE::kGamepad,mapping)?ControllerModifierMask(mapping.modifier):0;
+        }
+        std::uint16_t OpeningControllerHeld(ControllerSample sample) {
+            const auto config=Config();
+            return ControllerOpeningHeld(padChords.Mask(),sample,EffectiveGamepadKey(config),
+                NativeGamepadModifiers() | ControllerKeyBit(config.gamepadModifier) | ControllerKeyBit(config.gamepadActionModifier));
+        }
+        bool ReplacedEntrance(const RE::ButtonEvent* button,ControllerSample sample) {
             const auto config=Config();
             if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard)
                 return button->GetIDCode()==FavoritesScanCode() && static_cast<int>(button->GetIDCode())==EffectiveKeyboardKey(config);
             if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad)
                 return button->GetIDCode()==FavoritesScanCode(RE::INPUT_DEVICE::kGamepad) &&
-                    static_cast<int>(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()))==EffectiveGamepadKey(config);
+                    static_cast<int>(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()))==EffectiveGamepadKey(config) &&
+                    (OpeningControllerHeld(sample) & NativeGamepadModifiers())==NativeGamepadModifiers();
             return false;
         }
-        Opening ToggleKey(const RE::ButtonEvent* button) {
+        Opening ToggleKey(const RE::ButtonEvent* button,ControllerSample sample) {
             const auto config=Config();
             if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
                 const int favorite=EffectiveKeyboardKey(config);
@@ -597,18 +899,51 @@ namespace Wheel {
             }
             if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad) {
                 const int favorite=EffectiveGamepadKey(config);
-                auto held=[&](int key){return key<0 || (key!=favorite && key>=266 && key<=281 && padHeld[key-266]);};
-                return GamepadOpening(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()),favorite,
-                    held(config.gamepadModifier),held(config.gamepadActionModifier));
+                return ResolvedGamepadOpening(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()),favorite,
+                    OpeningControllerHeld(sample),NativeGamepadModifiers(),config.gamepadHotkey<0,
+                    config.gamepadModifier,config.gamepadActionModifier);
             }
             return Opening::None;
         }
 
+        bool CycleBindingConflict(int key,int modifiers) {
+            const auto config=Config();const int favorite=EffectiveKeyboardKey(config);
+            return Cycles::EntranceConflict(key,modifiers,favorite,config.hotkeyModifier,
+                config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier,config.switchKey);
+        }
+        bool TryCycleShortcut(int key,int modifiers,bool entrance) {
+            if(CurrentFormMode()!=FormMode::Human)return false;
+            const auto current=Snapshot();
+            if(entrance || current.settingsOpen || current.outfitDialog || closing || openQueued ||
+                !Config().enabled || !gameSession.Active() || !Focused() || !ValidPlayer() || BlockedMenu())return false;
+            const auto id=Cycles::Match(key,modifiers,current.open);if(!id)return false;
+            if(!current.open) {
+                auto ui=RE::UI::GetSingleton();if(!ui || ui->GameIsPaused())return false;
+                if(const auto reason=OpenBlockReason();reason && std::string_view(reason)!="preset changing" && std::string_view(reason)!="item action pending")return false;
+            }
+            if(HasPendingAction() || retainedAction || Outfits::Busy() || Combat::Busy())return true;
+            if(current.open) {
+                const int slot=WheelSlot(current.x,current.y,Style(current.config).layout),index=PageItemIndex(current,slot);
+                std::uint32_t preset=0;
+                if(slot>=0 && index>=0 && index<int(current.items.size())) {
+                    const auto& item=current.items[index];
+                    if(item.action==ActionKind::Combat)preset=item.actionId;
+                    else if(item.action==ActionKind::CycleMember)preset=item.actionIndex;
+                }
+                QueueCycleCapture(id,preset);
+            }else {
+                Item item;item.action=ActionKind::Cycle;item.actionId=id;
+                std::lock_guard lock(actionMutex);
+                pendingAction=PendingAction{item,false,epoch.load(),std::chrono::steady_clock::now()+std::chrono::seconds(2),false,openSerial.load(),false};
+            }
+            return true;
+        }
         void EnterSettings() {
+            if(CurrentFormMode()!=FormMode::Human)return;
             if(retainedAction)return;
             BeginSettings();
             {std::lock_guard lock(viewMutex);
-                view.settingsOpen=true; view.capturingKey=false; view.settingsTab=0; view.saveError=false;
+                view.sortingEdit=false;CancelSortDrag();view.settingsOpen=true; view.capturingKey=false; view.settingsTab=0; view.saveError=false;
                 view.x=view.y=0;padX=padY=0;}
             SyncWheelTime();
         }
@@ -663,6 +998,8 @@ namespace Wheel {
             case 22: config.keepOpen=!config.keepOpen; break;
             case 23: config.gamepadMoveWhileOpen=!config.gamepadMoveWhileOpen; break;
             case 24: config.hideEmptyCategories=!config.hideEmptyCategories; break;
+            case 25: config.swapMouseHands=!config.swapMouseHands; break;
+            case 26: config.rememberLastWheel=!config.rememberLastWheel; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -691,11 +1028,17 @@ namespace Wheel {
 
         void OutfitAccept() {
             const auto current=Snapshot();bool ok=false;
+            if(current.cycleDialog) {
+                if(current.outfitDialog==2)ok=Cycles::Rename(current.cycleGroup,current.outfitName.text);
+                else if(current.outfitDialog==5)ok=current.cycleMemberDialog?Cycles::Remove(current.cycleGroup,current.cycleMember):Cycles::Clear(current.cycleGroup);
+                else {EndOutfitDialog();return;}
+                if(ok)EndOutfitDialog();return;
+            }
             switch(current.outfitDialog) {
-            case 1:ok=Outfits::Capture(current.outfitName.text);break;
-            case 2:ok=Outfits::Rename(current.outfitId,current.outfitName.text);break;
-            case 4:ok=Outfits::Capture(current.outfitName.text,current.outfitId);break;
-            case 5:ok=Outfits::Remove(current.outfitId);break;
+            case 1:ok=current.combatDialog?Combat::Capture(current.outfitName.text):Outfits::Capture(current.outfitName.text);break;
+            case 2:ok=current.combatDialog?Combat::Rename(current.outfitId,current.outfitName.text):Outfits::Rename(current.outfitId,current.outfitName.text);break;
+            case 4:ok=current.combatDialog?Combat::Capture(current.outfitName.text,current.outfitId):Outfits::Capture(current.outfitName.text,current.outfitId);break;
+            case 5:ok=current.combatDialog?Combat::Remove(current.outfitId):Outfits::Remove(current.outfitId);break;
             default:EndOutfitDialog();return;
             }
             if(ok)EndOutfitDialog();
@@ -709,10 +1052,23 @@ namespace Wheel {
                 std::lock_guard lock(viewMutex);view.outfitName.Place(at,(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0);return;
             }
             if(current.outfitDialog!=3)return;
-            if(outfitNameButton.Contains(x,y))OutfitDialog(2,current.outfitId,current.outfitName.text);
-            else if(outfitOverwriteButton.Contains(x,y))OutfitDialog(4,current.outfitId,current.outfitName.text);
-            else if(outfitDeleteButton.Contains(x,y))OutfitDialog(5,current.outfitId,current.outfitName.text);
-            else if(outfitExportButton.Contains(x,y))Outfits::Export(current.outfitId);
+            if(current.cycleDialog) {
+                if(current.cycleMemberDialog) {
+                    if(outfitOverwriteButton.Contains(x,y)){Cycles::Move(current.cycleGroup,current.cycleMember,-1);RefreshFunctions();}
+                    else if(outfitDeleteButton.Contains(x,y)){Cycles::Move(current.cycleGroup,current.cycleMember,1);RefreshFunctions();}
+                    else if(outfitExportButton.Contains(x,y))CycleDialog(5,current.cycleGroup,current.outfitName.text,current.cycleMember);
+                }else {
+                    if(outfitNameButton.Contains(x,y))CycleDialog(2,current.cycleGroup,current.outfitName.text);
+                    else if(outfitOverwriteButton.Contains(x,y)){std::lock_guard lock(viewMutex);view.cycleCaptureKey=true;}
+                    else if(outfitDeleteButton.Contains(x,y))CycleDialog(5,current.cycleGroup,current.outfitName.text);
+                    else if(outfitExportButton.Contains(x,y)){EndOutfitDialog();FunctionNavigate(FaceLight::Section::CycleMembers);}
+                }
+                return;
+            }
+            if(outfitNameButton.Contains(x,y))OutfitDialog(2,current.outfitId,current.outfitName.text,current.combatDialog);
+            else if(outfitOverwriteButton.Contains(x,y))OutfitDialog(4,current.outfitId,current.outfitName.text,current.combatDialog);
+            else if(outfitDeleteButton.Contains(x,y))OutfitDialog(5,current.outfitId,current.outfitName.text,current.combatDialog);
+            else if(!current.combatDialog && outfitExportButton.Contains(x,y))Outfits::Export(current.outfitId);
         }
         void NameKey(std::uint32_t code,bool fallback) {
             std::lock_guard lock(viewMutex);
@@ -758,6 +1114,7 @@ namespace Wheel {
         }
         void InputHook(RE::BSTEventSource<RE::InputEvent*>* source, RE::InputEvent** events) {
             if (dispatchCount.fetch_add(1) == 0) SKSE::log::info("Input dispatch active (first callback)");
+            ProbeInitialSession();
             auto ui=RE::UI::GetSingleton();
             bool captureBatch = IsOpen() || closing || openQueued ||
                 (ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)));
@@ -767,17 +1124,20 @@ namespace Wheel {
             bool characterBatch=false;
             // Resolve chords from the whole physical batch before mutating events.
             // The main button may precede its modifier in the same input poll.
+            ControllerSample controllerSample;
             if(auto manager=RE::BSInputDeviceManager::GetSingleton()) {
                 if(auto keyboard=manager->GetKeyboard())
                     for(unsigned i=0;i<256;++i)keyboardHeld[i]=(keyboard->GetRuntimeData().curState[i]&0x80)!=0;
-                std::fill_n(padHeld,16,false);
-                if(auto pad=manager->GetGamepad();pad && pad->IsEnabled()) {
-                    const auto& buttons=static_cast<RE::BSInputDevice*>(pad)->GetRuntimeData().deviceButtons;
-                    for(int i=0;i<16;++i) {
-                        const auto at=buttons.find(SKSE::InputMap::GamepadKeycodeToMask(i+266));
-                        padHeld[i]=at!=buttons.end() && at->second && at->second->heldDownSecs>0;
-                    }
-                } else {movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
+                auto pad=manager->GetGamepad();
+                const bool connected=pad && pad->IsEnabled();
+                padChords.Attach(connected?pad:nullptr);
+                // Use the native delegate only after checking its runtime type.
+                // Other device providers keep the existing event-only path.
+                if(connected)if(auto native=skyrim_cast<RE::BSWin32GamepadDevice*>(pad)) {
+                    const auto state=native->GetRuntimeData().currentState.gamepad;
+                    controllerSample={true,ControllerPacketButtons(state.buttons,state.leftTrigger,state.rightTrigger)};
+                }
+                if(!connected){movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();std::lock_guard lock(viewMutex);padX=padY=0;}
             }
             for(auto event=events?*events:nullptr;event;event=event->next) {
                 if(auto c=event->AsCharEvent();c && c->keyCode>=32)characterBatch=true;
@@ -785,7 +1145,15 @@ namespace Wheel {
                     if(b->GetDevice()==RE::INPUT_DEVICE::kKeyboard && b->GetIDCode()<256)keyboardHeld[b->GetIDCode()]=b->IsPressed();
                     if(b->GetDevice()==RE::INPUT_DEVICE::kGamepad) {
                         const auto key=SKSE::InputMap::GamepadMaskToKeycode(b->GetIDCode());
-                        if(key>=266 && key<=281)padHeld[key-266]=b->IsPressed();
+                        const bool wasHeld=padChords.Held(static_cast<int>(key));
+                        padChords.Observe(key,b->IsPressed());
+                        if(wasHeld!=padChords.Held(static_cast<int>(key))) {
+                            const auto config=Config();
+                            if(static_cast<int>(key)==config.gamepadModifier || static_cast<int>(key)==config.gamepadActionModifier ||
+                                (NativeGamepadModifiers() & ControllerKeyBit(static_cast<int>(key))))
+                                SKSE::log::info("Controller modifier: raw={} key={} pressed={} nativeDown={} duration={} state=events-v1",
+                                    b->GetIDCode(),key,b->IsPressed(),b->IsDown(),b->HeldDuration());
+                        }
                     }
                 }
                 if(auto stick=event->AsThumbstickEvent();stick && IsOpen() &&
@@ -793,7 +1161,10 @@ namespace Wheel {
                     std::lock_guard lock(viewMutex);padX=stick->xValue;padY=stick->yValue;
                     if(std::hypot(padX,padY)>.2f) {
                         view.gamepad=true;
-                        if(!view.settingsOpen && !view.outfitDialog)AimStick(view.x,view.y,padX,padY);
+                        if(!view.settingsOpen && !view.outfitDialog) {
+                            AimStick(view.x,view.y,padX,padY);
+                            ClampWheelPointer(view.x,view.y,Style(Config()).layout);
+                        }
                     }
                 }
             }
@@ -823,14 +1194,14 @@ namespace Wheel {
                             nameRepeat=true;nameRepeatAt[code]=button->GetRuntimeData().heldDownSecs+.05f;
                         }
                     }
-                    const auto opening=ToggleKey(button);
+                    const auto opening=ToggleKey(button,controllerSample);
                     const bool toggle = opening!=Opening::None;
                     // Native contextual actions can disable a physical entrance
                     // through custom control groups without disabling all menus.
                     // Yield its whole cycle unchanged while idle; open/closing
                     // wheels still own captured buttons until physical release.
                     const bool yieldEntry=!captureBatch && !inputGate.Swallowed(identity) &&
-                        (toggle || ReplacedEntrance(button)) && !EntryControlsEnabled(button->GetDevice(),code);
+                        (toggle || ReplacedEntrance(button,controllerSample)) && !EntryControlsEnabled(button->GetDevice(),code);
                     if(down && (button->GetDevice()==RE::INPUT_DEVICE::kGamepad || button->GetDevice()==RE::INPUT_DEVICE::kKeyboard || button->GetDevice()==RE::INPUT_DEVICE::kMouse)) {
                         std::lock_guard lock(viewMutex);view.gamepad=pad!=0;
                     }
@@ -844,9 +1215,14 @@ namespace Wheel {
                     }
                     if(down && pad && (toggle || pad==266 || static_cast<int>(pad)==EffectiveGamepadKey(Config()))) {
                         const auto reason=yieldEntry?"entry control group disabled":OpenBlockReason();
-                        SKSE::log::info("Controller entrance: raw={} key={} mapped={} effective={} mode={} open={} blocked='{}'",
-                            code,pad,FavoritesScanCode(RE::INPUT_DEVICE::kGamepad),EffectiveGamepadKey(Config()),
-                            opening==Opening::Actions?"actions":opening==Opening::Favorites?"favorites":"none",IsOpen(),reason?reason:"none");
+                        const auto config=Config();const int favorite=EffectiveGamepadKey(config);
+                        const auto openingMask=OpeningControllerHeld(controllerSample);
+                        auto held=[&](int key){return key<0 || (key!=favorite && (openingMask & ControllerKeyBit(key)));};
+                        SKSE::log::info("Controller entrance: raw={} key={} mapped={} effective={} mode={} open={} blocked='{}' favoriteModifier={} favoriteHeld={} actionModifier={} actionHeld={} heldMask={:04X} nativeRequired={:04X} followNative={} engineAvailable={} engineMask={:04X} openingMask={:04X} event='{}' state=events+engine-v2 binding=native-chord-v1",
+                            code,pad,FavoritesScanCode(RE::INPUT_DEVICE::kGamepad),favorite,
+                            opening==Opening::Actions?"actions":opening==Opening::Favorites?"favorites":"none",IsOpen(),reason?reason:"none",
+                            config.gamepadModifier,held(config.gamepadModifier),config.gamepadActionModifier,held(config.gamepadActionModifier),padChords.Mask(),NativeGamepadModifiers(),config.gamepadHotkey<0,
+                            controllerSample.available,controllerSample.held,openingMask,button->GetUserEvent().c_str());
                     }
                     bool consume = captureBatch || inputGate.Swallowed(identity);
                     const auto current=Snapshot();
@@ -856,16 +1232,42 @@ namespace Wheel {
                     if(naming && nameRepeat && (code==14 || code==211 || code==203 || code==205) && !bridge.composing)NameKey(code,false);
                     const bool bridgeKey=naming && bridge.available && bridge.enabled && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
                         (code==bridge.hotkey || code==29 || code==157 || code==42 || code==54 || (bridge.active && code==57 && (GetAsyncKeyState(VK_CONTROL)&0x8000)));
-                    if(yieldEntry) {
+                    if(up && current.sortDrag.held && button->GetDevice()==RE::INPUT_DEVICE::kMouse && code==0) {
+                        EndSortDrag();consume=true; // Release is owned even though the press is swallowed by InputGate.
+                    } else if(down && current.sortDrag.held &&
+                        ((button->GetDevice()==RE::INPUT_DEVICE::kMouse && code==1) ||
+                        (button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==1))) {
+                        std::lock_guard lock(viewMutex);CancelSortDrag();consume=true;
+                    } else if(yieldEntry) {
                         // Leave the event for the contextual action's handler.
                     } else if(down && openQueued && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && (code==1 || code==15)) {
                         Cancel();
                     } else if(bridgeKey) {
                         // Keep toggle/modifier values intact for Text Bridge regardless of hook order.
                         consume=false;
+                    } else if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && EntryControlsEnabled(button->GetDevice(),code) &&
+                        !current.sortingEdit && !(current.open && !current.functions && !current.vampireRestricted &&
+                            !current.settingsOpen && !current.outfitDialog && !toggle &&
+                            code!=static_cast<unsigned>(Config().switchKey) && SortingShortcut(code,HeldModifiers())>=0) && TryCycleShortcut(static_cast<int>(code),HeldModifiers(),toggle)) {
+                        consume=true;
+                    } else if(down && !current.open && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && HeldModifiers()==0 &&
+                        ValidQuickSlot(QuickSlotFromKey(code,button->GetUserEvent().c_str())) && EntryControlsEnabled(button->GetDevice(),code) &&
+                        TryCombatQuickSlot(QuickSlotFromKey(code,button->GetUserEvent().c_str()),toggle,HeldModifiers())) {
+                        consume=true;
                     } else if(down && current.open && current.outfitDialog && !inputGate.Swallowed(identity)) {
                         if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
-                            if(naming && bridge.composing) { /* IME owns candidate editing/confirmation. */ }
+                            if(current.cycleCaptureKey) {
+                                if(code==1){std::lock_guard lock(viewMutex);view.cycleCaptureKey=false;}
+                                else if(!ModifierBit(code)) {
+                                    const int key=(code==14 || code==211)?-1:static_cast<int>(code),modifiers=key<0?0:HeldModifiers();
+                                    if(CycleBindingConflict(key,modifiers))RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),"cycleConflict").c_str());
+                                    else if(Cycles::Bind(current.cycleGroup,key,modifiers)) {
+                                        const auto binding=Cycles::Binding(current.cycleGroup);
+                                        {std::lock_guard lock(viewMutex);view.cycleCaptureKey=false;view.cycleBinding=binding;}
+                                        RefreshFunctions();
+                                    }
+                                }
+                            }else if(naming && bridge.composing) { /* IME owns candidate editing/confirmation. */ }
                             else if(code==1 || code==15)EndOutfitDialog();
                             else if(code==28)OutfitAccept();
                             else if(naming)NameKey(code,!bridge.active && !characterBatch);
@@ -897,20 +1299,25 @@ namespace Wheel {
                         else if(pad==274 || pad==275){std::lock_guard lock(viewMutex);view.settingsTab=NextSettingsTab(view.settingsTab,pad==275?1:-1);}
                     } else if (down && current.open && !inputGate.Swallowed(identity) &&
                         ((button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==60) || pad==270)) {
-                        EnterSettings(); // Remains reachable even if Favorites itself is bound to F2.
+                        EnterSettings();
+                    } else if(down && current.open && !current.functions && !current.vampireRestricted && !toggle &&
+                        !inputGate.Swallowed(identity) &&
+                        (pad==272 || pad==273 || (button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
+                            code!=static_cast<unsigned>(Config().switchKey) && SortingShortcut(code,HeldModifiers())>=0))) {
+                        ChangeSorting(pad?pad==273:SortingShortcut(code,HeldModifiers())==1);
                     } else if(down && current.open && !inputGate.Swallowed(identity) &&
                         ((button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==static_cast<unsigned>(Config().switchKey)) || pad==279)) {
                         SwitchWheel();
                     } else if (down && !inputGate.Swallowed(identity) && toggle && (!pad || !current.open)) {
                         if (IsOpen() || openQueued) { Cancel(true); consume = captureBatch = true; }
-                        else if (closing || HasPendingAction() || Outfits::Busy()) { consume = true;if(Outfits::Busy())RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),"outfitWorking").c_str()); }
+                        else if (closing || HasPendingAction() || Outfits::Busy() || Combat::Busy()) { consume = true;if(Outfits::Busy() || Combat::Busy())RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),Combat::Busy()?"combatWorking":"outfitWorking").c_str()); }
                         else if (!OpenBlockReason()) { RequestOpen(opening==Opening::Actions,button->GetDevice(),code); consume = captureBatch = true; }
                     } else if (down && IsOpen() && !inputGate.Swallowed(identity)) {
                         if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
                             const int quickSlot=QuickSlotFromKey(code,button->GetUserEvent().c_str());
-                            if(!current.functions && HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
+                            if(HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
                             else switch (code) {
-                            case 1: case 15: if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true); break; // Esc / Tab
+                            case 1: case 15: if(current.functions && (current.functionSection==FaceLight::Section::Followers || current.functionSection==FaceLight::Section::CycleMembers))FunctionBack();else Cancel(true); break; // Esc / Tab
                             case 30: case 203: ChangeCategory(-1); break; // A / left
                             case 32: case 205: ChangeCategory(1); break; // D / right
                             case 17: case 200: ChangePage(-1); break; // W / up
@@ -919,14 +1326,17 @@ namespace Wheel {
                             default: break;
                             }
                         } else if (button->GetDevice() == RE::INPUT_DEVICE::kMouse) {
-                            if (code == 0 || code == 1) Activate(code == 1);
+                            if (code == 0 || code == 1) {
+                                if(current.sortingEdit){if(code==0)BeginSortDrag();else Activate(true);}
+                                else Activate(MouseUsesLeftHand(code,current.config.swapMouseHands,current.functions));
+                            }
                             else if (code == 8) ChangePage(-1);
                             else if (code == 9) ChangePage(1);
                         } else if(pad) {
                             switch(ControllerCommand(pad,current.config.gamepadCategoryButtons)) {
                             case PadWheelCommand::UseRight:Activate(false);break;
                             case PadWheelCommand::UseLeft:Activate(true);break;
-                            case PadWheelCommand::Back:if(current.functions && current.functionSection==FaceLight::Section::Followers)FunctionBack();else Cancel(true);break;
+                            case PadWheelCommand::Back:if(current.functions && (current.functionSection==FaceLight::Section::Followers || current.functionSection==FaceLight::Section::CycleMembers))FunctionBack();else Cancel(true);break;
                             case PadWheelCommand::PreviousCategory:ChangeCategory(-1);break;
                             case PadWheelCommand::NextCategory:ChangeCategory(1);break;
                             case PadWheelCommand::PreviousPage:ChangePage(-1,"up");break;
@@ -934,7 +1344,7 @@ namespace Wheel {
                             default:break;
                             }
                         }
-                    } else if(down && !toggle && ReplacedEntrance(button) && !OpenBlockReason()) {
+                    } else if(down && !toggle && ReplacedEntrance(button,controllerSample) && !OpenBlockReason()) {
                         // A configured modifier is required for the replaced vanilla entrance.
                         // This only owns the mapped entrance, never number / Numpad quick slots.
                         consume=true;
@@ -944,7 +1354,7 @@ namespace Wheel {
                     // A wheel entrance takes priority even if bound to movement.
                     auto controls=RE::ControlMap::GetSingleton();
                     const auto device=button->GetDevice();
-                    const bool movement=!toggle && !ReplacedEntrance(button) && controls &&
+                    const bool movement=!toggle && !ReplacedEntrance(button,controllerSample) && controls &&
                         (device==RE::INPUT_DEVICE::kKeyboard || device==RE::INPUT_DEVICE::kMouse || device==RE::INPUT_DEVICE::kGamepad) &&
                         IsMovementEvent(controls->GetUserEventName(code,button->GetDevice()));
                     const auto decision = inputGate.Filter(identity, pressed, up,
@@ -983,8 +1393,9 @@ namespace Wheel {
                             view.x=std::clamp(view.x+mouse->mouseInputX*sensitivity,-width/(448*scale),width/(448*scale));
                             view.y=std::clamp(view.y+mouse->mouseInputY*sensitivity,-height/(448*scale),height/(448*scale));
                         } else {
-                            MovePointer(view.x,view.y,mouse->mouseInputX*config.sensitivity/250.f,
-                                mouse->mouseInputY*config.sensitivity/250.f);
+                            MoveWheelPointer(view.x,view.y,mouse->mouseInputX*config.sensitivity/250.f,
+                                mouse->mouseInputY*config.sensitivity/250.f,Style(config).layout);
+                            view.sortDrag.Move(view.x,view.y);
                         }
                     }
                     mouse->mouseInputX = mouse->mouseInputY = 0;
@@ -1018,14 +1429,18 @@ namespace Wheel {
             dispatch.Restore();
             if (!Focused()) {
                 inputGate.Reset();movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();shiftHeld[0]=shiftHeld[1]=false;
-                std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
+                std::fill_n(keyboardHeld,256,false);padChords.Reset();
                 std::lock_guard lock(viewMutex);padX=padY=0;
             }
             if(IsOpen())SyncWheelTime();
             PumpAction();
             {const auto current=Snapshot();if(current.open && !current.functions && !current.settingsOpen && !current.outfitDialog) {
-                bool needed;{std::lock_guard lock(viewMutex);needed=!inventoryLoaded;}
-                if(needed)RequestDirectory();
+                bool needed,refresh;
+                {std::lock_guard lock(viewMutex);
+                    needed=DirectoryRequestNeeded(inventoryLoaded,view.inventoryLoading,directoryTaskQueued.load());
+                    refresh=inventoryLoaded;
+                }
+                if(needed)RequestDirectory(refresh);
             }}
             PumpLiveInventory();
             PumpDetails();
@@ -1046,11 +1461,11 @@ namespace Wheel {
                     const auto old=Snapshot();
                     if(old.outfitDialog==1 || old.outfitDialog==2)TextBridge::Reset();
                     TimeControl::EndSession();RequestPause(false);
-                    retainedAction=false;retainedSubmitted=false;
+                    retainedAction=false;retainedKeepsPause=false;retainedSubmitted=false;
                     RevertSettings();
                     std::lock_guard lock(viewMutex);
                     if(view.open) view.animateClose=false;
-                    view.open = false;view.outfitDialog=0; view.settingsOpen=view.capturingKey=false; closing = false;
+                    view.open = false;view.sortingEdit=false;CancelSortDrag();view.outfitDialog=0;view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false; view.settingsOpen=view.capturingKey=false; closing = false;
                     return RE::UI_MESSAGE_RESULTS::kHandled;
                 }
                 if (message.type == RE::UI_MESSAGE_TYPE::kShow) {
@@ -1142,14 +1557,14 @@ namespace Wheel {
     bool IsOpen() { std::lock_guard lock(viewMutex); return view.open; }
     void Cancel(bool effects) {
         std::lock_guard lifecycle(lifecycleMutex);
-        retainedAction=false;retainedSubmitted=false;
+        retainedAction=false;retainedKeepsPause=false;retainedSubmitted=false;
         {std::lock_guard lock(openMutex);++openSerial;openQueued=false;pendingOpen.reset();}
         const auto current=Snapshot();
         if(current.outfitDialog==1 || current.outfitDialog==2)TextBridge::Reset();
         RevertSettings();
         TimeControl::EndSession();RequestPause(false);
         bool wasOpen;
-        { std::lock_guard lock(viewMutex); wasOpen = view.open;if(view.functions){if(view.functionSection==FaceLight::Section::Outfits)functionPage=view.page;}else favoritePage=view.page; view.open = false;view.outfitDialog=0; view.animateClose=effects; view.settingsOpen=view.capturingKey=false; }
+        { std::lock_guard lock(viewMutex); wasOpen = view.open;if(view.functions)RememberFunctionPage();else favoritePage=view.page; view.open = false;view.sortingEdit=false;CancelSortDrag();view.sortingSelectedSlot=-1;sortingSelection.reset();view.outfitDialog=0;view.combatDialog=view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false; view.animateClose=effects; view.settingsOpen=view.capturingKey=false; }
         if (wasOpen) {
             if(effects && Config().sounds) RE::PlaySound("UIMenuCancel");
             closing = true;
@@ -1160,21 +1575,23 @@ namespace Wheel {
         std::lock_guard lifecycle(lifecycleMutex);
         ++epoch;
         Outfits::CancelJob();
+        Combat::CancelJob();
         FaceLight::Clear();
         { std::lock_guard lock(actionMutex); pendingAction.reset(); }
         if(active)InstallPlayerUpdate();
-        gameActive = active;
+        gameSession.Notify(active);
         Cancel();
-        favoritePage=functionPage=0;shiftHeld[0]=shiftHeld[1]=false;
-        inputGate.Reset();movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();std::fill_n(keyboardHeld,256,false);std::fill_n(padHeld,16,false);
-        { std::lock_guard lock(viewMutex);++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
+        favoritePage=functionPage=combatPage=cyclePage=cycleMemberPage=0;shiftHeld[0]=shiftHeld[1]=false;
+        inputGate.Reset();movementStick.Reset();lookStick.Reset(AppliedGamepadMoveWhileOpen());controllerPages.Reset();controllerTriggers.Reset();std::fill_n(keyboardHeld,256,false);padChords.Reset();
+        { std::lock_guard lock(viewMutex);openingMemory.Reset();++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
             view.items.clear();view.visibleCategories={0};view.totalItems=0;view.inventoryLoading=false;padX=padY=0; }
         SKSE::log::info("Game active={}", active);
         if (active) {
             const auto config=Config();const auto favorite=EffectiveKeyboardKey(config);
-            SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={} effectiveFavorite={} favoriteModifiers={} effectiveAction={} actionModifiers={}",
+            SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={} effectiveFavorite={} favoriteModifiers={} effectiveAction={} actionModifiers={} gamepadMain={} gamepadModifier={} gamepadActionModifier={} controllerState=events+engine-v2",
                 dispatchCount.load(),FavoritesScanCode(),config.hotkey,favorite,config.hotkeyModifier,
-                config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier);
+                config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier,
+                EffectiveGamepadKey(config),config.gamepadModifier,config.gamepadActionModifier);
             if(config.hotkey<0 && favorite!=16)SKSE::log::info("Wheel follows the game's remapped Favorites key (scan={}); set Controls/Hotkey=16 to use physical Q",favorite);
         }
     }
@@ -1209,3 +1626,4 @@ namespace Wheel {
         return true;
     }
 }
+

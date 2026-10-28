@@ -1,0 +1,44 @@
+Favorite Wheel 0.7.0 - native UI / controller chord / COC TEST BUILD
+
+Install over 0.7.0 in your mod manager. Keep your existing INI and controlmap.
+The plugin metadata remains 0.7.0. This is a separate test build, not a release.
+Includes the earlier native-menu UI drawing and controller chord fixes.
+
+New fix: title-screen console start
+An initial playable world can now initialize the wheel without receiving
+NewGame/PostLoadGame. The game-thread check waits for an attached player cell,
+player 3D, completion of loading and closure of startup menus. It also installs
+the player-update hook needed to execute wheel actions. Ordinary loading and
+failed loads cannot activate a stale player through this fallback.
+
+Test from a fresh game process:
+1. At the title screen, open the console and run: coc qasmoke
+2. Wait for loading to finish and close the console.
+3. Open the Favorites wheel and Actions wheel; test an item and an action.
+4. Also check normal New Game and loading a saved game.
+
+New log marker: startup=implicit-v1
+Expected after COC: "Game session recovered", "Game active=true", and the
+player-update hook/callback logs. Normal NewGame/PostLoadGame uses its existing
+path, so it need not emit the recovery marker.
+
+Rendering:
+The wheel draws in the native menu UI pass, into the currently bound target,
+before later UI composition. Check with your usual ENB/frame generator enabled.
+Compatibility with the reported closed-source frame generator is unverified.
+Check mouse/controller use, Pause/Slow/Live, Keep Open, close animation and loads.
+Log marker: route=menu-postdisplay-v1
+
+Controller:
+For Favorites on LB+Y in a custom game controlmap, keep GamepadHotkey=-1 and
+GamepadModifier=-1 to follow the original chord. Check plain Y still jumps and
+LB+Y opens Favorites. Identical Favorites/Actions chords prefer Favorites;
+choose a distinct Actions modifier if needed. No other buttons are reassigned.
+Log marker: binding=native-chord-v1
+
+18 local test suites passed, including session lifecycle regressions, WARP UI
+target/composition tests and seven real Address Library databases. These checks
+do not replace in-game validation. If a problem remains, provide the new
+FavoriteWheel.log and your renderer version/log or relevant controller bindings.
+
+No player INI or controlmap is included. Reinstall original 0.7.0 to revert.

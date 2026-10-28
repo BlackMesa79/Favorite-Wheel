@@ -1,0 +1,10 @@
+0.7.0 — Combat presets
+- Added combat presets for dual weapons/spells, mixed pairs, shields/torches, two-handed equipment and empty hands, with crossed-sword icons.
+- Added shared 1–8 combat shortcuts: hover to bind/unbind, press in gameplay to apply. Handles conflicts with item slots and later SkyUI/vanilla assignments. Save the game after edits.
+- Added visible L/R/L+R/2H equipment states and clearer shortcut/name spacing.
+- Added optional LMB left hand / RMB right hand assignment in F2 -> Keyboard.
+- Fixed controller modifier chords losing held buttons between input packets.
+- Added GOG 1.6.659 support with matching GOG SKSE64 2.2.3 and Address Library.
+- Improved missing-font fallback and replaced category arrows with vector shapes, fixing a reproduced 4K pixel-font case. Reporter confirmation pending.
+
+Upgrade normally and disable separate test patches. Keep your main INI, custom resources and matching .skse co-saves. Existing combat presets remain readable; new shortcuts default to unbound.

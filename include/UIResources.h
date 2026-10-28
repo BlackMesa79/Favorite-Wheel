@@ -1,24 +1,26 @@
 #pragma once
 #include "Settings.h"
+#include "LayoutSkin.h"
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
 namespace Wheel {
     struct Language { std::string id, name, font; std::unordered_map<std::string,std::string> text; };
-    enum class ThemeStyle { Etched, Skyrim };
+    enum class ThemeStyle { Etched, ClassicGold, Skyrim };
     enum class FrameStyle { Plain, Nordic };
     struct Theme {
-        std::string id="classic", name="Classic", font;
-        ThemeStyle style=ThemeStyle::Etched; // Component shapes, independent of colors and layout.
+        std::string id="classic", name="Classic Gold", font;
+        ThemeStyle style=ThemeStyle::ClassicGold; // Component shapes, independent of colors and layout.
         FrameStyle frameStyle=FrameStyle::Plain;
+        LayoutSkin layout;
         std::string surfaceTexture; // Resolved local PNG; empty means the solid-color fallback.
         float materialStrength=.85f, materialZoom=1.f;
-        std::uint32_t accent=0xFF8BC9E7, text=0xFFEAEEED, muted=0xFFB5A89E;
-        std::uint32_t sector=0xF02C2017, empty=0xBE1F160F, hover=0xEB3D5B6B;
-        std::uint32_t panel=0xFC241C15, background=0xFF000000, border=0xFF70604B;
+        std::uint32_t accent=0xFF9CD6EF, text=0xFFE0E9F2, muted=0xFFA1ADB9;
+        std::uint32_t sector=0xFF222326, empty=0xFF17191C, hover=0xFF344A60;
+        std::uint32_t panel=0xFF191C21, background=0xFF000000, border=0xFF597B9C;
         // Optional visual tokens. Old themes inherit these; no game behavior lives here.
-        float borderWidth=1.f, cornerRadius=10.f, ornament=.65f, relief=.5f;
+        float borderWidth=1.f, cornerRadius=6.f, ornament=.8f, relief=.65f;
         float textShadow=.32f, iconScale=1.f, titleScale=1.f, labelScale=1.f;
         float hoverDuration=.10f, pageDuration=.12f;
     };

@@ -1,6 +1,7 @@
 #pragma once
 #include "Favorites.h"
 #include "Settings.h"
+#include "SortDrag.h"
 #include "NameEditor.h"
 #include "FaceLightClient.h"
 #include "CategoryNavigation.h"
@@ -10,9 +11,19 @@ namespace Wheel {
     inline constexpr const char* pauseMenuName = "FavoriteWheelPauseMenu";
     struct View {
         bool functions=false;
+        bool vampireRestricted=false;
+        bool sortingEdit=false;
+        SortDrag sortDrag;
+        std::optional<Item> dragItem;
+        int sortingSelectedSlot=-1;
+        std::string sortingLabel;
         bool faceLightAvailable=false;
         FaceLight::Section functionSection=FaceLight::Section::Outfits;
         int outfitDialog=0; // 1 new name, 2 rename, 3 manage, 4 overwrite confirmation, 5 delete confirmation
+        bool combatDialog=false; // Shared name/management widgets, separate preset family.
+        bool cycleDialog=false,cycleMemberDialog=false,cycleCaptureKey=false;
+        std::uint32_t cycleGroup=1,cycleMember=0;
+        std::string cycleBinding;
         std::uint32_t outfitId=0;
         NameEditor outfitName;
         std::string inventoryGlyphs;

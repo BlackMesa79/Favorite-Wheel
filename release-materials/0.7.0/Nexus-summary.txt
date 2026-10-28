@@ -1,0 +1,1 @@
+A configurable favorites and action wheel with combat/outfit presets, visible hand states, controller support and three themes. Version 0.7.0 adds shared 1–8 combat shortcuts, native slot conflict handling and improved font fallback.

@@ -2,6 +2,6 @@
 #include "ItemInfo.h"
 namespace RE {class TESBoundObject;class ExtraDataList;class SpellItem;class PlayerCharacter;}
 namespace Wheel {
-    ItemInfo CaptureItemInfo(RE::TESBoundObject* object,RE::ExtraDataList* instance,RE::PlayerCharacter* player);
+    ItemInfo CaptureItemInfo(RE::TESBoundObject* object,RE::ExtraDataList* instance,RE::PlayerCharacter* player,bool includeEffects=true);
     ItemInfo CaptureSpellInfo(RE::SpellItem* spell,RE::PlayerCharacter* player);
 }

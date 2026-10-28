@@ -1,12 +1,13 @@
 #include "Settings.h"
 #include "TimePolicy.h"
+#include "SettingsIni.h"
 #include <Windows.h>
 #include <algorithm>
 #include <filesystem>
 #include <mutex>
-#include <fstream>
 #include <vector>
 #include <cmath>
+#include <cwchar>
 
 namespace Wheel {
     namespace {
@@ -29,18 +30,34 @@ namespace Wheel {
             return settingsPath;
         }
         bool Report(const char* operation,DWORD error=ERROR_SUCCESS) {
-            diagnostic="path='"+UTF8(settingsPath)+"' stage="+operation+" win32="+std::to_string(error);
+            diagnostic="path='"+UTF8(settingsPath)+"' stage="+operation+" win32="+std::to_string(error)+" writer=file-bytes-v1";
             return false;
         }
-        std::string Read(const std::filesystem::path& path,const wchar_t* section, const wchar_t* key, const std::string& fallback) {
-            wchar_t value[2048]{};
-            const auto file = path.wstring();
-            GetPrivateProfileStringW(section, key, L"", value, 2048, file.c_str());
-            if (!*value) return fallback;
-            const int size = WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);
-            std::string result(size, '\0');
-            WideCharToMultiByte(CP_UTF8,0,value,-1,result.data(),size,nullptr,nullptr);
-            result.pop_back(); return result;
+        constexpr std::size_t maxIniBytes=2*1024*1024;
+        struct Close {
+            HANDLE handle;
+            ~Close(){if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);}
+        };
+        bool ReadBytes(HANDLE file,std::vector<char>& bytes) {
+            LARGE_INTEGER size{},start{};
+            if(!GetFileSizeEx(file,&size))return false;
+            if(size.QuadPart<0 || size.QuadPart>maxIniBytes){SetLastError(ERROR_FILE_TOO_LARGE);return false;}
+            bytes.resize(static_cast<std::size_t>(size.QuadPart));DWORD read=0;
+            if(!SetFilePointerEx(file,start,nullptr,FILE_BEGIN) ||
+                (!bytes.empty() && !ReadFile(file,bytes.data(),static_cast<DWORD>(bytes.size()),&read,nullptr)))return false;
+            if(read!=bytes.size()){SetLastError(ERROR_READ_FAULT);return false;}
+            return true;
+        }
+        bool ReadBytes(const std::filesystem::path& path,std::vector<char>& bytes) {
+            const HANDLE file=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if(file==INVALID_HANDLE_VALUE)return false;
+            Close close{file};return ReadBytes(file,bytes);
+        }
+        std::string Read(const SettingsIni::Document& document,const wchar_t* section,const wchar_t* key,const std::string& fallback) {
+            const auto value=document.Get(section,key);
+            std::string result;
+            return value && !value->empty() && SettingsIni::Utf8(*value,result)?result:fallback;
         }
         void Clamp(Settings& v) {
             v.gamepadCategoryButtons=std::clamp(v.gamepadCategoryButtons,0,1);
@@ -70,14 +87,18 @@ namespace Wheel {
     }
     std::string SettingsDiagnostic() {std::lock_guard lock(settingsMutex);return diagnostic;}
     namespace {
-        Settings ReadSettings(const std::filesystem::path& file) {
-            const auto path=file.wstring();
+        Settings ReadSettings(const SettingsIni::Document& file) {
             Settings settings;
             auto number = [&](const wchar_t* section, const wchar_t* key, int value) {
-                return static_cast<int>(GetPrivateProfileIntW(section,key,value,path.c_str()));
+                const auto text=file.Get(section,key);
+                if(!text || text->empty())return value;
+                // Match the legacy decimal INI fields, including signed -1
+                // bindings. A malformed present value historically reads as 0.
+                return static_cast<int>(std::wcstol(text->c_str(),nullptr,10));
             };
             settings.enabled = number(L"General",L"Enabled",settings.enabled) != 0;
             settings.allInventory = number(L"General",L"AllInventory",settings.allInventory) != 0;
+            settings.rememberLastWheel=number(L"General",L"RememberLastWheel",settings.rememberLastWheel)!=0;
             settings.hideEmptyCategories=number(L"General",L"HideEmptyCategories",settings.hideEmptyCategories)!=0;
             settings.keepOpen = number(L"General",L"KeepOpen",settings.keepOpen) != 0;
             settings.timeMode=number(L"General",L"TimeMode",settings.timeMode);
@@ -103,6 +124,7 @@ namespace Wheel {
             settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",settings.gamepadActionModifier);
             settings.gamepadCategoryButtons=number(L"Controls",L"GamepadCategoryButtons",settings.gamepadCategoryButtons);
             settings.gamepadMoveWhileOpen=number(L"Controls",L"GamepadMoveWhileOpen",settings.gamepadMoveWhileOpen)!=0;
+            settings.swapMouseHands=number(L"Controls",L"SwapMouseHands",settings.swapMouseHands)!=0;
             settings.scale = number(L"Display",L"ScalePercent",static_cast<int>(settings.scale*100))/100.f;
             settings.sensitivity = number(L"Controls",L"SensitivityPercent",static_cast<int>(settings.sensitivity*100))/100.f;
             settings.font = Read(file,L"Display",L"Font",settings.font);
@@ -123,7 +145,17 @@ namespace Wheel {
             }else if(attributes&FILE_ATTRIBUTE_DIRECTORY) {
                 settings=Settings{};Report("load-unavailable",ERROR_DIRECTORY);
             }else {
-                settings=ReadSettings(path);Report("loaded");
+                std::vector<char> bytes;SettingsIni::Document document;
+                if(!ReadBytes(path,bytes)){settings=Settings{};Report("load-unavailable",GetLastError());}
+                else if(!document.Parse(bytes)){settings=Settings{};Report("load-invalid",ERROR_INVALID_DATA);}
+                else {
+                    settings=ReadSettings(document);
+                    const bool empty=bytes.empty() || (bytes.size()==2 &&
+                        ((static_cast<unsigned char>(bytes[0])==0xFF && static_cast<unsigned char>(bytes[1])==0xFE) ||
+                         (static_cast<unsigned char>(bytes[0])==0xFE && static_cast<unsigned char>(bytes[1])==0xFF))) ||
+                        (bytes.size()==3 && bytes==std::vector<char>{'\xEF','\xBB','\xBF'});
+                    Report(empty?"loaded-empty":"loaded");diagnostic+=" bytes="+std::to_string(bytes.size());
+                }
             }
         }
         saved=settings;editing=false;
@@ -140,46 +172,33 @@ namespace Wheel {
     }
     bool SaveSettings() {
         std::lock_guard lock(settingsMutex);
-        // Stage away from the virtual Data tree, then write through the final
-        // INI's own handle. Renaming a new virtual .tmp onto an existing mapped
-        // INI can use different backing destinations in mod managers.
+        // Serialize in memory, then write through the destination's own handle.
+        // This preserves MO2 mappings and Vortex hardlinks while bypassing the
+        // Windows profile API's cache/redirected view of staged INI files.
         const auto path=SettingsFile();
         if(path.empty())return Report("resolve",GetLastError());
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(),error);
         if(error)return Report("create-directory",static_cast<DWORD>(error.value()));
-        const auto tempDir=std::filesystem::temp_directory_path(error);
-        if(error)return Report("temp-directory",static_cast<DWORD>(error.value()));
-        wchar_t tempName[MAX_PATH]{};
-        if(!GetTempFileNameW(tempDir.c_str(),L"FWh",0,tempName))return Report("create-stage",GetLastError());
-        const std::filesystem::path temporary=tempName;
-        struct Cleanup {
-            std::filesystem::path file;
-            ~Cleanup(){WritePrivateProfileStringW(nullptr,nullptr,nullptr,file.c_str());DeleteFileW(file.c_str());}
-        } cleanup{temporary};
-        const auto attributes=GetFileAttributesW(path.c_str());
-        if(attributes!=INVALID_FILE_ATTRIBUTES) {
-            if(!CopyFileW(path.c_str(),temporary.c_str(),FALSE))return Report("copy-stage",GetLastError());
-            // The original may be read-only: staging can still be edited, while
-            // the final write must fail honestly and preserve that original.
-            SetFileAttributesW(temporary.c_str(),FILE_ATTRIBUTE_NORMAL);
-        }else {
-            const auto missing=GetLastError();
-            if(missing!=ERROR_FILE_NOT_FOUND && missing!=ERROR_PATH_NOT_FOUND)return Report("inspect",missing);
-            std::ofstream file(temporary,std::ios::binary|std::ios::trunc);
-            file.put(static_cast<char>(0xFF));file.put(static_cast<char>(0xFE));
-            if(!file)return Report("initialize-stage",ERROR_WRITE_FAULT);
-        }
+        const HANDLE target=CreateFileW(path.c_str(),GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ,
+            nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+        if(target==INVALID_HANDLE_VALUE)return Report("open-target",GetLastError());
+        Close close{target};std::vector<char> before;
+        if(!ReadBytes(target,before))return Report("backup-read",GetLastError());
+        SettingsIni::Document document;
+        if(!document.Parse(before))return Report("parse-original",ERROR_INVALID_DATA);
+        struct Field {std::wstring section,key,value;};
+        std::vector<Field> fields;
         auto write = [&](const wchar_t* section,const wchar_t* key,const std::string& value) {
-            const int size=MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,nullptr,0);
-            std::wstring wide(size,L'\0');
-            MultiByteToWideChar(CP_UTF8,0,value.c_str(),-1,wide.data(),size);
-            return WritePrivateProfileStringW(section,key,wide.c_str(),temporary.c_str()) != 0;
+            std::wstring wide;
+            if(!SettingsIni::Wide(value,wide) || !document.Set(section,key,wide))return false;
+            fields.push_back({section,key,std::move(wide)});return true;
         };
         const bool ok = write(L"General",L"Enabled",settings.enabled?"1":"0") &&
             write(L"Display",L"Font",settings.font) &&
             write(L"General",L"Language",settings.language) &&
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
+            write(L"General",L"RememberLastWheel",settings.rememberLastWheel?"1":"0") &&
             write(L"General",L"HideEmptyCategories",settings.hideEmptyCategories?"1":"0") &&
             write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&
             write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&
@@ -202,29 +221,22 @@ namespace Wheel {
             write(L"Controls",L"GamepadActionModifier",std::to_string(settings.gamepadActionModifier)) &&
             write(L"Controls",L"GamepadCategoryButtons",std::to_string(settings.gamepadCategoryButtons)) &&
             write(L"Controls",L"GamepadMoveWhileOpen",settings.gamepadMoveWhileOpen?"1":"0") &&
+            write(L"Controls",L"SwapMouseHands",settings.swapMouseHands?"1":"0") &&
             write(L"Controls",L"SensitivityPercent",std::to_string(static_cast<int>(settings.sensitivity*100+.5f))) &&
             write(L"Display",L"ScalePercent",std::to_string(static_cast<int>(settings.scale*100+.5f)));
-        if(!ok)return Report("edit-stage",GetLastError());
-        WritePrivateProfileStringW(nullptr,nullptr,nullptr,temporary.c_str());
+        if(!ok)return Report("serialize",ERROR_INVALID_DATA);
         auto persisted=settings;
         persisted.scale=std::round(settings.scale*100)/100;
         persisted.wheelScale=std::round(settings.wheelScale*100)/100;
         persisted.sensitivity=std::round(settings.sensitivity*100)/100;
-        if(ReadSettings(temporary)!=persisted)return Report("verify-stage",ERROR_INVALID_DATA);
-        std::ifstream input(temporary,std::ios::binary);
-        const std::vector<char> bytes((std::istreambuf_iterator<char>(input)),{});
-        if(!input || bytes.empty() || bytes.size()>2*1024*1024)return Report("read-stage",ERROR_READ_FAULT);
-        // OPEN_ALWAYS retains the old bytes until the staged document is ready.
-        // Existing mod-managed destinations are opened directly, never renamed.
-        const HANDLE target=CreateFileW(path.c_str(),GENERIC_READ|GENERIC_WRITE,FILE_SHARE_READ,
-            nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if(target==INVALID_HANDLE_VALUE)return Report("open-target",GetLastError());
-        struct Close {HANDLE handle;~Close(){if(handle!=INVALID_HANDLE_VALUE)CloseHandle(handle);}} close{target};
-        LARGE_INTEGER length{};
-        if(!GetFileSizeEx(target,&length) || length.QuadPart>2*1024*1024)return Report("backup-size",ERROR_FILE_TOO_LARGE);
-        std::vector<char> before(static_cast<std::size_t>(length.QuadPart));DWORD read=0;
-        if(!before.empty() && (!ReadFile(target,before.data(),static_cast<DWORD>(before.size()),&read,nullptr) || read!=before.size()))
-            return Report("backup-read",GetLastError());
+        std::vector<char> bytes;
+        if(!document.Encode(bytes) || bytes.size()<=2 || bytes.size()>maxIniBytes)return Report("serialize",ERROR_INVALID_DATA);
+        SettingsIni::Document verifiedDocument;
+        if(!verifiedDocument.Parse(bytes) || ReadSettings(verifiedDocument)!=persisted)return Report("verify-document",ERROR_INVALID_DATA);
+        // Defaults are not evidence that a key was written. Require every
+        // explicit field in the serialized bytes, even when all values default.
+        for(const auto& field:fields)if(verifiedDocument.Get(field.section,field.key)!=field.value)
+            return Report("verify-document-key",ERROR_INVALID_DATA);
         auto writeBytes=[&](const std::vector<char>& data) {
             LARGE_INTEGER start{};DWORD written=0;
             return SetFilePointerEx(target,start,nullptr,FILE_BEGIN) &&
@@ -238,20 +250,20 @@ namespace Wheel {
         }
         // Verify persisted bytes via the same destination handle, bypassing the
         // Windows profile cache. A fresh process is also covered by tests.
-        LARGE_INTEGER start{};DWORD verified=0;std::vector<char> actual(bytes.size());
-        if(!SetFilePointerEx(target,start,nullptr,FILE_BEGIN) ||
-            !ReadFile(target,actual.data(),static_cast<DWORD>(actual.size()),&verified,nullptr) || verified!=actual.size() || actual!=bytes) {
+        std::vector<char> actual;
+        if(!ReadBytes(target,actual) || actual!=bytes) {
             const bool restored=writeBytes(before);
             return Report(restored?"verify-target-rolled-back":"verify-target-rollback-failed",ERROR_INVALID_DATA);
         }
-        // Refresh Win32's cached view of the original INI only after closing it.
         if(!CloseHandle(target))return Report("close-target",GetLastError());
         close.handle=INVALID_HANDLE_VALUE;
-        WritePrivateProfileStringW(nullptr,nullptr,nullptr,path.c_str());
-        std::ifstream reopen(path,std::ios::binary);
-        const std::vector<char> reopened((std::istreambuf_iterator<char>(reopen)),{});
-        if(!reopen || reopened!=bytes || ReadSettings(path)!=persisted)return Report("verify-reopened-target",ERROR_INVALID_DATA);
+        std::vector<char> reopened;
+        if(!ReadBytes(path,reopened))return Report("reopen-target",GetLastError());
+        if(reopened!=bytes) {
+            Report("verify-reopened-target",ERROR_INVALID_DATA);
+            diagnostic+=" expected_bytes="+std::to_string(bytes.size())+" actual_bytes="+std::to_string(reopened.size());return false;
+        }
         settings=persisted;saved=settings;editing=false;
-        Report("saved-verified");return true;
+        Report("saved-verified");diagnostic+=" bytes="+std::to_string(bytes.size());return true;
     }
 }

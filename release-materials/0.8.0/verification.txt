@@ -1,0 +1,17 @@
+Date: 2026-10-25
+Version: 0.8.0.0
+DLL SHA256: E290A8DFADE537E61E8218303B028CA339016106393D9D3125B1FF7D958E3FD2
+Final code: user-tested rollback before Vampire Lord audio experiments.
+User confirmed combat centre hints, misc stacking and Vampire Lord wheel work.
+Revert Form recovered after user fixed T-pose; not claimed as a plugin fix.
+Release x64 build passed; deployed DLL hash matches build.
+Installed INI changes versus rollback baseline: 0 / 18
+WheelLogicTests: passed
+InventoryTests: passed
+RuntimeLayoutTests: passed
+ActorRuntimeTests: passed
+CombatPresetTests: passed
+CombatCycleTests: passed
+BBCode tag balance verified; HTML preview regenerated. No new visual render performed.
+Runtime layout tests use simulated runtime fixtures; no new in-game test performed by agent.
+Local release archives prepared by scripts/package.ps1; no online upload, Git commit or push performed.

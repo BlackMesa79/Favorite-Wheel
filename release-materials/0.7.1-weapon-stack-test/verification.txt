@@ -1,0 +1,7 @@
+Date: 2026-10-16 (Asia/Hong_Kong)
+Development label: weapon-stack-test; DLL metadata 0.7.1
+DLL SHA256: 40E6E2A6528B91D8A32AB7249462749B92CE5A7181784403EA73FF2D986B3989
+18 automated suites passed, including seven real runtime databases and isolated usvfs persistence.
+User logs overlap: 276 common-prefix lines, longer file 346 lines; one Skyrim 1.5.97 session.
+Native in-game validation of this stack fix is pending.
+Formal release archives and player INI/resources are preserved.

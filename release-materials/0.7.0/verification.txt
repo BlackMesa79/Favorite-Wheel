@@ -1,0 +1,24 @@
+Deployment verified: 132 player resources and previous archives unchanged; MO2 DLL matches 0.7.0 build.
+DLL SHA256: BAD22A21B74396A0E9A3AC2AF8D65095D96C749E07C265830E5C981855AC8BC5
+SettingsTests : exit 0
+SettingsPersistenceTests : exit 0
+SettingsVfsTests : exit 0
+WheelLogicTests : exit 0
+TimeTests : exit 0
+RuntimeLayoutTests : exit 0
+InventoryTests : exit 0
+OutfitTests : exit 0
+NameEditorTests : exit 0
+ItemInfoTests : exit 0
+FaceLightClientTests : exit 0
+ActorRuntimeTests : exit 0
+SkinTextureTests : exit 0
+LayoutSkinTests : exit 0
+SectorMeshTests : exit 0
+CombatPresetTests : exit 0
+Seven actual installed address databases and SKSE export version 0.7.0 verified.
+User confirmed own game tests, including mouse hand switching and combat quick slots. No detailed case/runtime matrix supplied.
+Font issue not reproduced or game-tested by user; native 4K fallback/render checks passed previously; original reporter confirmation pending.
+Existing native-render geometry and prewarmed font cache checks retained; version promotion changes metadata/docs only.
+BBCode tags balanced; English summary 233 characters; HTML preview generated.
+Corresponding source is packaged with per-file SHA256 manifest; theme authoring guide retains its 0.6.0 interface version.

@@ -1,0 +1,22 @@
+Deployment verified: 8 language files append three new keys; player INIs, themes, textures and previous ZIPs preserved.
+DLL SHA256: 82FFC2B056F792AE69D069FEF2C52F33621C48966812C12C6EB847EAC46AEB72
+SettingsTests : exit 0
+SettingsPersistenceTests : exit 0
+SettingsVfsTests : exit 0
+WheelLogicTests : exit 0
+TimeTests : exit 0
+RuntimeLayoutTests : exit 0
+InventoryTests : exit 0
+OutfitTests : exit 0
+NameEditorTests : exit 0
+ItemInfoTests : exit 0
+FaceLightClientTests : exit 0
+ActorRuntimeTests : exit 0
+SkinTextureTests : exit 0
+LayoutSkinTests : exit 0
+SectorMeshTests : exit 0
+CombatPresetTests : exit 0
+Seven real address-library databases passed; GOG 1.6.659 gameplay pending. Exported plugin version 0.6.2 verified.
+Native WARP visual checks: new six-row keyboard settings and swapped item footer fit at 1920x1080. Compressed previews: build/hands-skyrim-controls-swapped-1920.jpg and build/hands-skyrim-mouse-swapped-1920.jpg.
+Official SKSE 2.2.3 GOG archive readme declares GOG 1.6.659; archive contains skse64_1_6_659.dll.
+BBCode tags balanced; summary 245 characters.

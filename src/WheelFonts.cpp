@@ -13,10 +13,11 @@
 
 namespace Wheel {
     namespace {
-        constexpr std::array sizes{12.f,14.f,15.f,16.f,17.f,18.f,20.f,21.f,22.f,25.f,30.f};
+        constexpr std::array sizes{12.f,13.f,14.f,15.f,16.f,17.f,18.f,20.f,21.f,22.f,25.f,30.f};
         ImFontGlyphRangesBuilder glyphs;
         ImVector<ImWchar> ranges;
         std::map<int, ImFont*> fonts;
+        std::string preparedFontPath;
         float bakedScale = 0;
         float bakedTitle=0,bakedLabel=0;
         struct FontFile {std::vector<unsigned char> data;stbtt_fontinfo info{};bool valid=false;};
@@ -24,6 +25,7 @@ namespace Wheel {
         struct ExtraFont {FontFile* file;ImVector<ImWchar> ranges;};
         std::vector<ExtraFont> extras; // ImGui retains range pointers until the next atlas clear.
         std::string loadedFont;
+        std::string preparedCatalogGlyphs;
         FontFile& ReadFont(const std::string& path) {
             auto [entry,inserted]=fontFiles.try_emplace(path);
             auto& font=entry->second;
@@ -38,6 +40,34 @@ namespace Wheel {
             return font;
         }
     }
+    std::string CatalogFontGlyphs(const std::vector<Item>& items,const std::string& extra) {
+        ImFontGlyphRangesBuilder catalog;
+        catalog.AddText(extra.c_str());
+        for(const auto& item:items) {
+            catalog.AddText(item.name.c_str());catalog.AddText(item.detail.c_str());catalog.AddText(item.centreNote.c_str());
+            catalog.AddText(ItemInfoGlyphs(item.info).c_str());
+        }
+        ImVector<ImWchar> requested;catalog.BuildRanges(&requested);
+        std::string text;
+        for(int range=0;requested[range];range+=2)
+            for(unsigned code=requested[range];code<=requested[range+1];++code) {
+                if(code<0x80)text.push_back(static_cast<char>(code));
+                else if(code<0x800) {
+                    text.push_back(static_cast<char>(0xC0|(code>>6)));
+                    text.push_back(static_cast<char>(0x80|(code&0x3F)));
+                } else if(code<0x10000) {
+                    text.push_back(static_cast<char>(0xE0|(code>>12)));
+                    text.push_back(static_cast<char>(0x80|((code>>6)&0x3F)));
+                    text.push_back(static_cast<char>(0x80|(code&0x3F)));
+                } else {
+                    text.push_back(static_cast<char>(0xF0|(code>>18)));
+                    text.push_back(static_cast<char>(0x80|((code>>12)&0x3F)));
+                    text.push_back(static_cast<char>(0x80|((code>>6)&0x3F)));
+                    text.push_back(static_cast<char>(0x80|(code&0x3F)));
+                }
+            }
+        return text;
+    }
     bool PrepareFonts(const View& view, float scale) {
         auto& io = ImGui::GetIO();
         const auto path=FontPath(view.config);
@@ -47,12 +77,16 @@ namespace Wheel {
         if (bakedScale != scale || fontChanged || metricsChanged) {
             glyphs.Clear();
             glyphs.AddRanges(io.Fonts->GetGlyphRangesDefault());
+            preparedCatalogGlyphs.clear();
         }
         const auto previous = glyphs.UsedChars;
-        glyphs.AddText(view.inventoryGlyphs.c_str());
+        if(view.inventoryGlyphs!=preparedCatalogGlyphs) {
+            glyphs.AddText(view.inventoryGlyphs.c_str());
+            preparedCatalogGlyphs=view.inventoryGlyphs;
+        }
         glyphs.AddText(view.outfitName.text.c_str());
         glyphs.AddText(UIGlyphs(view.config).c_str());
-        for (const auto& item : view.items) {glyphs.AddText(item.name.c_str());glyphs.AddText(item.detail.c_str());glyphs.AddText(ItemInfoGlyphs(item.info).c_str());}
+        for (const auto& item : view.items) {glyphs.AddText(item.name.c_str());glyphs.AddText(item.detail.c_str());glyphs.AddText(item.centreNote.c_str());glyphs.AddText(ItemInfoGlyphs(item.info).c_str());}
         bool changed = bakedScale != scale || fontChanged || metricsChanged || fonts.empty();
         for (int i = 0; i < glyphs.UsedChars.Size && !changed; ++i)
             changed = previous[i] != glyphs.UsedChars[i];
@@ -65,18 +99,26 @@ namespace Wheel {
         io.FontDefault = nullptr;
         fonts.clear();
         loadedFont=path;
-        auto& primary=ReadFont(path);
+        auto* primary=&ReadFont(path);
+        preparedFontPath=primary->valid?path:"";
+        // The embedded emergency font has pixel-shaped Latin glyphs. Merging
+        // fallbacks into it cannot replace those already-present characters.
+        // Choose a real system font as the primary before merging missing glyphs.
+        if(!primary->valid)for(const auto& fallback:FallbackFontPaths()) {
+            auto& candidate=ReadFont(fallback);
+            if(candidate.valid){primary=&candidate;preparedFontPath=fallback;break;}
+        }
         // Resolve missing requested glyphs once per atlas build, not per frame.
         // Merge only those glyphs; do not bake full CJK alphabets at every size.
         std::vector<ImWchar> missing;
         for(int range=0;ranges[range];range+=2)
             for(unsigned code=ranges[range];code<=ranges[range+1];++code)
-                if(!primary.valid || !stbtt_FindGlyphIndex(&primary.info,static_cast<int>(code)))
+                if(!primary->valid || !stbtt_FindGlyphIndex(&primary->info,static_cast<int>(code)))
                     missing.push_back(static_cast<ImWchar>(code));
         extras.reserve(FallbackFontPaths().size());
         for(const auto& fallback:FallbackFontPaths()) {
             if(missing.empty())break;
-            if(fallback==path)continue;
+            if(fallback==preparedFontPath)continue;
             auto& font=ReadFont(fallback);if(!font.valid)continue;
             ImFontGlyphRangesBuilder extraGlyphs;
             const auto before=missing.size();
@@ -97,11 +139,11 @@ namespace Wheel {
             ImFontConfig cfg;
             cfg.SizePixels = static_cast<float>(pixels);
             cfg.OversampleH = 2;
-            cfg.OversampleV = 1;
-            cfg.PixelSnapH = true;
+            cfg.OversampleV = 1; // Keep the atlas budget; native-sized system glyphs supply AA.
+            cfg.PixelSnapH = false;
             // Share the font file across sizes; only glyph bitmaps are per-size.
             cfg.FontDataOwnedByAtlas = false;
-            ImFont* font = primary.valid ? io.Fonts->AddFontFromMemoryTTF(primary.data.data(), static_cast<int>(primary.data.size()), cfg.SizePixels, &cfg, ranges.Data) : nullptr;
+            ImFont* font = primary->valid ? io.Fonts->AddFontFromMemoryTTF(primary->data.data(), static_cast<int>(primary->data.size()), cfg.SizePixels, &cfg, ranges.Data) : nullptr;
             if (!font) font = io.Fonts->AddFontDefault(&cfg);
             for(const auto& extra:extras) {
                 auto merged=cfg;merged.MergeMode=true;merged.DstFont=font;
@@ -116,7 +158,10 @@ namespace Wheel {
         return true;
     }
     ImFont* FontAt(float pixelSize) {
-        const auto found = fonts.find(std::max(1, static_cast<int>(std::round(pixelSize))));
-        return found != fonts.end() ? found->second : ImGui::GetFont();
+        if(fonts.empty())return ImGui::GetFont();
+        auto found = fonts.lower_bound(std::max(1, static_cast<int>(std::round(pixelSize))));
+        if(found==fonts.end())found=std::prev(found);
+        return found->second; // Prefer downsampling over enlarging the smallest font.
     }
+    const std::string& PreparedFontPath(){return preparedFontPath;}
 }

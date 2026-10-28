@@ -9,6 +9,7 @@
 #include "WheelFonts.h"
 #include "WheelIcons.h"
 #include "SkinTextures.h"
+#include "WheelSectorMesh.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -20,17 +21,22 @@ namespace Wheel
 {
     namespace
     {
-        constexpr const char *categoryKeys[] = {"weapons", "armor", "potions", "food", "spells", "shouts", "powers", "other"};
+        constexpr const char *categoryKeys[] = {"weapons", "armor", "potions", "poisons", "food", "spells", "shouts", "powers", "other"};
         static_assert(std::size(categoryKeys)==categoryCount);
         struct Feedback
         {
             std::array<float, slots> hover{};
             int category = -1, page = -1;
             float age = 1.f;
+            bool dragging=false;
+            float ghostAlpha=0;
+            ImVec2 ghostPosition{};
+            std::optional<Item> ghostItem;
         } feedback;
-        ImVec2 At(ImVec2 c, float r, float a)
+        ImVec2 At(ImVec2 c, float r, float a,const LayoutSkin& skin={})
         {
-            return {c.x + std::sin(a) * r, c.y - std::cos(a) * r};
+            const auto p=ShapePoint(skin,r,a);
+            return {c.x+p.x,c.y+p.y};
         }
         ImU32 Alpha(ImU32 color, float alpha)
         {
@@ -39,13 +45,15 @@ namespace Wheel
         // Move whole text/icon groups without scaling their baked pixel geometry.
         void Reveal(ImDrawList *d, int first, float alpha, ImVec2 offset = {0, 0})
         {
+            alpha=std::clamp(alpha,0.f,1.f);
+            if(alpha==1.f && offset.x==0.f && offset.y==0.f)return;
             for (int i = first; i < d->VtxBuffer.Size; ++i)
             {
                 auto &vertex = d->VtxBuffer[i];
                 vertex.pos.x += offset.x;
                 vertex.pos.y += offset.y;
                 vertex.col = (vertex.col & 0x00FFFFFFu) |
-                             (static_cast<ImU32>((vertex.col >> 24) * std::clamp(alpha, 0.f, 1.f)) << 24);
+                             (static_cast<ImU32>((vertex.col >> 24) * alpha) << 24);
             }
         }
         ImU32 Mix(ImU32 a, ImU32 b, float t)
@@ -110,23 +118,31 @@ namespace Wheel
             size = std::round(size);
             d->AddText(FontAt(size), size, {std::round(at.x), std::round(at.y)}, color, text.c_str(), nullptr, width);
         }
-        void Arc(ImDrawList *d, ImVec2 c, float radius, float begin, float end, ImU32 color, float thickness)
+        void Arc(ImDrawList *d, ImVec2 c, float radius, float begin, float end, ImU32 color, float thickness,const LayoutSkin& skin={})
         {
             const int segments = std::max(4, int(std::ceil((end - begin) * radius / 9)));
             for (int i = 0; i <= segments; ++i)
-                d->PathLineTo(At(c, radius, std::lerp(begin, end, float(i) / segments)));
+                d->PathLineTo(At(c, radius, std::lerp(begin, end, float(i) / segments),skin));
             d->PathStroke(color, 0, thickness);
         }
         void Sector(ImDrawList *d, ImVec2 c, float inner, float outer, float begin, float end, ImU32 color,
-                    float relief)
+                    float relief,const LayoutSkin& skin={})
         {
             // Single AA outline; vertex tint supplies relief without textures or scene sampling.
             const int start = d->VtxBuffer.Size, segments = std::max(12, int(std::ceil((end - begin) * outer / 8)));
             for (int i = 0; i <= segments; ++i)
-                d->PathLineTo(At(c, outer, std::lerp(begin, end, float(i) / segments)));
+                d->PathLineTo(At(c, outer, std::lerp(begin, end, float(i) / segments),skin));
             for (int i = segments; i >= 0; --i)
-                d->PathLineTo(At(c, inner, std::lerp(begin, end, float(i) / segments)));
-            d->PathFillConcave(color | 0xFF000000u);
+                d->PathLineTo(At(c, inner, std::lerp(begin, end, float(i) / segments),skin));
+            // Subpixel arc segments in almost-folded blades rasterize differently
+            // with skinny quad diagonals. Keep the legacy fill for these tiny
+            // contours; visible/full blades use the linear strip path.
+            if((end-begin)*outer/segments<d->_FringeScale)
+                d->PathFillConcave(color | 0xFF000000u);
+            else {
+                FillSectorStrip(d,d->_Path.Data,segments+1,color | 0xFF000000u);
+                d->PathClear();
+            }
             const auto shade = Mix(color, IM_COL32(4, 8, 12, 255), relief * .16f),
                        light = Mix(color, IM_COL32(213, 225, 232, 255), relief * .075f);
             for (int i = start; i < d->VtxBuffer.Size; ++i)
@@ -136,13 +152,45 @@ namespace Wheel
                 v.col = (Mix(light, shade, t) & 0x00FFFFFFu) | (v.col & 0xFF000000u);
             }
         }
+        void ShapeOutline(ImDrawList* d,ImVec2 c,float radius,ImU32 color,int segments,float stroke,const LayoutSkin& skin)
+        {
+            if(skin.shape==WheelShape::Circle){d->AddCircle(c,radius,color,segments,stroke);return;}
+            const bool polygon=skin.shape==WheelShape::Polygon;
+            const int count=polygon?slots:segments;
+            for(int i=0;i<count;++i)d->PathLineTo(At(c,radius,(i+(polygon?.5f:0.f))*2*std::numbers::pi_v<float>/count,skin));
+            d->PathStroke(color,ImDrawFlags_Closed,stroke);
+        }
+        void ShapeFill(ImDrawList* d,ImVec2 c,float radius,ImU32 color,int segments,const LayoutSkin& skin)
+        {
+            if(skin.shape==WheelShape::Circle){d->AddCircleFilled(c,radius,color,segments);return;}
+            const bool polygon=skin.shape==WheelShape::Polygon;
+            const int count=polygon?slots:segments;
+            for(int i=0;i<count;++i)d->PathLineTo(At(c,radius,(i+(polygon?.5f:0.f))*2*std::numbers::pi_v<float>/count,skin));
+            d->PathFillConvex(color);
+        }
         void Diamond(ImDrawList *d, ImVec2 c, float r, ImU32 color)
         {
             const ImVec2 p[] = {{c.x, c.y - r}, {c.x + r, c.y}, {c.x, c.y + r}, {c.x - r, c.y}};
             d->AddPolyline(p, 4, color, ImDrawFlags_Closed, 1.f);
         }
         bool Skyrim(const Theme &t) { return t.style == ThemeStyle::Skyrim; }
+        bool Classic(const Theme &t) { return t.style == ThemeStyle::ClassicGold; }
         bool Nordic(const Theme &t) { return Skyrim(t) && t.frameStyle==FrameStyle::Nordic; }
+        void GoldFrame(ImDrawList *d, ImVec2 a, ImVec2 b, const Theme &t, float s, ImU32 edge)
+        {
+            const float radius=t.cornerRadius*s;
+            d->AddRect(a,b,edge,radius,0,t.borderWidth*s);
+            d->AddRect({a.x+4*s,a.y+4*s},{b.x-4*s,b.y-4*s},Alpha(t.border,.35f),
+                       std::max(0.f,radius-2*s),0,s);
+            if(t.ornament<=0)return;
+            // Short engraved corner brackets leave the panel's content area clear.
+            const auto ink=Alpha(t.accent,.65f*t.ornament);
+            for(int x=0;x<2;++x)for(int y=0;y<2;++y) {
+                const float cx=x?b.x:a.x, cy=y?b.y:a.y, dx=x?-1.f:1.f, dy=y?-1.f:1.f;
+                const ImVec2 p[]={{cx+dx*17*s,cy+dy*7*s},{cx+dx*7*s,cy+dy*7*s},{cx+dx*7*s,cy+dy*17*s}};
+                d->AddPolyline(p,3,ink,0,s);
+            }
+        }
         template<class Paint> void Material(ImDrawList* d,ImVec2 a,ImVec2 b,const Theme& t,Paint paint)
         {
             const auto texture=SkinTextures::Surface(t);
@@ -158,6 +206,32 @@ namespace Wheel
                            std::clamp(.5f+((vertex.pos.y-a.y)/(b.y-a.y)-.5f)/t.materialZoom,0.f,1.f)};
             }
             d->PopTextureID();
+        }
+        void GoldBlade(ImDrawList *d, ImVec2 c, float inner, float outer, float begin, float end,
+                       const Theme &t, float s, bool occupied, float weight)
+        {
+            Material(d,{c.x-outer*t.layout.AxisX(),c.y-outer*t.layout.AxisY()},
+                {c.x+outer*t.layout.AxisX(),c.y+outer*t.layout.AxisY()},t,[&]{
+                Sector(d,c,inner,outer,begin,end,occupied?Mix(t.sector,t.hover,weight*.75f):t.empty,t.relief,t.layout);
+            });
+            // Insets scale with the unfolding span and never cross a blade's hinge.
+            const float span=end-begin, inset=std::min(.018f,span*.12f), angle=(begin+end)*.5f;
+            const auto edge=Alpha(t.border,occupied?.72f:.25f);
+            Arc(d,c,outer-1.5f*s,begin+inset,end-inset,edge,t.borderWidth*s,t.layout);
+            Arc(d,c,inner+2*s,begin+inset,end-inset,edge,s,t.layout);
+            if(outer-inner>18*s) {
+                Arc(d,c,outer-6*s,begin+inset*2,end-inset*2,Alpha(t.accent,(.13f+weight*.32f)*t.ornament),s,t.layout);
+                for(const float seam:{begin+inset,end-inset})
+                    d->AddLine(At(c,inner+7*s,seam,t.layout),At(c,outer-7*s,seam,t.layout),Alpha(t.border,.24f*t.ornament),s);
+            }
+            if(weight>0) {
+                Arc(d,c,outer-2*s,begin+inset,end-inset,Alpha(t.accent,weight*.9f),1.5f*s,t.layout);
+                Arc(d,c,inner+3*s,begin+inset*2,end-inset*2,Alpha(t.accent,weight*.5f),s,t.layout);
+                // The arrow ends at outer-8; the equipped diamond starts at outer-13.
+                const float half=std::min(.019f,span*.2f),depth=std::min(5*s,(outer-inner)*.3f);
+                const ImVec2 p[]={At(c,outer-3*s,angle-half,t.layout),At(c,outer-3*s-depth,angle,t.layout),At(c,outer-3*s,angle+half,t.layout)};
+                d->AddConvexPolyFilled(p,3,Alpha(t.accent,weight));
+            }
         }
         void NordicCorner(ImDrawList* d,ImVec2 at,float dx,float dy,float s,const Theme& t)
         {
@@ -236,37 +310,36 @@ namespace Wheel
                          const Theme &t, float s, bool occupied, float weight)
         {
             const auto fill=occupied ? Mix(t.sector,t.hover,weight*.7f) : t.empty;
-            const ImVec2 lo{c.x-outer,c.y-outer},hi{c.x+outer,c.y+outer};
+            const ImVec2 lo{c.x-outer*t.layout.AxisX(),c.y-outer*t.layout.AxisY()},hi{c.x+outer*t.layout.AxisX(),c.y+outer*t.layout.AxisY()};
             const float band=std::min(3.5f*s,(outer-inner)*.15f);
             Material(d,lo,hi,t,[&]{
                 if(Nordic(t)) {
-                    Sector(d,c,inner,outer,begin,end,Mix(t.border,t.sector,.65f),.25f);
+                    Sector(d,c,inner,outer,begin,end,Mix(t.border,t.sector,.65f),.25f,t.layout);
                     const float inset=std::min(.012f,(end-begin)*.15f);
                     Sector(d,c,inner+band,outer-band,begin+inset,end-inset,
-                           Mix(fill,t.border,occupied?.11f:.04f),.12f);
-                } else Sector(d,c,inner,outer,begin,end,fill,0);
+                           Mix(fill,t.border,occupied?.11f:.04f),.12f,t.layout);
+                } else Sector(d,c,inner,outer,begin,end,fill,0,t.layout);
             });
             const auto edge = Mix(Alpha(t.border, occupied ? .7f : .32f), t.accent, weight);
-            Arc(d, c, outer - s, begin, end, edge, t.borderWidth * s);
-            Arc(d, c, inner + s, begin, end, edge, t.borderWidth * s);
+            Arc(d, c, outer - s, begin, end, edge, t.borderWidth * s,t.layout);
+            Arc(d, c, inner + s, begin, end, edge, t.borderWidth * s,t.layout);
             for (const float angle : {begin, end})
-                d->AddLine(At(c, inner + s, angle), At(c, outer - s, angle), edge, t.borderWidth * s);
+                d->AddLine(At(c, inner + s, angle,t.layout), At(c, outer - s, angle,t.layout), edge, t.borderWidth * s);
             if(Nordic(t)) {
                 const float inset=std::min(.017f,(end-begin)*.16f);
-                Arc(d,c,outer-band,begin+inset,end-inset,Alpha(IM_COL32_BLACK,.7f),s);
-                Arc(d,c,inner+band,begin+inset,end-inset,Alpha(t.accent,.14f),s);
-                const float mid=(begin+end)/2;
-                if(t.ornament>0 && end-begin>.12f)
-                    Diamond(d,At(c,inner+7*s,mid),2*s,Alpha(t.accent,.4f*t.ornament));
-                if(weight>0)Arc(d,c,outer-2*s,begin+inset,end-inset,Alpha(t.accent,weight*.75f),1.5f*s);
+                Arc(d,c,outer-band,begin+inset,end-inset,Alpha(IM_COL32_BLACK,.7f),s,t.layout);
+                Arc(d,c,inner+band,begin+inset,end-inset,Alpha(t.accent,.14f),s,t.layout);
+                if(weight>0)Arc(d,c,outer-2*s,begin+inset,end-inset,Alpha(t.accent,weight*.75f),1.5f*s,t.layout);
             }
             if (weight > 0)
             {
-                const float angle = (begin + end) / 2, radius = outer - 3 * s,
+                // The equipped diamond sits farther inside the rim than this arrow.
+                const float angle = (begin + end) / 2,
+                            radius = outer - 3 * s,
                             half = std::min(.019f, (end - begin) * .25f),
                             depth = std::min(5 * s, (outer - inner) * .3f);
-                const ImVec2 p[] = {At(c, radius, angle - half), At(c, radius - depth, angle),
-                                   At(c, radius, angle + half)};
+                const ImVec2 p[] = {At(c, radius, angle - half,t.layout), At(c, radius - depth, angle,t.layout),
+                                   At(c, radius, angle + half,t.layout)};
                 d->AddConvexPolyFilled(p, 3, Alpha(t.accent, weight));
             }
         }
@@ -279,15 +352,16 @@ namespace Wheel
                          Alpha(t.border, enabled ? .85f : .35f), s);
             else
                 d->AddRect({at.x - w, at.y - r}, {at.x + w, at.y + r}, Alpha(t.border, enabled ? .85f : .35f), 3 * s, 0, s);
+            if(Classic(t)) d->AddLine({at.x-w+4*s,at.y+r-3*s},{at.x+w-4*s,at.y+r-3*s},Alpha(t.accent,enabled?.3f:.1f),s);
             Text(d, at, key, 14 * s, enabled ? t.accent : t.muted, 0, t.textShadow);
         }
         void CategoryStrip(ImDrawList *d, ImVec2 c, float s, const View &v, float pageFade)
         {
             const auto &t = Style(v.config);
             const int current =
-                v.functions ? (v.functionSection == FaceLight::Section::Outfits ? 0 : 1) : v.visibleCategories.Index(v.category);
+                v.functions ? FaceLight::TypeIndex(v.functionSection) : v.visibleCategories.Index(v.category);
             const auto ribbon = RibbonLabels(current, v.functions ? FaceLight::TypeCount(v.faceLightAvailable) : v.visibleCategories.Count());
-            const float y = c.y - 307 * s;
+            const float y = c.y - (307+t.layout.ExtraY()) * s;
             std::array<std::string, 5> captions;
             std::array<float, 5> halfWidths{}, positions{}, sizes{};
             std::array<bool, 5> present{};
@@ -297,14 +371,13 @@ namespace Wheel
                 const int at = label.offset + 2;
                 const bool selected = label.offset == 0;
                 const char *key =
-                    v.functions ? (label.index == 0 ? "outfitTitle" : "lightTitle") : categoryKeys[static_cast<int>(v.visibleCategories.At(label.index))];
+                    v.functions ? FaceLight::TypeKey(label.index) : categoryKeys[static_cast<int>(v.visibleCategories.At(label.index))];
                 sizes[at] = selected ? 25 * s * t.titleScale : 16 * s;
                 const float width = (selected ? 154.f : std::abs(label.offset) == 1 ? 82.f : 64.f) * s;
-                captions[at] = Fit(Tr(v.config, key), sizes[at], width);
-                if (selected)
-                    captions[at] = "< " + captions[at] + " >";
+                captions[at] = Fit(Tr(v.config, v.functions && label.index==1?"combatTab":v.functions && label.index==2?"cycleTab":key), sizes[at], width);
                 const float pixels = std::round(sizes[at]);
                 halfWidths[at] = FontAt(pixels)->CalcTextSizeA(pixels, FLT_MAX, 0, captions[at].c_str()).x / (2 * s);
+                if(selected)halfWidths[at]+=16*t.titleScale; // Vector arrows and spacing.
                 present[at] = true;
             }
             float edge = halfWidths[2];
@@ -339,6 +412,11 @@ namespace Wheel
                                                           : std::abs(label.offset) == 1 ? .82f
                                                                                         : .55f),
                      0, t.textShadow * (selected ? pageFade : .65f));
+                if(selected) {
+                    const float offset=(halfWidths[at]-6*t.titleScale)*s;
+                    Chevron(d,{c.x-offset,y},5*s*t.titleScale,Alpha(t.accent,pageFade),false,1.2f*s);
+                    Chevron(d,{c.x+offset,y},5*s*t.titleScale,Alpha(t.accent,pageFade),true,1.2f*s);
+                }
             }
         }
         void PageRail(ImDrawList *d, ImVec2 c, float s, const View &v)
@@ -346,7 +424,7 @@ namespace Wheel
             const auto &t = Style(v.config);
             const int total = PageCount(ItemCount(v)), current = std::clamp(v.page, 0, total - 1);
             const auto pages = VisiblePages(total, current);
-            const float x = c.x + 302 * s, top = c.y - (pages.size - 1) * 17 * s,
+            const float x = c.x + (302+t.layout.ExtraX()) * s, top = c.y - (pages.size - 1) * 17 * s,
                         bottom = top + (pages.size - 1) * 34 * s;
             if (v.config.showHints)
             {
@@ -357,10 +435,11 @@ namespace Wheel
             {
                 const ImVec2 at{x, top + i * 34 * s};
                 const bool selected = pages.first + i == current;
-                if (Skyrim(t))
+                if (Skyrim(t) || Classic(t))
                 {
                     if (i > 0)
                         d->AddLine({x, at.y - 26 * s}, {x, at.y - 8 * s}, Alpha(t.border, .5f), s);
+                    if(Classic(t)) d->AddCircleFilled(at,selected?3*s:2*s,selected?t.accent:Alpha(t.border,.65f),16);
                     Diamond(d, at, selected ? 7 * s : 4 * s, selected ? t.accent : t.muted);
                     if (selected)
                     {
@@ -395,12 +474,29 @@ namespace Wheel
                            radius + pad, 0, 2 * s);
             }
             Material(d,a,b,t,[&]{d->AddRectFilled(a,b,t.panel|0xFF000000u,radius);});
+            if(Classic(t)) {
+                GoldFrame(d,a,b,t,s,Alpha(accent?t.accent:t.border,accent?.75f:.85f));
+                return;
+            }
             d->AddRect(a, b, accent ? Alpha(t.accent, .65f) : t.border, radius, 0, t.borderWidth * s);
             d->AddLine({a.x + radius + 8 * s, a.y + 2 * s}, {b.x - radius - 8 * s, a.y + 2 * s},
                        Alpha(t.accent, .15f * t.ornament), s);
         }
         void Rule(ImDrawList *d, ImVec2 c, float half, const Theme &t, float s)
         {
+            if(Classic(t)) {
+                const float gap=t.ornament>0?14*s:0;
+                for(const float direction:{-1.f,1.f}) {
+                    d->AddLine({c.x+direction*gap,c.y},{c.x+direction*half,c.y},Alpha(t.border,.65f),s);
+                    if(t.ornament>0)d->AddLine({c.x+direction*22*s,c.y+3*s},{c.x+direction*std::max(22*s,half-12*s),c.y+3*s},Alpha(t.border,.22f*t.ornament),s);
+                }
+                if(t.ornament>0) {
+                    Diamond(d,c,4*s,Alpha(t.accent,t.ornament));
+                    d->AddCircle({c.x-9*s,c.y},1.3f*s,Alpha(t.accent,.65f*t.ornament),12);
+                    d->AddCircle({c.x+9*s,c.y},1.3f*s,Alpha(t.accent,.65f*t.ornament),12);
+                }
+                return;
+            }
             if (Skyrim(t))
             {
                 const float gap = t.ornament > 0 ? 18 * s : 0;
@@ -452,6 +548,11 @@ namespace Wheel
                     Chevron(d, {b.x - inset, (a.y + b.y) / 2}, 3 * s, edge, false, s);
                 }
             }
+            else if(Classic(t)) {
+                d->AddRect(a,b,hover||accent?Alpha(edge,.9f):Alpha(t.border,.6f),radius,0,t.borderWidth*s);
+                if(hover||accent)d->AddRect({a.x+3*s,a.y+3*s},{b.x-3*s,b.y-3*s},Alpha(edge,.25f),radius,0,s);
+                else d->AddLine({a.x+7*s,a.y+3*s},{b.x-7*s,a.y+3*s},Alpha(t.accent,.12f*t.ornament),s);
+            }
             else d->AddRect(a, b, hover || accent ? Alpha(edge, .9f) : Alpha(t.border, .6f), radius, 0, t.borderWidth * s);
             if (hover && !Skyrim(t))
                 d->AddLine({a.x + 6 * s, b.y - 2 * s}, {b.x - 6 * s, b.y - 2 * s}, Alpha(edge, .65f), s);
@@ -470,6 +571,7 @@ namespace Wheel
             const ImVec2 a{c.x + rect.x * s, c.y + rect.y * s}, b{a.x + rect.w * s, a.y + rect.h * s};
             Material(d,a,b,t,[&]{d->AddRectFilled(a,b,t.sector|0xFF000000u,Skyrim(t)?0:5*s);});
             if (Skyrim(t)) CutFrame(d, a, b, 5 * s, Alpha(t.accent, .8f), t.borderWidth * s);
+            else if(Classic(t)) GoldFrame(d,a,b,t,s,Alpha(t.accent,.8f));
             else d->AddRect(a, b, Alpha(t.accent, .8f), 5 * s, 0, t.borderWidth * s);
             d->AddLine({a.x + 12 * s, b.y - 3 * s}, {b.x - 12 * s, b.y - 3 * s}, Alpha(t.accent, .25f), s);
             const float size = std::round(18 * s);
@@ -506,30 +608,32 @@ namespace Wheel
             const auto &t = Style(v.config);
             auto tr = [&](const char *key) { return Tr(v.config, key); };
             const bool naming = v.outfitDialog == 1 || v.outfitDialog == 2;
-            PanelFrame(d, c, s, t, tr(v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
-                       tr(naming ? "outfitNameEditHelp" : "outfitManageHelp"));
+            PanelFrame(d, c, s, t, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMemberManage":"cycleManage"):v.combatDialog?(v.outfitDialog==1?"combatSave":"combatManage"):v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
+                       tr(naming ? "outfitNameEditHelp" : v.cycleMemberDialog ? "cycleMemberHelp" : "outfitManageHelp"));
             if (naming)
                 NameField(d, c, s, v);
+            else if(v.cycleMemberDialog)
+                Text(d,{c.x,c.y-156*s},v.outfitName.text,22*s,t.text,520*s,t.textShadow);
             else
                 Button(d, c, s, v, outfitNameButton,
                        v.outfitName.text.empty() ? tr("outfitNameEmpty") : v.outfitName.text, true);
             if (v.outfitDialog == 3)
             {
-                Button(d, c, s, v, outfitOverwriteButton, tr("outfitOverwrite"));
-                Button(d, c, s, v, outfitDeleteButton, tr("outfitDelete"), false, true);
-                Button(d, c, s, v, outfitExportButton, tr("outfitExport"));
+                Button(d, c, s, v, outfitOverwriteButton, v.cycleCaptureKey?tr("cycleCaptureKey"):tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveUp":"cycleBind"):v.combatDialog?"combatOverwrite":"outfitOverwrite"));
+                Button(d, c, s, v, outfitDeleteButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveDown":"cycleClear"):"outfitDelete"), false, !v.cycleMemberDialog);
+                if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleRemove":"cycleEdit"):"outfitExport"));
             }
             else if (v.outfitDialog == 4 || v.outfitDialog == 5)
-                Text(d, {c.x, c.y - 40 * s}, tr(v.outfitDialog == 4 ? "outfitConfirmOverwrite" : "outfitConfirmDelete"),
+                Text(d, {c.x, c.y - 40 * s}, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleConfirmRemove":"cycleConfirmClear"):v.combatDialog && v.outfitDialog==4?"combatConfirmOverwrite":v.outfitDialog == 4 ? "outfitConfirmOverwrite" : "outfitConfirmDelete"),
                      20 * s, t.accent, 550 * s, t.textShadow);
             else
             {
                 Item item;
-                item.action = ActionKind::Outfit;
+                item.action = v.combatDialog?ActionKind::Combat:ActionKind::Outfit;
                 DrawIcon(d, {c.x, c.y - 38 * s}, item, 1.65f * s * t.iconScale, Alpha(t.accent, .65f));
             }
             Rule(d, {c.x, c.y + 74 * s}, 240 * s, t, s);
-            Text(d, {c.x, c.y + 120 * s}, Wrapped(tr("outfitStorageHint"), 16 * s, 535 * s, 3), 16 * s, t.muted,
+            Text(d, {c.x, c.y + 120 * s}, Wrapped(v.cycleDialog?(v.cycleCaptureKey?tr("cycleCaptureHint"):v.cycleBinding+"\n"+tr("cycleStorage")):tr(v.combatDialog?"combatStorageHint":"outfitStorageHint"), 16 * s, 535 * s, 3), 16 * s, t.muted,
                  535 * s, t.textShadow);
             if (v.outfitDialog != 3)
                 Button(d, c, s, v, cancelButton, tr("outfitBack"));
@@ -551,7 +655,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -570,7 +674,7 @@ namespace Wheel
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
                                           tr(config.allInventory?"scopeAll":"scopeFavorites"),
                                           tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
-                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off")};
+                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off")};
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);
@@ -594,7 +698,11 @@ namespace Wheel
                 const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
                 Text(d,{c.x,c.y+145*s},Fit(tr(conflict?"bindingConflict":"controlsBindHint"),14*s,610*s),14*s,conflict?t.accent:t.muted);
             }
-            if(v.settingsTab==2)Text(d,{c.x,c.y+10*s},Wrapped(tr("keepOpenHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
+            if(v.settingsTab==1)Text(d,{c.x,c.y+36*s},Wrapped(tr("swapMouseHandsHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
+            if(v.settingsTab==2) {
+                Text(d,{c.x,c.y+40*s},Wrapped(tr("keepOpenHelp"),15*s,575*s,3),15*s,t.muted,575*s,t.textShadow);
+                Text(d,{c.x,c.y+104*s},Wrapped(tr("rememberLastWheelHelp"),14*s,575*s,3),14*s,t.muted,575*s,t.textShadow);
+            }
             if(v.settingsTab==3)Text(d,{c.x,c.y+10*s},Wrapped(tr("controllerSchemeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             if(v.settingsTab==3)Text(d,{c.x,c.y+105*s},Wrapped(tr("gamepadMoveHelp"),14*s,575*s,4),14*s,t.muted,575*s,t.textShadow);
             if(v.settingsTab==3)Text(d,{c.x,c.y+151*s},Fit(tr("gamepadMoveApplyHint"),13*s,575*s),13*s,t.muted);
@@ -604,7 +712,7 @@ namespace Wheel
             if (v.saveError)
                 Text(d, {c.x, c.y + 300 * s}, Fit(tr("saveError"), 14 * s, 620 * s), 14 * s, t.accent);
         }
-        std::string State(const View &v, const Item &item)
+        std::string State(const View &v, const Item &item,bool compact=false)
         {
             auto tr = [&](const char *key) { return Tr(v.config, key); };
             switch (item.action)
@@ -619,28 +727,41 @@ namespace Wheel
                 return tr(item.usable ? "lightOpen" : "lightUnavailableShort");
             case ActionKind::SaveOutfit:
             case ActionKind::ImportOutfits:
+            case ActionKind::SaveCombat:
+            case ActionKind::CycleCapture:
                 return "";
             default:
                 break;
             }
+            if(item.action==ActionKind::Cycle)return std::to_string(item.count)+" "+tr("cycleSets");
             if (!item.usable)
-                return tr(v.functions ? "outfitUnavailable" : "inventory");
+                return tr(item.action==ActionKind::Combat?"combatUnavailable":v.functions ? "outfitUnavailable" : "inventory");
+            // A hand badge already identifies equipped state. Keep the sector
+            // row to quantity only; full localized status remains in the card.
+            if(compact && item.equipped && item.handEquip!=HandEquip::None)
+                return item.magic?"":"x"+std::to_string(item.count);
             if (item.equipped)
-                return (item.magic ? "" : "x" + std::to_string(item.count) + " · ") + tr("equipped");
+                return (item.magic ? "" : "x" + std::to_string(item.count) + " · ") +
+                    tr(compact?"equipped":HandEquipKey(item.handEquip));
             return item.magic ? "" : "x" + std::to_string(item.count);
         }
         std::string ActionHint(const View &v, const Item &item)
         {
+            if(v.sortingEdit)return Tr(v.config,v.sortDrag.active?"sortDragging":v.gamepad?"sortMovePad":"sortMove");
             if (!item.detail.empty())
                 return item.detail;
             const char *key = "select";
             switch (item.action)
             {
             case ActionKind::Outfit:
+            case ActionKind::Combat:
                 key = item.usable ? (v.gamepad?(v.config.gamepadCategoryButtons==1?"padUseBumpers":"padUseTriggers"):"outfitSelect") : "outfitUnavailable";
                 break;
             case ActionKind::SaveOutfit:
                 key = "outfitSave";
+                break;
+            case ActionKind::SaveCombat:
+                key="combatSave";
                 break;
             case ActionKind::ImportOutfits:
                 key = "outfitImport";
@@ -668,22 +789,20 @@ namespace Wheel
             const auto viewport = ImGui::GetIO().DisplaySize;
             // Nordic corners reach 23 units inward. Reserve a real content gutter
             // beyond them, while keeping the same usable text width as old themes.
-            const float padding = Nordic(t) ? 30.f : Skyrim(t) ? 24.f : 18.f;
+            const float padding = Nordic(t) ? 30.f : Skyrim(t) || Classic(t) ? 24.f : 18.f;
             const float extra = padding - 18.f;
-            const float width = (278 + 2 * extra) * s, margin = 14 * s, gap = 346 * s;
-            float left = c.x + gap;
-            if (left + width > viewport.x - margin)
-                left = c.x - 304 * s - width;
-            if (left < margin || left + width > viewport.x - margin)
-                return false;
+            const float width = (278 + 2 * extra) * s;
+            const float reveal = SmoothPhase(expansion, .42f, 1.f);
             const bool hasInfo = item.info.HasData();
             const auto info = DescribeItem(item.info, [&](const char *key) { return Tr(v.config, key); });
             const int statRows = (static_cast<int>(info.stats.size()) + 1) / 2;
             const float infoHeight = statRows * 28.f + (info.heading.empty() ? 0.f : 27.f) +
                                      info.effects.size() * 42.f + (info.more.empty() ? 0.f : 20.f);
-            const float height = (hasInfo ? 194.f + infoHeight : 218.f) + 2 * extra;
-            const float top =
-                std::clamp(c.y - height * s * .5f, margin, std::max(margin, viewport.y - height * s - margin));
+            const float height = (hasInfo ? 194.f + infoHeight : item.action==ActionKind::Combat || item.action==ActionKind::Cycle || item.action==ActionKind::CycleMember?270.f:218.f) + 2 * extra;
+            const auto placement=PlaceDetail(t.layout,c.x,c.y,s,width,height*s,viewport.x,viewport.y);
+            if(!placement.visible)return false;
+            if(reveal==0.f)return true;
+            const float left=placement.box.x,top=placement.box.y;
             const ImVec2 a{left, top}, b{left + width, top + height * s};
             const float bodyLeft = a.x + padding * s, bodyRight = b.x - padding * s,
                         bodyWidth = bodyRight - bodyLeft, bodyTop = top + extra * s;
@@ -733,10 +852,13 @@ namespace Wheel
                          item.usable ? t.muted : t.accent);
             }
             else
-                LeftText(d, {bodyLeft, bodyTop + 158 * s}, Wrapped(hint, 14 * s, bodyWidth, 3), 14 * s,
+                LeftText(d, {bodyLeft, bodyTop + 158 * s}, Wrapped(hint, 14 * s, bodyWidth, item.action==ActionKind::Combat || item.action==ActionKind::Cycle || item.action==ActionKind::CycleMember?5:3), 14 * s,
                          item.usable ? t.muted : t.accent, bodyWidth);
-            const float reveal = SmoothPhase(expansion, .42f, 1.f);
-            Reveal(d, first, reveal, {(left > c.x ? -1.f : 1.f) * 12 * s * (1 - reveal), 0});
+            const bool vertical=placement.position==DetailPosition::Top || placement.position==DetailPosition::Bottom;
+            const float travel=(vertical?std::min(12.f,t.layout.detailGap-8.f):12.f)*s*(1-reveal);
+            const ImVec2 offset=placement.position==DetailPosition::Top?ImVec2{0,travel}:
+                placement.position==DetailPosition::Bottom?ImVec2{0,-travel}:ImVec2{left>c.x?-travel:travel,0};
+            Reveal(d, first, reveal, offset);
             return true;
         }
     } // namespace
@@ -761,7 +883,7 @@ namespace Wheel
         const ImVec2 c = ViewCentre(io.DisplaySize.x, io.DisplaySize.y, v);
         constexpr float step = 2 * std::numbers::pi_v<float> / slots;
         const float outer = 264 * s, inner = 116 * s;
-        const int selected = WheelSlot(v.x, v.y);
+        const int selected = WheelSlot(v.x, v.y,t.layout);
         if (v.outfitDialog || v.settingsOpen)
         {
             ResetVisualFeedback();
@@ -789,12 +911,15 @@ namespace Wheel
                         pageFade = pageT * pageT * (3 - 2 * pageT);
             const auto typeTitle = v.functions
                                        ? tr(v.functionSection == FaceLight::Section::Outfits    ? "outfitTitle"
+                                            :v.functionSection == FaceLight::Section::Combat ? "combatTitle"
+                                            :v.functionSection == FaceLight::Section::Cycles ? "cycleTitle"
+                                            :v.functionSection == FaceLight::Section::CycleMembers ? "cycleEntries"
                                             : v.functionSection == FaceLight::Section::Lighting ? "lightTitle"
                                                                                                 : "lightFollowers")
                                        : tr(v.visibleCategories.Count()?categoryKeys[int(v.category)]:"title");
             const int titleStart = d->VtxBuffer.Size;
             CategoryStrip(d, c, s, v, pageFade);
-            Rule(d, {c.x, c.y - 283 * s}, 160 * s, t, s);
+            Rule(d, {c.x, c.y - (283+t.layout.ExtraY()) * s}, 160 * s, t, s);
             const float frameReveal = SmoothPhase(expansion, .15f, .9f);
             Reveal(d, titleStart, frameReveal, {0, 8 * s * (1 - frameReveal)});
             const int railStart = d->VtxBuffer.Size;
@@ -804,15 +929,15 @@ namespace Wheel
             // its own rim and ticks, so the closed part never outlines a full wheel.
             if (expansion >= 1.f)
             {
-                d->AddCircle(c, outer + 8 * s, Alpha(t.border, .8f), 192, t.borderWidth * s);
-                if (!Skyrim(t)) d->AddCircle(c, outer + 12 * s, Alpha(t.border, .28f * t.ornament), 192, s);
+                ShapeOutline(d,c,outer+8*s,Alpha(t.border,.8f),192,t.borderWidth*s,t.layout);
+                if (!Skyrim(t)) ShapeOutline(d,c,outer+12*s,Alpha(t.border,.28f*t.ornament),192,s,t.layout);
             }
             if (expansion >= 1.f && t.ornament > 0 && !Skyrim(t))
-                for (int i = 0; i < slots * 3; ++i)
+                for (int i = 0, divisions=Classic(t)?2:3; i < slots * divisions; ++i)
                 {
-                    const float a = i * step / 3;
-                    d->AddLine(At(c, outer + 8 * s, a), At(c, outer + (i % 3 == 0 ? 14.f : 11.f) * s, a),
-                               Alpha(t.accent, (i % 3 == 0 ? .65f : .25f) * t.ornament), s);
+                    const float a = i * step / divisions;
+                    d->AddLine(At(c, outer + 8 * s, a,t.layout), At(c, outer + (i % divisions == 0 ? 14.f : 11.f) * s, a,t.layout),
+                               Alpha(t.accent, (i % divisions == 0 ? .65f : .25f) * t.ornament), s);
                 }
             for (int slot = 0; slot < slots; ++slot)
             {
@@ -837,54 +962,92 @@ namespace Wheel
                 if (expansion < 1.f)
                 {
                     Arc(d, c, bladeOuter + 8 * s, a - step * .5f, a - step * .5f + step * blade, Alpha(t.border, .8f),
-                        t.borderWidth * s);
+                        t.borderWidth * s,t.layout);
                     if (!Skyrim(t)) Arc(d, c, bladeOuter + 12 * s, a - step * .5f, a - step * .5f + step * blade,
-                        Alpha(t.border, .28f * t.ornament), s);
+                        Alpha(t.border, .28f * t.ornament), s,t.layout);
                     if (t.ornament > 0 && !Skyrim(t))
                         for (int tick = -1; tick <= 1; ++tick)
                         {
-                            const float angle = a + tick * step / 3;
+                            const float angle = a + tick * step / (Classic(t)?2:3);
                             if (angle > a - step * .5f + step * blade)
                                 continue;
-                            d->AddLine(At(c, bladeOuter + 8 * s, angle),
-                                       At(c, bladeOuter + (tick == 0 ? 14.f : 11.f) * s, angle),
+                            d->AddLine(At(c, bladeOuter + 8 * s, angle,t.layout),
+                                       At(c, bladeOuter + (tick == 0 ? 14.f : 11.f) * s, angle,t.layout),
                                        Alpha(t.accent, (tick == 0 ? .65f : .25f) * t.ornament), s);
                         }
                 }
                 if (Skyrim(t)) SkyrimBlade(d, c, inner, bladeOuter, begin, end, t, s, occupied, weight);
+                else if(Classic(t)) GoldBlade(d,c,inner,bladeOuter,begin,end,t,s,occupied,weight);
                 else {
-                Material(d,{c.x-bladeOuter,c.y-bladeOuter},{c.x+bladeOuter,c.y+bladeOuter},t,[&]{
-                    Sector(d,c,inner,bladeOuter,begin,end,occupied?Mix(t.sector,t.hover,weight*.6f):t.empty,t.relief);
+                Material(d,{c.x-bladeOuter*t.layout.AxisX(),c.y-bladeOuter*t.layout.AxisY()},
+                    {c.x+bladeOuter*t.layout.AxisX(),c.y+bladeOuter*t.layout.AxisY()},t,[&]{
+                    Sector(d,c,inner,bladeOuter,begin,end,occupied?Mix(t.sector,t.hover,weight*.6f):t.empty,t.relief,t.layout);
                 });
                 // Insets must stay inside the partial angular span near the hinge.
                 Arc(d, c, bladeOuter - 1.5f * s, begin + .008f * blade, end - .008f * blade,
-                    Alpha(t.border, occupied ? .65f : .23f), t.borderWidth * s);
-                Arc(d, c, inner + 1.5f * s, begin + .008f * blade, end - .008f * blade, Alpha(t.border, .35f), s);
+                    Alpha(t.border, occupied ? .65f : .23f), t.borderWidth * s,t.layout);
+                Arc(d, c, inner + 1.5f * s, begin + .008f * blade, end - .008f * blade, Alpha(t.border, .35f), s,t.layout);
                 if (weight > 0)
                 {
                     Arc(d, c, bladeOuter - 3 * s, begin + .018f * blade, end - .018f * blade, Alpha(t.accent, weight),
-                        2 * s);
+                        2 * s,t.layout);
                     Arc(d, c, inner + 3 * s, begin + .05f * blade, end - .05f * blade, Alpha(t.accent, weight * .45f),
-                        s);
+                        s,t.layout);
                 }
                 }
                 const int contentStart = d->VtxBuffer.Size;
-                const auto at = At(c, (189 - 16 * (1 - blade)) * s, bladeAngle);
+                const auto at = At(c, (189 - 16 * (1 - blade)) * s, bladeAngle,t.layout);
+                const float contentReveal=SmoothPhase(blade,.55f,1.f);
+                if(contentReveal>0.f && pageFade>0.f) {
                 if (occupied)
                 {
                     const auto &item = v.items[index];
-                    const auto state = State(v, item);
+                    const auto state = State(v, item,true);
                     const auto ink = item.usable ? Mix(t.text, t.accent, weight) : t.muted;
                     const float size = 16 * s * t.labelScale;
                     DrawIcon(d, {at.x, at.y - 19 * s}, item, 1.05f * s * t.iconScale, Alpha(ink, pageFade));
-                    Text(d, {at.x, at.y + 15 * s}, Fit(item.name, size, 109 * s), size,
-                         Alpha(item.usable ? t.text : t.muted, pageFade), 0, t.textShadow * pageFade);
-                    Text(d, {at.x, at.y + 36 * s}, Fit(state, 12 * s, 112 * s), 12 * s,
-                         Alpha(item.equipped ? t.accent : t.muted, pageFade), 0, t.textShadow * pageFade);
-                    if (item.equipped)
-                        Diamond(d, At(c, bladeOuter - 17 * s, bladeAngle+(ValidQuickSlot(item.quickSlot)?.07f:0.f)), 3 * s, Alpha(t.accent, pageFade));
+                    float nameWidth=item.handEquip==HandEquip::Left || item.handEquip==HandEquip::Right?88.f:
+                        item.handEquip!=HandEquip::None?102.f:109.f;
                     if(ValidQuickSlot(item.quickSlot)) {
-                        const auto badge=At(c,bladeOuter-18*s,bladeAngle);
+                        const auto keyAt=At(c,inner+15*s,bladeAngle,t.layout);
+                        if(std::abs(keyAt.y-(at.y+15*s))<size*.5f+10*s)
+                            nameWidth=std::min(nameWidth,std::max(24.f,2*std::abs(keyAt.x-at.x)/s-28.f));
+                    }
+                    Text(d, {at.x, at.y + 15 * s}, Fit(item.name, size, nameWidth * s*std::min(1.f,t.layout.AxisX())), size,
+                         Alpha(item.usable ? t.text : t.muted, pageFade), 0, t.textShadow * pageFade);
+                    // Keep icon, name and the whole status line in one vertical column,
+                    // including diagonal blades and intermediate animation poses.
+                    const ImVec2 statusAt{at.x, at.y + 36 * s};
+                    Text(d, statusAt, Fit(state, 12 * s, 112 * s*std::min(1.f,t.layout.AxisX())), 12 * s,
+                         Alpha(item.equipped ? t.accent : t.muted, pageFade), 0, t.textShadow * pageFade);
+                    // Keep the equipped diamond near the outer rim, with a radial gap
+                    // from the hover arrow (outer-3 through outer-8). The keycap's
+                    // 15-unit inner inset also keeps its diagonal corners inside the blade.
+                    const float markerRadius = bladeOuter - 10 * s;
+                    if (item.equipped) {
+                        if(item.handEquip==HandEquip::None)
+                            Diamond(d, At(c, bladeOuter - 16 * s, bladeAngle,t.layout), 3 * s, Alpha(t.accent, pageFade));
+                        else {
+                            // Inner L / R flank the number. Outer L+R / 2H
+                            // occupy fixed left/right corners of each blade.
+                            const auto label=HandEquipLabel(item.handEquip);
+                            const bool innerBadge=item.handEquip==HandEquip::Left || item.handEquip==HandEquip::Right;
+                            const float textWidth=FontAt(12*s)->CalcTextSizeA(12*s,FLT_MAX,0,label).x;
+                            const float half=(innerBadge?8.f:item.handEquip==HandEquip::Dual?14.f:12.f)*s;
+                            const float available=innerBadge?10*s:2*half-8*s;
+                            const float fontSize=textWidth>available?12*s*(available/textWidth):12*s;
+                            const auto point=HandBadgePoint(t.layout,inner,bladeOuter,s,bladeAngle,item.handEquip,half);
+                            const ImVec2 badge{c.x+point.x,c.y+point.y};
+                            const float halfHeight=(innerBadge?7.f:9.f)*s;
+                            const ImVec2 a{badge.x-half,badge.y-halfHeight},b{badge.x+half,badge.y+halfHeight};
+                            d->AddRectFilled(a,b,Alpha(t.panel|0xFF000000u,pageFade),Skyrim(t)?0:3*s);
+                            if(Skyrim(t))CutFrame(d,a,b,3*s,Alpha(t.accent,pageFade),s);
+                            else d->AddRect(a,b,Alpha(t.accent,pageFade),3*s,0,s);
+                            Text(d,badge,label,fontSize,Alpha(t.accent,pageFade));
+                        }
+                    }
+                    if(ValidQuickSlot(item.quickSlot)) {
+                        const auto badge=At(c,inner + 15 * s,bladeAngle,t.layout);
                         const float radius=9*s;
                         if (Skyrim(t)) {
                             d->AddRectFilled({badge.x-radius,badge.y-radius},{badge.x+radius,badge.y+radius},t.panel|0xFF000000u);
@@ -897,37 +1060,53 @@ namespace Wheel
                     }
                     if (!item.usable)
                     {
-                        const auto mark = At(c, bladeOuter - 17 * s, bladeAngle-(ValidQuickSlot(item.quickSlot)?.07f:0.f));
+                        const auto mark = At(c, markerRadius, bladeAngle-(ValidQuickSlot(item.quickSlot)?.07f:0.f),t.layout);
                         d->AddLine({mark.x - 3 * s, mark.y}, {mark.x + 3 * s, mark.y}, Alpha(t.muted, pageFade),
                                    1.5f * s);
                     }
                 }
                 else
                     Diamond(d, at, 2 * s, Alpha(t.border, .35f));
-                Reveal(d, contentStart, SmoothPhase(blade, .55f, 1.f));
+                Reveal(d, contentStart, contentReveal*(v.sortDrag.active && slot==v.sortingSelectedSlot?.3f:1.f));
+                }
+                if(v.sortDrag.active && occupied && slot==selected) {
+                    const float pulse=config.animations?.75f+.25f*std::sin(static_cast<float>(ImGui::GetTime())*8.f):1.f;
+                    for(int line=0;line<24;++line) {
+                        const float a=slot*step-step*.45f+step*.9f*line/24;
+                        const float b=slot*step-step*.45f+step*.9f*(line+1)/24;
+                        d->AddLine(At(c,outer-5*s,a,t.layout),At(c,outer-5*s,b,t.layout),Alpha(t.accent,pulse),3*s);
+                    }
+                }
                 Reveal(d, bladeStart, SmoothPhase(blade, 0.f, .18f));
             }
-            Material(d,{c.x-inner,c.y-inner},{c.x+inner,c.y+inner},t,[&]{
-                d->AddCircleFilled(c,inner-9*s,(Nordic(t)?Mix(t.panel,t.border,.11f):t.panel)|0xFF000000u,128);
+            Material(d,{c.x-inner*t.layout.AxisX(),c.y-inner*t.layout.AxisY()},
+                {c.x+inner*t.layout.AxisX(),c.y+inner*t.layout.AxisY()},t,[&]{
+                ShapeFill(d,c,inner-9*s,(Nordic(t)?Mix(t.panel,t.border,.11f):t.panel)|0xFF000000u,128,t.layout);
             });
-            d->AddCircle(c, inner - 6 * s, Alpha(t.border, .8f), 128, t.borderWidth * s);
+            ShapeOutline(d,c,inner-6*s,Alpha(t.border,.8f),128,t.borderWidth*s,t.layout);
             if (Skyrim(t))
             {
                 if(Nordic(t)) {
-                    d->AddCircle(c,inner-12*s,Alpha(t.border,.5f),128,1.3f*s);
-                    d->AddCircle(c,inner-15*s,Alpha(IM_COL32_BLACK,.7f),128,s);
+                    ShapeOutline(d,c,inner-12*s,Alpha(t.border,.5f),128,1.3f*s,t.layout);
+                    ShapeOutline(d,c,inner-15*s,Alpha(IM_COL32_BLACK,.7f),128,s,t.layout);
                     for(int axis=0;axis<4;++axis) {
                         const float angle=axis*std::numbers::pi_v<float>/2;
                         const float r=inner-11*s;
-                        const ImVec2 p[]={At(c,r,angle-.05f),At(c,r-4*s,angle),At(c,r,angle+.05f)};
+                        const ImVec2 p[]={At(c,r,angle-.05f,t.layout),At(c,r-4*s,angle,t.layout),At(c,r,angle+.05f,t.layout)};
                         d->AddPolyline(p,3,Alpha(t.accent,.5f*t.ornament),0,s);
                     }
                 }
-                d->AddCircle(c, inner - 11 * s, Alpha(t.border, .4f), 128, s);
+                ShapeOutline(d,c,inner-11*s,Alpha(t.border,.4f),128,s,t.layout);
                 Rule(d, {c.x, c.y - 77 * s}, 36 * s, t, s);
                 Rule(d, {c.x, c.y + 77 * s}, 36 * s, t, s);
             }
-            else Arc(d, c, inner - 10 * s, -.7f, .7f, Alpha(t.accent, .3f * t.ornament), s);
+            else if(Classic(t)) {
+                ShapeOutline(d,c,inner-11*s,Alpha(t.accent,.3f*t.ornament),128,s,t.layout);
+                ShapeOutline(d,c,inner-14*s,Alpha(t.border,.22f*t.ornament),128,s,t.layout);
+                Rule(d,{c.x,c.y-77*s},32*s,t,s);
+                Rule(d,{c.x,c.y+77*s},32*s,t,s);
+            }
+            else Arc(d, c, inner - 10 * s, -.7f, .7f, Alpha(t.accent, .3f * t.ornament), s,t.layout);
             const int centreStart = d->VtxBuffer.Size;
             const int index = PageItemIndex(v,selected);
             if (selected >= 0 && index>=0 && index < int(v.items.size()))
@@ -949,8 +1128,10 @@ namespace Wheel
                     else if (!data.effects.empty())
                         compactInfo = data.effects[0].label;
                 }
-                Text(d, {c.x, c.y + 38 * s}, Wrapped(compactInfo, 14 * s, 172 * s, 2), 14 * s,
+                Text(d, {c.x, c.y + (item.centreNote.empty()?38:30) * s}, Wrapped(compactInfo, 14 * s, 172 * s, 2), 14 * s,
                      item.equipped ? t.accent : t.muted, 172 * s, t.textShadow);
+                if(!item.centreNote.empty())
+                    Text(d, {c.x, c.y + 60 * s}, Wrapped(item.centreNote,12*s,172*s,2),12*s,t.accent,172*s,t.textShadow);
             }
             else
             {
@@ -963,25 +1144,27 @@ namespace Wheel
             // Includes the card; its later reveal remains relative to this fade.
             Reveal(d, centreStart, SmoothPhase(expansion, .08f, .75f));
             const int footerStart = d->VtxBuffer.Size;
-            Rule(d, {c.x, c.y + 283 * s}, 160 * s, t, s);
-            Text(d, {c.x, c.y + 304 * s},
-                 std::to_string(ItemCount(v)) + " " + tr(v.functions ? "functionCount" : v.inventoryWide?"inventoryCount":"count"), 16 * s, t.accent,
+            Rule(d, {c.x, c.y + (283+t.layout.ExtraY()) * s}, 160 * s, t, s);
+            Text(d, {c.x, c.y + (304+t.layout.ExtraY()) * s},
+                 std::to_string(ItemCount(v)) + " " + tr(v.functions ? "functionCount" : v.inventoryWide?"inventoryCount":"count") +
+                     (!v.functions && !v.vampireRestricted?" · "+v.sortingLabel+(v.sortingEdit?" ["+tr("sortEditing")+"]":""):""), 16 * s, t.accent,
                  0, t.textShadow);
             if (config.showHints)
             {
-                const float left = c.x - 282 * s, right = c.x + 282 * s, top = c.y + 328 * s;
-                const bool quickHint=!v.functions && !v.gamepad;
-                if (Skyrim(t)) Surface(d,{left,top},{right,top+(quickHint?68:48)*s},t,s);
-                else d->AddRectFilled({left, top}, {right, top + (quickHint?68:48) * s}, Alpha(t.panel, .85f), 6 * s);
+                const float left = c.x - 282 * s, right = c.x + 282 * s, top = c.y + (328+t.layout.ExtraY()) * s;
+                const bool sortHint=!v.functions && !v.vampireRestricted;
+                const bool quickHint=!v.vampireRestricted && !v.gamepad && (!v.functions || v.functionSection==FaceLight::Section::Combat);
+                if (Skyrim(t) || Classic(t)) Surface(d,{left,top},{right,top+((quickHint || sortHint)?88:48)*s},t,s);
+                else d->AddRectFilled({left, top}, {right, top + ((quickHint || sortHint)?88:48) * s}, Alpha(t.panel, .85f), 6 * s);
                 d->AddLine({left + 12 * s, top}, {right - 12 * s, top}, Alpha(t.border, .45f), s);
                 Text(
                     d, {c.x, top + 14 * s},
-                    Fit(tr(v.gamepad?(v.config.gamepadCategoryButtons==1?"padUseBumpers":"padUseTriggers"):v.functions ? (v.functionSection == FaceLight::Section::Outfits ? "functionUse" : "lightUse")
-                                       : "compactUse"),
+                    Fit(tr(v.sortingEdit?(v.sortDrag.active?"sortDragging":v.gamepad?"sortMovePad":"sortMove"):v.vampireRestricted?"vampireUse":v.gamepad?(v.config.gamepadCategoryButtons==1?"padUseBumpers":"padUseTriggers"):v.functions ? (v.functionSection==FaceLight::Section::Combat?"combatUse":v.functionSection==FaceLight::Section::Cycles?"cycleUse":v.functionSection==FaceLight::Section::CycleMembers?"cycleMemberHint":v.functionSection == FaceLight::Section::Outfits ? "functionUse" : "lightUse")
+                                       : config.swapMouseHands?"compactUseSwapped":"compactUse"),
                         14 * s, 535 * s),
                     14 * s, t.muted, 0, t.textShadow);
                 Text(d, {c.x, top + 36 * s},
-                     Fit(v.gamepad?tr(v.appliedGamepadMove?
+                     Fit(v.vampireRestricted?tr("vampireRestricted"):v.gamepad?tr(v.appliedGamepadMove?
                          (config.timeMode==0?"padNavigationRight":"padNavigationMoving"):"padNavigation"):KeyLabel([&] {
                              auto x = config;
                              x.hotkey = config.switchKey;
@@ -992,9 +1175,40 @@ namespace Wheel
                                                                                                   : "dualWheelHint"),
                          12 * s, 535 * s),
                      12 * s, t.muted, 0, t.textShadow);
-                if(quickHint)Text(d,{c.x,top+56*s},Fit(tr(v.inventoryWide?"allQuickSlotHint":"quickSlotHint"),12*s,535*s),12*s,t.muted,0,t.textShadow);
+                if(quickHint)Text(d,{c.x,top+56*s},Fit(tr(v.sortingEdit?"sortSave":v.inventoryWide?"allQuickSlotHint":"quickSlotHint"),12*s,535*s),12*s,t.muted,0,t.textShadow);
+                if(quickHint || sortHint)Text(d,{c.x,top+76*s},Fit(tr(sortHint?(v.gamepad?"sortPad":"sortKeys"):"cycleQuickHint"),12*s,535*s),12*s,t.muted,0,t.textShadow);
             }
             Reveal(d, footerStart, frameReveal, {0, -8 * s * (1 - frameReveal)});
+        }
+        // Lift/follow while dragging, then settle onto the final sector and fade.
+        // Rendering owns this animation; input/order changes commit only on release.
+        const bool dragging=v.sortDrag.active && v.dragItem && v.sortingEdit && !v.settingsOpen;
+        const float motion=config.animations?std::clamp(io.DeltaTime*18.f,0.f,1.f):1.f;
+        if(dragging) {
+            const ImVec2 target{c.x+v.x*224*s,c.y+v.y*224*s-34*s};
+            if(!feedback.dragging)feedback.ghostPosition=target;
+            else feedback.ghostPosition={std::lerp(feedback.ghostPosition.x,target.x,motion),std::lerp(feedback.ghostPosition.y,target.y,motion)};
+            feedback.ghostItem=v.dragItem;
+            feedback.ghostAlpha=std::lerp(feedback.ghostAlpha,1.f,motion);
+        }else if(feedback.ghostItem && feedback.ghostAlpha>0) {
+            if(!v.sortingEdit || v.sortingSelectedSlot<0 || !config.animations)feedback.ghostAlpha=0;
+            else {
+                const auto target=At(c,189*s,v.sortingSelectedSlot*step,t.layout);
+                feedback.ghostPosition={std::lerp(feedback.ghostPosition.x,target.x,motion),std::lerp(feedback.ghostPosition.y,target.y,motion)};
+                feedback.ghostAlpha=std::max(0.f,feedback.ghostAlpha-io.DeltaTime*5.f);
+            }
+        }
+        feedback.dragging=dragging;
+        if(feedback.ghostItem && feedback.ghostAlpha>0) {
+            const int start=d->VtxBuffer.Size;
+            auto at=feedback.ghostPosition;
+            at.x=std::clamp(at.x,76*s,io.DisplaySize.x-76*s);
+            at.y=std::clamp(at.y,40*s,io.DisplaySize.y-40*s);
+            d->AddRectFilled({at.x-70*s,at.y-33*s},{at.x+70*s,at.y+33*s},t.panel|0xFF000000u,5*s);
+            d->AddRect({at.x-70*s,at.y-33*s},{at.x+70*s,at.y+33*s},t.accent,5*s,0,1.5f*s);
+            DrawIcon(d,{at.x,at.y-10*s},*feedback.ghostItem,.65f*s*t.iconScale,t.accent);
+            Text(d,{at.x,at.y+17*s},Fit(feedback.ghostItem->name,13*s,126*s),13*s,t.text,0,t.textShadow);
+            Reveal(d,start,feedback.ghostAlpha);
         }
         const ImVec2 pointer{c.x + v.x * 224 * s, c.y + v.y * 224 * s};
         if (!v.settingsOpen && !v.outfitDialog)

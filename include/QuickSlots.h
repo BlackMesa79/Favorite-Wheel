@@ -3,6 +3,10 @@
 #include <string_view>
 namespace Wheel {
 inline constexpr int nativeQuickSlots = 8;
+enum class QuickSlotRoute { Native, Combat };
+inline QuickSlotRoute RouteQuickSlot(std::uint32_t combatPreset,bool nativeOccupied) {
+  return combatPreset && !nativeOccupied ? QuickSlotRoute::Combat : QuickSlotRoute::Native;
+}
 inline bool ValidQuickSlot(int slot) {
   return slot >= 0 && slot < nativeQuickSlots;
 }

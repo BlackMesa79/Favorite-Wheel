@@ -10,6 +10,8 @@ The UI has no background blur, scene copies, compute shaders or extra scene rend
 
 The 1920x1080 synthetic armor-details preview before the multilingual font changes used one command list, one draw command, 8,136 vertices and 8,100 triangles. These counts describe the supplied scene only; one draw command can still contain overlapping triangles. WARP preview is CPU software rendering, not a 1080 Ti benchmark, and gives no real GPU time, clock, power or game-scene measurements.
 
+October 11 follow-up: the user and commenters report an animation on/off correlation with opening stutter. The drawing path has now been optimized and transition CPU/font timing summaries added; see [ANIMATION_PERFORMANCE_0.5.3.md](ANIMATION_PERFORMANCE_0.5.3.md). This narrows the investigation but does not establish the in-game GPU or driver cause. The recommendations below remain historical diagnostic guidance.
+
 ## Working hypotheses and shortest checks
 
 1. Compare gameplay, vanilla Favorites, and the wheel at the same location. Record FPS, GPU utilization, clock and power before/after. In Pause mode reduced CPU simulation work can allow higher rendering FPS on an uncapped configuration, increasing GPU load. A custom menu may also be treated differently by per-menu limiter settings. These are hypotheses, not confirmed causes.

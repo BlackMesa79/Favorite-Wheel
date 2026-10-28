@@ -1,0 +1,8 @@
+0.7.1 hand equipment test v2 — not the formal release
+
+- Fixed a native unequip-return-value mistake that stopped single-weapon transfers after removing the source hand.
+- A spell already in L+R now keeps only the requested hand; equipping its second hand still creates L+R.
+
+Test both weapon transfer directions, same-spell L+R -> L and L+R -> R, swapped mouse hands, and Pause + KeepOpen.
+Spell collapse uses native UnequipSpell dispatch. Verify the result appears without closing the paused wheel; logs include Spell hand clear completed.
+Existing INI/resources are preserved. The prepared formal 0.7.1 archives are unchanged.

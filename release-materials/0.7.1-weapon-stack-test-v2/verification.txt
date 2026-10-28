@@ -1,0 +1,6 @@
+Date: 2026-10-16 (Asia/Hong_Kong)
+DLL metadata: 0.7.1; development label weapon-stack-test-v2
+DLL SHA256: 552E00E8B70977F7497EF69E49CBC3F2F1CBA6CB38616FD179EFD2B62E1FA452
+18 automated suites passed, including real runtime databases and isolated usvfs persistence.
+Local user confirmed the first stack fix; native anchor migration was found in the local log.
+Cursor fix gameplay validation is pending. Formal release packages and player INI/resources are preserved.

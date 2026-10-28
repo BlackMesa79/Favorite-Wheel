@@ -1,27 +1,52 @@
 # Favorite Wheel - Radial Actions
 
-![Favorite Wheel - Radial Actions](release-materials/0.5.2/FavoriteWheel-cover-1280.png)
+## 0.9.0
+
+- **T** cycles sorting; **Shift+T** toggles manual sorting; **F2** opens settings. Manual sorting supports short LMB release / RMB to move earlier / later, and LMB dragging onto an occupied sector to insert there. Scroll while held to change pages; RMB or Esc cancels the drag. Save the game to keep the order.
+- Weapons and apparel support damage/armor, weight and value sorting; spells support magicka-cost sorting. These use detail-panel values and refresh with the directory. Concentration spell cost is per second; there is no combined spell-damage metric.
+- Gameplay settings offer an opt-in session-local **Remember last wheel** option. The normal entrance remembers; the dedicated actions shortcut stays direct. Loading a save resets the remembered wheel.
+- Re-selecting a regular spell clears the requested occupied hand, preserving the other hand. Required two-hand spells clear together. This supersedes the historical 0.7.1 dual-spell behavior described below.
+- Zero-health apparel signatures can be saved in outfits without normalizing or modifying the actual items.
+
+
+![Favorite Wheel - Radial Actions](release-materials/0.6.0/FavoriteWheel-cover-1280.png)
 
 **Your favorites and actions, at your fingertips.**
 
-An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. The current action modules are outfit presets and optional Face Lighting controls.
+An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. Action modules include outfit presets, combat presets, combat cycles and optional Face Lighting controls.
 
-Latest release: **0.5.2**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current build: **0.9.0** (previous published release: 0.8.0). The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
-Current development build: **0.5.3**, extending the optional **Skyrim** skin with an original charcoal material, thin silver-gray framing and small Nordic corner ornaments inspired by the vanilla inventory UI. Detail cards reserve extra space for decorations while keeping their text width. Choose it under Appearance / Theme. The first layer and slow-time physics guard have passed the user's game test; the latest skin refinements still need a game test. Existing themes keep their original style. See [material skin notes](docs/SKIN_MATERIALS_0.5.3.md).
+Version 0.9.0 adds category/stat sorting, animated drag arrangement and session wheel memory; improves first opening; fixes zero-health outfit capture and spell reselect toggling. See the [0.9.0 changelog](release-materials/0.9.0/Nexus-changelog-en.txt), [Nexus description](release-materials/0.9.0/Nexus-description-en.bbcode.txt) and [release record](docs/RELEASE_0.9.0.md).
+
+Version 0.8.0 adds combat cycles and centre group indicators, fixes duplicate favorited misc stacks, and adds a restricted Vampire Lord skill wheel. The user confirmed these changes in game after the audio experiments were reverted. Includes the 0.7.3 controller-chord fix. See the [release notes](docs/RELEASE_0.8.0.md), [short changelog](release-materials/0.8.0/Nexus-changelog-en.txt) and [Nexus description](release-materials/0.8.0/Nexus-description-en.bbcode.txt). Disable older standalone test patches when upgrading. PureDark/TRP visibility issues remain unresolved.
+
+Version 0.7.3 fixes the reported LB+Y controller shortcut opening vanilla Favorites with custom control maps. The reporter confirmed the independent patch works. Disable that separate controller-chord test patch when upgrading. See the [short changelog](release-materials/0.7.3/Nexus-changelog-en.txt).
+
+Version 0.7.2 fixes dual wielding identical weapons when only one copy is favorited, false changed-item errors after native stack splitting/merging, and cursor recentering on first equip. See the [short changelog](release-materials/0.7.2/Nexus-changelog-en.txt).
+
+Version 0.7.1 fixes startup after title-screen console commands such as `coc qasmoke` and follows controller Favorites modifiers from custom control maps. Plain buttons retain their normal use; identical Favorites/Actions controller chords prefer Favorites. Single weapons can switch hands in one click; a spell already in both hands keeps only the requested hand when clicked again. See the [short changelog](release-materials/0.7.1/Nexus-changelog-en.txt).
+
+Version **0.6.0** adds three-layer theme authoring, a rebuilt Classic Gold, and the Skyrim / Skyrim Polygon skins. Colors/components, local PNG materials, wheel shapes and detail-card preferences can be mixed in external theme INIs. It also improves animation and category-switch performance, fixes torch/poison use and paused equipment, and strengthens empty-INI saving. See the [theme-making guide](docs/THEME_AUTHORING_0.6.0.md) and [short changelog](release-materials/0.6.0/Nexus-changelog-en.txt).
+
+Equipped hand-held items show `L`/`R` beside the inner quick-slot number and `L+R`/`2H` at the outer left/right, relative to each sector. Details show the localized hand state; sector text keeps only quantity. Apparel retains its equipped diamond. See [hand-state display and testing](docs/HAND_EQUIPMENT_STATUS.md).
+
+Combat presets: open actions, change type to Combat, equip your desired hands and select Save hands. Left-click applies; right-click manages names, overwrite and delete. Supports dual weapons/spells, mixed pairs, shields/torches, two-handed equipment and explicit empty hands. Save your game to retain presets per character. Selecting an active preset keeps it equipped; applying closes the wheel. See [usage, implementation and game checks](docs/COMBAT_PRESETS.md). Preset icons use two crossed swords. F2 → Keyboard → Swap mouse hands → On → Apply changes item clicks to LMB left / RMB right; preset apply/manage remains unchanged. Controller modifier state now survives sparse event packets. See [0.7.0 changes](docs/RELEASE_0.7.0.md).
 
 ## Features
+
+Version 0.7.0: combat presets can use the shared 1–8 quick slots (hover to bind/unbind, press in gameplay to apply), with native-item conflict handling and separate character co-save records. See [usage and tests](docs/COMBAT_QUICK_SLOTS.md). Missing fonts now fall back to installed system fonts and category arrows use vector drawing; see [the 4K pixelation investigation](docs/PIXELATED_TEXT_4K.md). The user confirmed the equipment-hand preference and combat quick-slot tests in-game. Font fallback was reproduced and verified locally; the original reporter’s environment still needs confirmation. Disable separate test patches when installing the full release.
 
 - **Categorized favorites:** weapons, equipment, potions, food, spells, shouts, powers, and other items. Ten entries per page, with additional pages as needed.
 - **Optional full inventory:** switch Item source to All inventory in Settings / Gameplay. Favorites only remains the default, including when upgrading an old INI.
 - **Time behavior:** choose Pause (default), Slow time, or Normal speed; adjust slow time from 5% to 100% of the existing game speed. Settings and outfit dialogs always pause.
-- **Separate action wheel:** outfit presets and optional Face Lighting controls occupy independent categories.
+- **Separate action wheel:** combat presets, outfit presets and optional Face Lighting controls occupy independent categories.
 - **Item information:** available damage, armor, weight, value, spell cost, and effect or enchantment records appear in the hover details card.
 - **Outfit management:** capture currently worn equipment, apply or remove an outfit, rename, overwrite, delete, import, and export presets.
 - **Optional integrations:** Face Lighting SKSE public API V1 and compatible Skyrim Text Bridge IME input.
 - **Built-in settings:** wheel size and X/Y position, background dimming, mouse sensitivity, bindings, sounds, animations, language, and theme.
 - **Original UI:** 29 redesigned outline icons, neighboring category titles, diamond page indicators, and staggered fan-style transitions.
-- **Resource support:** English, Simplified Chinese, French, Brazilian Portuguese, Russian, Japanese, Korean, and German; Classic Gold, Frost, Engraved Gold, and Quiet Slate themes; external language and theme files.
+- **Resource support:** English, Simplified Chinese, French, Brazilian Portuguese, Russian, Japanese, Korean, and German; Classic Gold, Skyrim, and Skyrim Polygon themes; external language and theme files.
 - **Session memory:** each wheel remembers its last category during the current game session. Category changes preserve the cursor position.
 
 ## Requirements and runtime compatibility
@@ -31,10 +56,11 @@ Current development build: **0.5.3**, extending the optional **Skyrim** skin wit
 | SE 1.5.97 | Tested in-game by a user on an earlier test build |
 | AE 1.6.640 | Supported by this build; in-game testing pending |
 | AE 1.6.1170 | Tested in-game, including the CommonLib dependency update |
+| GOG 1.6.659 | Supported; real address-library and layout checks passed; in-game testing pending |
 | GOG 1.6.1179 | Supported by this build; not yet tested in-game |
 | 1.7.99 / 1.7.104 | Supported by this build; not yet tested in-game |
 
-The plugin accepts the five exact Steam runtimes above and GOG 1.6.1179. Other versions, including older GOG runtimes, and VR are not supported by this build. Support for these two 1.7 releases does not automatically cover future 1.7.x updates.
+The plugin accepts the five exact Steam runtimes above and GOG 1.6.659 / 1.6.1179. Other versions, and VR are not supported by this build. Support for these two 1.7 releases does not automatically cover future 1.7.x updates.
 
 Required:
 
@@ -57,9 +83,11 @@ SKSE/Plugins/FavoriteWheel/Themes/Textures/*.png
 
 The installation ZIP omits the player-owned `FavoriteWheel.ini`, so upgrades cannot replace it. Without this file, the plugin uses built-in defaults; the first successful **Apply** creates it at `Data/SKSE/Plugins/FavoriteWheel.ini` relative to `SkyrimSE.exe`, creating missing parent directories. Startup only reads existing files; missing keys use defaults without rewriting them. Mod managers may place a newly created INI in their writable override area. The repository's main INI is a reference example for manual configuration, not an installation file.
 
+Version 0.6.1 fixes the configuration-save failure reported after 0.6.0. The main configuration reader/writer uses file bytes and requires every saved key explicitly, preserving comments and mod-manager mappings. The reporter confirmed successful saving with the test patch; the fix is now included in the official package. See [the investigation and tests](docs/CONFIG_SAVE_0.6.0_FOLLOWUP.md).
+
 Mark items and spells as favorites in your normal inventory and magic menus, return to gameplay, and press the Favorites key. SkyUI is optional. Disable competing Favorites-menu replacement features in other mods.
 
-For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the built-in default is `0`. Switching the source does not add or remove favorites. Spells, shouts, and active powers occupy three separate top-level categories and remain favorites only. Passive abilities are excluded; physical scrolls stay under Other. Books, ingredients, miscellaneous items, and poisons can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
+For all carried items, open the wheel → F2 → Gameplay → Item source → All inventory → Apply. This saves `[General] AllInventory=1`; the built-in default is `0`. Switching the source does not add or remove favorites. Spells, shouts, and active powers occupy three separate top-level categories and remain favorites only. Passive abilities are excluded; physical scrolls stay under Other. Poisons have their own category between Potions and Food, with a distinct vial icon, and use the game's native poison checks and confirmation after the wheel closes. Books, ingredients, and miscellaneous items can be listed but cannot be directly used by this version. Native 1–8 assignment remains available only for already favorited entries.
 
 The directory collects lightweight item identities once per opening; category/page changes and rendering copy at most ten entries. Details are requested after about 80 ms of stable hover and cached for that opening; live modes refresh the hovered details at most twice per second. Inventory/equipment events trigger coalesced directory refreshes in live modes. Opening the action wheel directly skips inventory collection until you switch to items. Initial collection and sorting still scale with inventory size, and new font glyphs may require an atlas upload. Large-inventory use received positive user feedback; see [inventory mode notes](docs/INVENTORY_MODE.md).
 
@@ -101,7 +129,7 @@ Controller controls (Xbox names; equivalent PlayStation buttons use the same pos
 
 The opening button acts as navigation while the controller wheel is open; use B to close. In dialogs/settings, the selection stick moves the pointer, A clicks, X resets a setting and B cancels. LB/RB cycle appearance, controls, and gameplay tabs. Preset names still need keyboard/IME input; no virtual keyboard is included.
 
-Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 50% (range 50–100%). A physics guard prevents the wheel from lowering the global speed below 50%; existing slower effects are left alone rather than compounded. Settings and outfit dialogs temporarily pause in every mode. With Keep open after equip enabled, equipment and other actions retain the wheel while its own pause briefly yields for processing. Potions, food, and outfit presets always close before use. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it.
+Opening the wheel pauses gameplay by default. Under F2 / Gameplay, choose Slow time or Normal speed, then Apply; the default optional slowdown is 50% (range 50–100%). A physics guard prevents the wheel from lowering the global speed below 50%; existing slower effects are left alone rather than compounded. Settings and outfit dialogs temporarily pause in every mode. With Keep open after equip enabled, ordinary equipment and magic retain the wheel and its pause throughout the action. Face Lighting commands still briefly yield the wheel's pause for their player-update callback. Potions, food, poisons, and outfit presets always close before use. Animations do not delay those actions. Spells, shouts, and powers are equipped for normal casting or activation, not cast automatically. Selecting an already equipped weapon in the corresponding hand or an equipped armor item unequips it. Torches always equip in the left hand with either use button, and selecting the equipped torch unequips it.
 
 Slow time scales the existing current/target game speed rather than restoring a hard-coded 1.0 on close. If an external multiplier change is detected, the wheel yields and closes. The world continues moving and the player can still take damage; UI animations keep real-time timing. See [time mode notes](docs/TIME_MODE.md), the [0.4.3 review](docs/REVIEW_0.4.3.md), and [movement input notes](docs/MOVEMENT_INPUT.md).
 
@@ -129,11 +157,45 @@ Missing or ambiguous items, protected quest equipment, and shield-slot conflicts
 
 See [outfit implementation notes](docs/OUTFITS.md) for identity matching and serialization details.
 
+## Version 0.7.2
+
+Plain weapon stacks now use their actual available copies for dual wield and preserve selection when native extra-list anchors change. Distinct modified instances and independent shortcut bindings retain their identity checks. Local gameplay tests passed; Gamepad++ controller reports and frame-generation compatibility still await reporter follow-up. See the [release record](docs/RELEASE_0.7.2.md).
+
+## Version 0.7.1
+
+Fixed initialization after entering a playable world through title-screen console commands, including installation of the player-update hook. Controller Favorites now inherits the game's modifier with its main key; identical Favorites/Actions controller chords prefer Favorites. Configure a distinct Actions modifier when the game's Favorites mapping already requires LB. Uses the established 0.7.0 renderer. Closed-source frame-generation and TRP compatibility remain unverified. See the [short changelog](release-materials/0.7.1/Nexus-changelog-en.txt) and [release record](docs/RELEASE_0.7.1.md).
+
+## Version 0.7.0
+
+Combat presets now form a complete feature: save left/right hand combinations, manage them with crossed-sword icons, and assign shared native 1–8 keyboard slots. Conflicting item/preset assignments replace their prior owners; later SkyUI/vanilla item assignments retain their native shortcut behavior. Save the game after editing presets or bindings.
+
+[Combat Cycles](docs/COMBAT_CYCLES.md), integrated in 0.8.0, adds eight ordered preset groups. With the wheel open, Shift+1–8 appends the hovered combat preset or captures current hands; outside the wheel the same shortcut applies the next usable set. Manage groups, member order and custom Shift/Ctrl/Alt chords in the existing actions wheel. Save the game to retain these character-specific groups and bindings. Hovering a combat preset shows its cycle group numbers in the wheel centre, without adding sector clutter. The user reported no problems in their in-game cycle testing on 2026-10-24; this does not imply every runtime or edge case was tested.
+
+Includes visible hand states, reversible mouse hand assignment, the controller modifier fix and GOG 1.6.659 support. Missing fonts fall back to installed system fonts and category arrows use vector drawing. See the [short changelog](release-materials/0.7.0/Nexus-changelog-en.txt) and [release record](docs/RELEASE_0.7.0.md).
+
+## Version 0.6.2
+
+Added per-character combat presets with crossed-sword icons, visible hand states, configurable mouse hand assignment, and GOG 1.6.659 compatibility. Fixed controller modifier chords losing held buttons between input packets. Includes the 0.6.1 configuration-save fix. See the [short changelog](release-materials/0.6.2/Nexus-changelog-en.txt) and [release record](docs/RELEASE_0.6.2.md).
+
+GOG 1.6.659 requires the **GOG SKSE64 2.2.3** build and `versionlib-1-6-659-0.bin` from Address Library. The [official SKSE archive](https://skse.silverlock.org/download/archive/) contains the GOG build. Local checks use the actual address database; GOG 1.6.659 gameplay has not been tested here.
+
+## Version 0.6.1
+
+Fixed empty/BOM-only INIs incorrectly reported as saved and configuration changes failing verification. Direct file serialization and explicit-key validation replace Windows profile-cache reads/writes. Comments, unknown keys, Unicode values, MO2 mappings and Vortex-style hardlinks are preserved. The original reporter confirmed successful saving. See the [short changelog](release-materials/0.6.1/Nexus-changelog-en.txt) and [release record](docs/RELEASE_0.6.1.md).
+
+## Version 0.6.0
+
+This release combines the changes since 0.5.2: the redesigned Classic Gold and two Skyrim themes; color/component, material and layout authoring; clearer markers and detail-card spacing; cheaper fan rendering and directory-wide glyph prewarming; torch equip/unequip, native poison use and a separate ninth category; and ordinary equipment changes that keep Pause mode paused.
+
+Optional slow time now defaults to 50% within a 50–100% range, with conservative protection for low-speed physics and externally controlled time. Opening is blocked in unpaused Tween/Skills/Level Up menus, Important-item markers are protected, and empty-INI Unicode saves have been fixed. STB bindings and virtual multi-ring slots are not newly supported. A further configuration-save fix is documented in the development follow-up above. See the [release record](docs/RELEASE_0.6.0.md).
+
+For an existing installation, back up edited themes and remove `frost.ini`, `engraved.ini`, `minimal.ini` and development `ellipse.ini` if present; install the new `classic.ini`. Keep the main INI and other custom themes. Copying an update ZIP over an old directory alone does not remove retired files.
+
 ## Version 0.5.2
 
 Optional **Controller / Left stick movement** (`Controls / GamepadMoveWhileOpen=1`, off by default) lets the left stick move freely in Slow/Normal speed while the right stick selects wheel entries. The stick scheme changes only after a successful **Apply**; pending edits, Cancel, and failed saves retain the current selection stick. Pause and dialogs block movement; the right stick also moves dialog pointers. After closing, center the right stick before it resumes camera control. Ordinary analog walking/running is supported; sprint buttons remain wheel controls. See [controller scheme notes](docs/CONTROLLER_SPLIT_STICKS.md).
 
-**Gameplay / Hide empty categories** (`General / HideEmptyCategories=1`, on by default) hides empty item categories from navigation and the title strip for the selected item source. Disable it to show all eight types, including empty ones. Categories return when entries become available; a remembered empty category advances to the next populated one while hiding is enabled. An entirely empty wheel still opens with the empty-state message. The action wheel keeps its outfit creation/import category and optional Face Lighting handling.
+**Gameplay / Hide empty categories** (`General / HideEmptyCategories=1`, on by default) hides empty item categories from navigation and the title strip for the selected item source. Disable it to show all nine types, including empty ones. Categories return when entries become available; a remembered empty category advances to the next populated one while hiding is enabled. An entirely empty wheel still opens with the empty-state message. The action wheel keeps its outfit creation/import category and optional Face Lighting handling.
 
 Fresh installs and restored defaults place the wheel on the right at **X 72%, Y 46%**, leaving the left side clearer for the player character. Existing saved positions are preserved; adjust **Appearance / Horizontal position** to 72% to try the new placement.
 
@@ -145,7 +207,7 @@ Installation ZIPs now omit the main settings INI. Missing configurations use bui
 
 ## Version 0.5.1
 
-This release includes GOG 1.6.1179 support, continuous equipment/magic/action selection, configurable controller shoulder/trigger roles, separate Keyboard/Controller settings, contextual entrance handling and improved configuration persistence. Keep open after equip defaults on; explicit saved off choices remain off, and potions/food always close. In Pause mode retained equipment processing briefly resumes the world before pausing again; outfit jobs run until complete. Slow/Normal modes keep their selected speed.
+This release includes GOG 1.6.1179 support, continuous equipment/magic/action selection, configurable controller shoulder/trigger roles, separate Keyboard/Controller settings, contextual entrance handling and improved configuration persistence. Keep open after equip defaults on; explicit saved off choices remain off, and potions/food/poisons always close. In Pause mode retained ordinary equipment now keeps the world paused throughout processing. Torch actions explicitly use the left hand, and poisons use the native weapon checks and confirmation. Outfit jobs close the wheel and run until complete. Slow/Normal modes keep their selected speed.
 
 Use GOG SKSE64 2.2.6 and Address Library containing `versionlib-1-6-1179-0.bin` for GOG. Optional integrations require their own compatible builds. Applied settings are global INI configuration and do not require saving the game. Configuration is anchored to the game executable directory and verified on save; failures remain visible and are recorded in the log.
 
@@ -167,9 +229,9 @@ Controls cover the player, the NPC targeted before opening the wheel, the follow
 
 Ultimate Animated Potions NG and Eating Animations and Sounds SE worked in user testing. Consumables use the game's equipment path so those mods can receive their usual triggers. Specific animation and rendering combinations still require testing.
 
-The 0.5.3 development build adds explicit unpaused Tween/skills/level-up menu guards for Skyrim Souls RE and excludes Double Favorite As Important's protected items from favorites mode. STB Hotkey System can coexist with wheel item use, but replaces native hotkeys: assign its bindings through Inventory/Magic, and avoid the wheel's native 1–8 assignment. These combinations await in-game verification; see the [compatibility review](docs/MOD_COMPATIBILITY_0.5.3.md).
+Version 0.6.0 adds explicit unpaused Tween/skills/level-up menu guards for Skyrim Souls RE and excludes Double Favorite As Important's protected items from favorites mode. STB Hotkey System can coexist with wheel item use, but replaces native hotkeys: assign its bindings through Inventory/Magic, and avoid the wheel's native 1–8 assignment. These combinations await in-game verification; see the [compatibility review](docs/MOD_COMPATIBILITY_0.5.3.md).
 
-Poison application is not implemented; use poisons through the inventory. Beast-form controls fall back to the original Favorites menu.
+Poison application follows the game's weapon selection and confirmation rules; the wheel's left/right use button does not choose the poisoned hand. Beast-form controls fall back to the original Favorites menu.
 
 ## Settings, themes, and translations
 
@@ -183,7 +245,7 @@ See [input bindings and testing](docs/INPUT_CONTROLS.md) for INI codes and regre
 
 Preserve your INI and customized resources when upgrading. With MO2, also check Overwrite or the configured output mod for files written by the game.
 
-Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. In 0.5.3 development builds, `Style=skyrim` selects the Skyrim component skin, while omitted/unknown Style keeps the original `etched` components. `FrameStyle=nordic` adds layered framing; `SurfaceTexture` accepts a local PNG material with configurable strength and zoom. See the [skin authoring guide](docs/SKIN_MATERIALS_0.5.3.md). Missing images use solid fills. Arbitrary layouts and icon replacement are not supported. Background blur is not used.
+Copy an existing language or theme INI to a new filename, edit its values, and restart to select it. Language filenames use locale codes such as `fr.ini` or `pt-BR.ini`. Missing translations fall back to English. See the [translation guide](docs/LOCALIZATION.md) for matching rules, fonts, and sharing translations. Use a font covering your chosen language. In 0.6.0, `Style=classic` selects the redesigned Classic Gold components; `Style=skyrim` selects the Skyrim skin, while omitted/unknown Style keeps the original `etched` components for external themes. `FrameStyle=nordic` adds layered framing; `SurfaceTexture` accepts a local PNG material with configurable strength and zoom. See the [skin authoring guide](docs/SKIN_MATERIALS_0.5.3.md). The first stage of layout skins adds circle/ellipse/ten-sided polygon wheel shapes and preferred detail positions, with screen-fit fallback. The bundled selection is **Classic Gold**, **Skyrim** and **Skyrim Polygon**. Classic Gold has been rebuilt with brass rims and matching engraved panels; see the [redesign notes](docs/CLASSIC_GOLD_REDESIGN_0.5.3.md). Try **Skyrim Polygon** under Appearance → Theme; see the [theme-making guide](docs/THEME_AUTHORING_0.6.0.md). Missing images use solid fills. Arbitrary meshes, navigation hierarchies and icon replacement are future extensions. Background blur is not used.
 
 See the [resource guide](docs/RESOURCES.md) and [item information notes](docs/ITEM_INFORMATION.md).
 

@@ -11,6 +11,34 @@
 namespace Wheel {
     namespace {
         const std::unordered_map<std::string,std::string> english{
+            {"cycleTitle","COMBAT CYCLES"},{"cycleTab","CYCLES"},{"cycleEntries","CYCLE ENTRIES"},{"cycleDefault","Cycle group"},
+            {"cycleManage","MANAGE CYCLE GROUP"},{"cycleMemberManage","MANAGE CYCLE ENTRY"},{"cycleCapture","ADD CURRENT HANDS"},
+            {"cycleUse","LMB NEXT SET · RMB MANAGE"},{"cycleMemberHint","LMB APPLY · RMB REORDER / REMOVE"},
+            {"cycleMemberHelp","Change the order or remove this entry. The combat preset itself is kept."},
+            {"cycleStorage","Save your game to retain groups, bindings and cycle positions. Groups use complete hand presets."},
+            {"cycleFull","This cycle group is full."},{"cycleDuplicate","This preset is already in the cycle group."},
+            {"cycleAdded","Added to cycle"},{"cycleEmpty","This cycle group is empty."},{"cycleUnavailable","No usable preset in this cycle group."},
+            {"cycleInvalidKey","Use a main key with optional Shift/Ctrl/Alt. Bare 1-8 and menu keys are reserved."},
+            {"cycleConflict","This combination conflicts with a wheel binding or another cycle group."},{"cycleBound","Cycle shortcut updated."},
+            {"cycleBind","BIND SHORTCUT"},{"cycleClear","CLEAR GROUP"},{"cycleEdit","EDIT ENTRIES"},{"cycleRemove","REMOVE FROM GROUP"},
+            {"cycleMoveUp","MOVE EARLIER"},{"cycleMoveDown","MOVE LATER"},{"cycleCaptureKey","PRESS A COMBINATION..."},
+            {"cycleCaptureHint","Press the main key with optional Shift/Ctrl/Alt. Esc cancels; Backspace/Delete disables the shortcut. Left/right modifiers are equivalent."},
+            {"cycleConfirmClear","Clear this group? Its combat presets will be kept."},{"cycleConfirmRemove","Remove this entry from the group? Its combat preset will be kept."},
+            {"cycleSets","sets"},{"cycleQuickHint","CYCLE SHORTCUT: ADD CURRENT HANDS / HOVERED PRESET"},
+            {"combatTitle","COMBAT PRESETS"},{"combatTab","COMBAT"},{"combatSave","SAVE HANDS"},{"combatDefault","Combat preset"},
+            {"combatManage","MANAGE COMBAT PRESET"},{"combatConfirmOverwrite","Replace this preset with your current hand equipment?"},
+            {"combatOverwrite","REPLACE WITH CURRENT HANDS"},
+            {"combatStorageHint","Presets are saved with your game. Empty hand slots are cleared. Spells are equipped, not cast."},
+            {"combatUse","LMB APPLY · RMB MANAGE"},{"combatLeft","Left hand"},{"combatRight","Right hand"},{"combatBoth","Two-handed"},
+            {"combatEmptyHand","Empty"},{"combatMissing","Item missing"},{"combatChanged","Item changed"},
+            {"combatAmbiguous","Ambiguous item instance"},{"combatNotEnough","Not enough matching copies"},
+            {"combatSpellMissing","Spell unavailable or not learned"},{"combatUnsupported","Hand equipment cannot be captured/restored."},
+            {"combatUnavailable","UNAVAILABLE"},{"combatCaptureFailed","Unable to capture the current hand combination."},
+            {"combatLimit","Combat preset limit reached (100)."},{"combatSaved","Combat preset saved. Save your game to retain it."},
+            {"combatApplied","Combat preset equipped."},{"combatWorking","Changing hand equipment..."},
+            {"combatBlocked","Current equipment or game state blocks this preset."},
+            {"combatInterrupted","Combat preset interrupted. Check your hand equipment."},
+            {"combatPartial","Combat preset could not finish. Check your hand equipment and the log."},
             {"infoWeight","Weight"},{"infoValue","Value"},{"infoDamage","Damage"},{"infoBaseDamage","Base damage"},
             {"infoArmor","Armor"},{"infoMagicka","Magicka"},{"infoPerSecond","/s"},
             {"infoEffects","BASE EFFECTS"},{"infoEnchantment","BASE ENCHANTMENT EFFECTS"},
@@ -94,6 +122,8 @@ namespace Wheel {
             {"inventoryEmpty","NO ITEMS IN THIS CATEGORY"},{"inventoryLoading","LOADING ITEMS"},{"inventoryCount","ITEMS"},
             {"allQuickSlotHint","HOVER FAVORITE + 1-8 BIND / UNBIND"},
             {"quickSlotNeedsFavorite","Favorite this item in the inventory before assigning a quick slot."},
+            {"combatQuickBound","Combat quick slot assigned. The previous item/preset binding is cleared. Save your game."},
+            {"combatQuickUnbound","Combat quick slot removed. Save your game to keep this change."},
             {"settingsGeneral","APPEARANCE"},{"settingsControls","CONTROLS"},{"favoriteModifier","Favorites modifier"},{"actionHotkey","Actions key"},{"actionModifier","Actions modifier"},{"gamepadHotkey","Controller favorites key"},{"gamepadModifier","Controller favorites modifier"},{"gamepadActionModifier","Controller actions modifier"},{"modifierNone","None"},{"followFavorite","Follow favorites key"},{"captureChord","Hold modifiers and press a key; Esc cancels."},{"capturePad","Press a controller button; B / Esc cancels."},{"padUse","A USE / RIGHT HAND  ·  X LEFT HAND / MANAGE"},{"padNavigation","Y SWITCH WHEEL  ·  B BACK / CLOSE  ·  START SETTINGS"},{"padSettingsHelp","Left stick moves pointer; A selects; X resets; B cancels; LB/RB tabs."},
             {"wheelBindHint","Click to bind; right-click to reset (Favorites: game / switch: R)"},{"switchWheelKey","Switch wheel key"},
             {"outfitWheelTitle","FUNCTIONS · OUTFITS"},
@@ -121,8 +151,45 @@ namespace Wheel {
             {"outfitNavigation","W / S / SCROLL PAGE"},
             {"outfitUse","LMB EQUIP / REMOVE · RMB MANAGE"},
             {"dualWheelHint","SWITCH WHEEL · ESC CLOSE · F2 SETTINGS"},
+            {"sortSave","Order is per character and category; save your game."},
+            {"sortEditing","ARRANGE"},
+            {"sortButton","Sort"},
+            {"sortArrange","Arrange"},
+            {"sortEarlier","Move earlier"},
+            {"sortLater","Move later"},
+            {"sortDone","Done"},
+            {"sortDefault","Default"},
+            {"sortAsc","Name A-Z"},
+            {"sortDesc","Name Z-A"},
+            {"sortEquipped","Equipped first"},
+            {"sortCustom","Custom"},
+            {"sortType","Type"},
+            {"sortWeaponType","Weapon type"},
+            {"sortArmorType","Armor class"},
+            {"sortSchool","Magic school"},
+            {"sortSlot","Equipment slot"},
+            {"rememberLastWheel","Remember last wheel"},
+            {"rememberLastWheelHelp","Normal entrance remembers the last wheel this session. The actions shortcut stays direct. Loading a save resets the remembered wheel."},
+            {"sortStatDesc","Stat: high to low"},
+            {"sortStatAsc","Stat: low to high"},
+            {"sortDamageDesc","Damage: high to low"},
+            {"sortDamageAsc","Damage: low to high"},
+            {"sortArmorDesc","Armor: high to low"},
+            {"sortArmorAsc","Armor: low to high"},
+            {"sortCostDesc","Magicka cost: high to low"},
+            {"sortCostAsc","Magicka cost: low to high"},
+            {"sortWeight","Weight: low to high"},
+            {"sortValue","Value: high to low"},
+            {"sortDragging","Release: move to target | Scroll: page | RMB / Esc: cancel"},
+            {"sortKeys","T: Cycle sort | Shift+T: Arrange | F2: Settings"},
+            {"sortPad","LS click: Sort | RS click: Arrange | Save game to keep order"},
+            {"sortMove","Click: earlier / later | Hold LMB + drag: move | Shift+T: Done"},
+            {"sortMovePad","A earlier | X later | RS click done"},
+            {"vampireUse","SELECT SKILL · USE ITS NATIVE EQUIP SLOT"},
+            {"vampireRestricted","VAMPIRE LORD · SKILLS ONLY"},
             {"outfitEmpty","No eligible armor is worn. Weapons and shields are excluded."},
             {"outfitLimit","The limit is 100 presets."},
+            {"outfitSaveInvalid","Outfit not saved: equipment data failed validation. See FavoriteWheel.log."},
             {"outfitSaved","Outfit recorded. Save your game to keep it."},
             {"outfitNotPortable","Dynamic items or enchantments cannot be exported across characters."},
             {"outfitExported","Exported to FavoriteWheel/Outfits/Exports."},
@@ -141,8 +208,10 @@ namespace Wheel {
             {"outfitPartial","Outfit change was incomplete. Check your equipment and log."},
             {"outfitRemoved","Armor, clothing and jewelry removed. Weapons and shields retained."},
             {"outfitApplied","Outfit equipped."},
-            {"title","F A V O R I T E S"},{"weapons","WEAPONS"},{"armor","APPAREL"},{"potions","POTIONS"},{"food","FOOD"},{"magic","MAGIC"},{"spells","SPELLS"},{"shouts","SHOUTS"},{"powers","POWERS"},{"other","OTHER"},
-            {"equipped","EQUIPPED"},{"select","CLICK TO SELECT"},{"inventory","USE IN INVENTORY"},{"empty","NO FAVORITES"},{"move","MOVE TO SELECT"},{"count","FAVORITES"},
+            {"title","F A V O R I T E S"},{"weapons","WEAPONS"},{"armor","APPAREL"},{"potions","POTIONS"},{"poisons","POISONS"},{"food","FOOD"},{"magic","MAGIC"},{"spells","SPELLS"},{"shouts","SHOUTS"},{"powers","POWERS"},{"other","OTHER"},
+            {"equipped","EQUIPPED"},{"equippedLeft","EQUIPPED · LEFT HAND"},{"equippedRight","EQUIPPED · RIGHT HAND"},
+            {"equippedDual","EQUIPPED · BOTH HANDS"},{"equippedTwoHanded","EQUIPPED · TWO-HANDED"},
+            {"select","CLICK TO SELECT"},{"inventory","USE IN INVENTORY"},{"empty","NO FAVORITES"},{"move","MOVE TO SELECT"},{"count","FAVORITES"},
             {"categoriesHint","A / D  CATEGORY     W / S OR SCROLL  PAGE"},{"useHint","LMB USE / RIGHT HAND    RMB LEFT HAND    ESC CLOSE"},
             {"compactNavigation","A / D CATEGORY  ·  W / S / SCROLL PAGE"},{"compactUse","LMB USE / RIGHT HAND  ·  RMB LEFT HAND"},{"compactClose","ESC CLOSE  ·  F2 SETTINGS"},
             {"wheelSize","Wheel size"},{"positionX","Horizontal position X"},{"positionY","Vertical position Y"},{"overlayOpacity","Background dimming"},{"sounds","Open / close sounds"},{"animations","Open / close animation"},
@@ -271,10 +340,24 @@ namespace Wheel {
             entry.id=path.stem().string(); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
             auto style=Trim(values["Style"]);
             std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
-            entry.style=style=="skyrim"?ThemeStyle::Skyrim:ThemeStyle::Etched;
+            entry.style=style=="skyrim"?ThemeStyle::Skyrim:style=="classic"?ThemeStyle::ClassicGold:ThemeStyle::Etched;
             auto frame=Trim(values["FrameStyle"]);
             std::transform(frame.begin(),frame.end(),frame.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
             entry.frameStyle=frame=="nordic"?FrameStyle::Nordic:FrameStyle::Plain;
+            const auto token=[&](const char* key) {
+                auto value=Trim(values[key]);
+                std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+                return value;
+            };
+            const auto shape=token("WheelShape");
+            entry.layout.shape=shape=="ellipse"?WheelShape::Ellipse:shape=="polygon"?WheelShape::Polygon:WheelShape::Circle;
+            entry.layout.stretchX=Number(values,"WheelStretchX",entry.layout.stretchX,.9f,1.25f);
+            entry.layout.stretchY=Number(values,"WheelStretchY",entry.layout.stretchY,.9f,1.2f);
+            const auto detail=token("DetailPosition");
+            entry.layout.detailPosition=detail=="left"?DetailPosition::Left:detail=="right"?DetailPosition::Right:
+                detail=="top"?DetailPosition::Top:detail=="bottom"?DetailPosition::Bottom:
+                detail=="center"?DetailPosition::Center:DetailPosition::Auto;
+            entry.layout.detailGap=Number(values,"DetailGap",entry.layout.detailGap,16.f,80.f);
             // Resource paths belong to the theme package, not arbitrary absolute files.
             const auto texture=std::filesystem::u8path(values["SurfaceTexture"]);
             const bool traversal=std::any_of(texture.begin(),texture.end(),[](const auto& part){return part=="..";});

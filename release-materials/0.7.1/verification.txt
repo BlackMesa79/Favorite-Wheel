@@ -1,0 +1,14 @@
+Favorite Wheel 0.7.1 - final verification with hand equipment fixes
+Date: 2026-10-15 (Asia/Hong_Kong)
+DLL SHA256: B857D6F01D639D8305A41FB49F6776682E457D30A1944C571EE94D8E7C96E505
+Same DLL as user-tested hand-equip-test-v2; export metadata verified as 0.7.1.
+18 local test suites passed; RuntimeLayout used seven real Address Library databases.
+Renderer.cpp remains byte-identical to the formal 0.7.0 source.
+User confirmed title-screen coc qasmoke wheel visibility.
+User confirmed revision 2 single-weapon hand transfers and dual-spell collapse work in game, and authorized their inclusion in 0.7.1.
+Kontrol/custom-map reporter validation and closed-source FG/TRP compatibility remain unverified.
+MO2 DLL matches the tested build; main INI and custom resources preserved.
+Previous 0.7.1 package revision backed up under build/release071-before-hand-equip-20261015-162114.
+Package verification: build/release071-hand-final-verify-packages.log
+Artifact hashes: dist/FavoriteWheel-0.7.1-SHA256SUMS.txt
+No Nexus upload, Git commit/push or remote release creation performed.

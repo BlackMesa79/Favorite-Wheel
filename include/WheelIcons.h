@@ -49,9 +49,36 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
         line(0,-17,0,6); path({{-7,-1},{0,6},{7,-1}}); etch(-8,11,8,11); return;
     }
     if (item.action == ActionKind::Outfit) { hanger(); return; }
+    if(item.action==ActionKind::Cycle) {
+        d->PathArcTo(origin,17*s,.3f,2.8f,20);d->PathStroke(ink,ImDrawFlags_None,stroke);
+        d->PathArcTo(origin,17*s,3.44f,5.94f,20);d->PathStroke(ink,ImDrawFlags_None,stroke);
+        path({{-11,4},{-16,6},{-17,-1}});path({{11,-4},{16,-6},{17,1}});return;
+    }
+    if(item.action==ActionKind::Combat || item.action==ActionKind::SaveCombat || item.action==ActionKind::CycleMember || item.action==ActionKind::CycleCapture) {
+        // Two complete swords at +/-45 degrees: tips above, guards and grips
+        // below. Break the rear blade at the crossing so the centre stays clean.
+        const bool save=item.action==ActionKind::SaveCombat || item.action==ActionKind::CycleCapture;
+        auto sword=[&](float direction,bool rear) {
+            auto a=[&](float x,float y) {
+                const float size=save?.88f:1.f;
+                return ImVec2{(x+direction*y)*.70710678f*size,(y-direction*x)*.70710678f*size};
+            };
+            if(rear) {
+                path({a(-2.8f,-4),a(-3,-16),a(0,-22),a(3,-16),a(2.8f,-4)});
+                path({a(-2.8f,4),a(-2.8f,5),a(2.8f,5),a(2.8f,4)});
+            }else shape({a(0,-22),a(3,-16),a(2.8f,5),a(-2.8f,5),a(-3,-16)});
+            const auto tip=a(0,-16),fuller=a(0,-6);etch(tip.x,tip.y,fuller.x,fuller.y);
+            path({a(-7,3),a(-6,6),a(6,6),a(7,3)});
+            path({a(-1.7f,6),a(-1.7f,15),a(-2.5f,17),a(0,20),a(2.5f,17),a(1.7f,15),a(1.7f,6)});
+            const auto l=a(-1.7f,14),r=a(1.7f,14);etch(l.x,l.y,r.x,r.y);
+        };
+        sword(1,true);sword(-1,false);
+        // Keep the save badge in clear space beside the right grip.
+        if(save){line(13,7,21,7);line(17,3,17,11);}return;
+    }
     auto kind = item.icon;
     if (kind == IconKind::Auto) {
-        constexpr IconKind fallback[] = {IconKind::Sword,IconKind::Armor,IconKind::Potion,IconKind::Food,IconKind::Magic,IconKind::Magic,IconKind::Magic,IconKind::Other};
+        constexpr IconKind fallback[] = {IconKind::Sword,IconKind::Armor,IconKind::Potion,IconKind::Poison,IconKind::Food,IconKind::Magic,IconKind::Magic,IconKind::Magic,IconKind::Other};
         static_assert(std::size(fallback)==categoryCount);
         kind = fallback[static_cast<int>(item.category)];
     }
@@ -145,6 +172,11 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
         start(-4,-14); to(-4,-7); bend(-4,-4,-13,-1,-13,7); bend(-13,14,-8,17,0,17);
         bend(8,17,13,14,13,7); bend(13,-1,4,-4,4,-7); to(4,-14); end();
         gem(0,6,5); break;
+    case IconKind::Poison:
+        // Angular vial with a crossed label, distinct from the round potion flask.
+        shape({{-5,-18},{5,-18},{5,-14},{-5,-14}});
+        shape({{-4,-14},{-4,-6},{-11,-1},{-11,14},{-8,17},{8,17},{11,14},{11,-1},{4,-6},{4,-14}});
+        line(-5,1,5,11); line(-5,11,5,1); break;
     case IconKind::Food:
         start(0,-8); bend(-11,-17,-19,-6,-13,7); bend(-9,18,-5,18,0,14);
         bend(5,18,9,18,13,7); bend(19,-6,11,-17,0,-8); end();
