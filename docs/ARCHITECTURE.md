@@ -1,5 +1,7 @@
 # 工程说明
 
+> 2026-10-28 接手补充：当前（0.9.0）的模块索引、线程与锁顺序、SKSE 序列化记录总表、INI 配置总表、构建/测试/打包/部署流程和用户已确认的决策，见本文末尾的“2026-10-28 接手补充（0.9.0 现状）”一节，以该节为准。下面按版本倒序排列的段落是历史记录，其中的版本号与“当前”说法可能已经过时。文档索引见 [docs/README.md](README.md)。
+
 2026-10-10当前0.5.2补齐8种自带语言：英/简中/法/巴西葡语/俄/日/韩/德。UIResources启动解析Windows字体目录与Font=auto，WheelFonts在字库变化时用stbtt检查字符覆盖、仅合并缺失字形并缓存字体文件/合并ranges（直到atlas清理才释放）；不在稳定帧查询字体文件或重建atlas。见LOCALIZATION.md、LOCALIZATION_EXPANSION_0.5.2.md。1080Ti负载反馈排查见GPU_LOAD_REPORT.md，未据此修改Present或强加限帧。
 
 2026-10-10当前0.5.2追加设置修正：实际手柄选杆/分流/重置读取已应用值，事务预览不切换物理操作方案；HideEmptyCategories默认1，可切为完整八类，复用现有目录掩码；新安装/默认值位置X72/Y46，保留已有坐标。见SETTINGS_REFINEMENTS_0.5.2.md。
@@ -95,3 +97,130 @@ FunctionNavigation.h 定义装备/面光类型及随从子列表。A/D 循环顶
 ## 0.3.2 双运行时测试构建
 
 RuntimeSupport.h 仅接受 1.5.97/1.6.1170，不放开所有 SE/AE。CommonLib 构建同时启用 SE/AE，输入 RelocationID 自动分流，renderer/control/player 等保留运行时访问器。RuntimeLayoutTests 使用 REL::Module::mock 切换实际运行时选择，独立原生字节哨兵和错误版本偏移检查 UI/输入/ActorState/玩家结构，并可读取安装的 Address Library 验证关键 ID。ActorRuntimeTests 在两版逐次验证虚调用。没有更换依赖库或修改别的模组/游戏文件；1.5.97 的游戏内 hook 签名与功能结果仍待验证。
+
+## 2026-10-28 接手补充（0.9.0 现状）
+
+本节由接手审查（task 20261028-takeover-review）补充。所有结论以 0.9.0 基线代码 `069d0c3` 为准，并标注 `文件:行号`。当前交接内容与“不要回归的修复”清单见 `HANDOFF_CURRENT.md` 第 5 节；本次审查发现的问题见 `docs/reports/20261028-takeover-review-audit.md`。代码行号会随后续修改漂移，引用时以符号名为准。
+
+### 1. 模块与文件索引
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 入口/生命周期 | `src/main.cpp:7-46` | `SKSEPluginLoad`：读取设置与资源 → 运行时白名单（`include/RuntimeSupport.h:10-15`）→ 注册 SKSE 消息与序列化回调。`kPostPostLoad` 时发现面光 API；`kDataLoaded` 时安装渲染器与轮盘；`kPreLoadGame`/`kNewGame`/`kPostLoadGame` 时调用 `SetGameActive` |
+| | `include/GameSession.h` | 会话状态（AwaitingWorld/Inactive/Active）。`coc` 等不发 SKSE 会话消息的启动方式，由 `ProbeInitialSession`（`src/Wheel.cpp:826-853`）补齐 |
+| | `include/QueuedTask.h` | SKSE 任务单槽排队：`RunQueuedTask`/`ScheduleQueuedTask` 保证出现异常时也释放槽位；`DirectoryRequestNeeded`（HANDOFF §5.2） |
+| 控制器（超大文件） | `src/Wheel.cpp` | 视图状态 `View`（`include/Wheel.h:12-45`）、打开/关闭、分类与分页、排序与拖拽（`:209-363`）、目录与详情任务（`:364-400`、`:682-726`）、动作调度（`:727-812`）、设置与对话框（`:540-562`、`:941-1114`）、输入 hook（`:1115-1447`）、两个自定义菜单与事件接收器（`:1449-1543`）、安装（`:1598-1627`） |
+| 输入策略（纯头文件，可单测） | `include/InputGate.h`、`InputBindings.h`、`ControllerSticks.h`、`InputDispatchChain.h`、`OpenPolicy.h`、`QuickSlots.h`、`SortDrag.h` | 物理键吞到松开为止、移动键的保留与恢复、组合键、手柄翻页边沿、从派发链摘除被吞事件、入口控制组、阻断菜单名单、1–8 快捷槽、拖拽阈值 |
+| 视图/导航策略 | `include/CategoryNavigation.h`、`FunctionNavigation.h`、`InventoryPages.h`、`NavigationPresentation.h`、`UILayout.h`、`LayoutSkin.h`、`Transition.h`、`WheelLogic.h` | 9 个物品分类的掩码、功能轮盘的各分区、按分类连续分页、扇区命中、皮肤几何、开合动画 |
+| 物品与装备（游戏线程） | `src/Favorites.cpp` | `CollectDirectory`（`:270-384`）在游戏线程遍历库存并生成值快照；`ResolveItem`（`:241-267`）在执行前重新校验实例；`UseFavorite`（`:478-630`）；原生 1–8 快捷槽（`:397-477`） |
+| | `include/EquipPolicy.h`、`WeaponStack.h`、`InventoryPolicy.h`、`MiscDisplayStack.h`、`MagicCategories.h`、`AlchemyCategories.h`、`ActionPolicy.h` | 左右手计划、普通武器池、预算、杂物显示堆叠、魔法/药剂分类、动作执行器与保留策略 |
+| | `include/FormMode.h`、`FormRuntime.h` | 人类/吸血鬼领主/不支持的兽形；领主形态只允许列表内的法术 |
+| | `include/ActorRuntime.h` | `IsDead`/`DrinkPotion` 的显式虚表调用（SE/AE 0x99/0x10F） |
+| | `src/ItemInfoCapture.cpp`、`src/ItemInfo.cpp`、`include/ItemInfo.h` | 详情卡数值与效果；数值排序复用这里的取值 |
+| 排序（0.9.0） | `include/InventoryOrderModel.h`、`include/InventoryOrder.h`、`src/InventoryOrder.cpp` | 18 组（9 类 × 收藏/全部背包）的模式与自定义顺序、身份 `Key`、`FWS 1` 编解码、读档时解析 FormID |
+| 换装预设 | `src/Outfits.cpp`、`include/OutfitModel.h`、`OutfitPlan.h`、`OutfitStep.h` | 捕获、匹配、分帧替换（`Apply`/`Tick` `:274-354`）、导入导出；**同时负责全部 SKSE 序列化回调的注册与分发**（`:111-146`） |
+| 战斗预设（0.7.0） | `src/CombatPresets.cpp`、`include/CombatPresetModel.h` | 左右手捕获和逐步恢复（`Apply`/`Tick` `:310-399`），法术通过 VM `Actor.UnequipSpell` 清除；1–8 快捷槽绑定使用独立记录 |
+| 战斗循环（0.8.0） | `src/CombatCycles.cpp`、`include/CombatCycleModel.h` | 8 组有序战斗预设，组合键触发下一套；`Apply` 回调中提交游标 |
+| 面部光照（可选） | `src/FaceLightClient.cpp`、`include/FaceLightModel.h`、`FaceLightingAPI.h` | 在 `kPostPostLoad` 通过 `GetProcAddress` 获取 V1；只在 PlayerUpdate 线程上 `Capture`/`Execute` |
+| 时间 | `src/TimeControl.cpp`、`include/TimePolicy.h` | 相对减速租约、50% 物理下限、外部修改倍率时让出所有权；写入 BSTimer 当前值与目标值（`src/TimeControl.cpp:11-20`） |
+| 设置与资源 | `src/Settings.cpp`、`include/SettingsIni.h`、`src/UIResources.cpp`、`include/UIResources.h` | 事务式设置（预览/撤销/应用）、按文件字节写 INI 并校验；语言/主题 INI、系统字体回退、`Tr()` |
+| 渲染 | `src/Renderer.cpp` | swap chain vtable[8] Present hook（`:207-217`）、独立 ImGui context、每帧获取 `kFRAMEBUFFER` RTV（`:121-135`）、初始化时预热字体（`:65-88`） |
+| | `src/WheelFonts.cpp` | 按实际像素字号烘焙 atlas，缺字合并系统回退字体（`PrepareFonts` `:71-159`） |
+| | `src/Draw.cpp`、`include/WheelIcons.h`、`WheelSectorMesh.h`、`src/SkinTextures.cpp` | 根据值快照绘制轮盘、面板、详情卡和拖拽动画；矢量图标；PNG 材质（只在启动时加载） |
+| 名称输入 | `include/NameEditor.h`、`NameHitMap.h`、`TextBridgeClient.h` | UTF-8 名称编辑器；可选的 Skyrim Text Bridge C ABI |
+
+### 2. 原生挂钩与注册
+
+| 位置 | 机制 | 说明 |
+|---|---|---|
+| `src/Wheel.cpp:1602-1617` | 在 `RelocationID(67315,68617)+0x7B` 处做 trampoline `write_call<5>` | 输入派发；先校验原字节是 `E8`，否则拒绝安装并保留原版收藏菜单 |
+| `src/Wheel.cpp:813-821` | `PlayerCharacter` vtable 槽 `0xAD` | 首次 NewGame/PostLoadGame 时才链入，确保排在面光等插件的 DataLoaded hook 之后 |
+| `src/Renderer.cpp:207-217` | swap chain vtable[8] | 只处理目标 swap chain；初始化失败后不再重试 |
+| `src/Wheel.cpp:1607-1621` | `UI::Register` 两个菜单；MenuOpenClose、TESContainerChanged、TESEquip、InputEvent 事件接收器 | `FavoriteWheelMenu` 是输入门控的叠加层；`FavoriteWheelPauseMenu` 是固定标志的暂停守卫 |
+| `src/TimeControl.cpp:17-18` | `RELOCATION_ID(511882,388442)`、`(511883,388443)` | 当前与目标全局时间倍率 |
+| 运行时白名单 | `include/RuntimeSupport.h:10-15` | 1.5.97、1.6.640、GOG 1.6.659、1.6.1170、GOG 1.6.1179、1.7.99、1.7.104；不支持 VR（`xmake.lua:7`） |
+
+### 3. 线程模型与锁顺序
+
+- 线程契约来自代码注释：输入派发、UI 消息、SKSE 任务、PlayerUpdate 回调可能交错（`src/Wheel.cpp:37-40`）；Present 只读值快照（`src/Renderer.cpp:98-118`）；面光 API 只能在 PlayerUpdate 链中调用（`:799-812`）；Papyrus VM 回调只设置原子量或 `AddTask`（`src/Favorites.cpp:148-162`、`src/CombatPresets.cpp:170-175`）；库存事件接收器只做原子递增（`src/Wheel.cpp:1517-1526`）；序列化回调在存读档时由 SKSE 调用。各回调实际运行在哪个 OS 线程，未在所有运行时和帧生成组合下实测，不能假设一定是同一线程。
+- 主要锁：`lifecycleMutex`（**递归**，串行化开关、时间同步与动作提交）、`viewMutex`（**非递归**，保护 `view` 与目录）、`actionMutex`、`openMutex`、`pauseMutex`（`src/Wheel.cpp:36-114`）、`settingsMutex`（`src/Settings.cpp:14`）、`Ordering::mutex`、`Outfits::mutex`、`Combat::mutex`、`Cycles::mutex`、`TimeControl::mutex`、`FaceLight::mutex`、`nameHitMutex`。
+- 已观察到的获取顺序（只允许按这个方向嵌套）：
+  - `lifecycleMutex` → `openMutex` / `actionMutex` / `viewMutex` / `pauseMutex`
+  - `actionMutex` → `viewMutex`（`TakeAction` 调用 `ValidPlayer()`→`IsOpen()`，`src/Wheel.cpp:727-750`）
+  - `viewMutex` → `settingsMutex`（`Config()`）、`Ordering::mutex`（`FilterItems`/`ResortInventory`）
+  - `Outfits::mutex` → `Combat::mutex` / `Cycles::mutex` / `Ordering::mutex`（存读档与 Revert，`src/Outfits.cpp:111-140`）
+  - `Combat::mutex`、`Cycles::mutex`、`TimeControl::mutex`、`FaceLight::mutex`、`settingsMutex` 是叶子锁；`Combat::Remove` 先释放自己的锁再调用 `Cycles::PresetRemoved`（`src/CombatPresets.cpp:262-265`）
+- **禁止**：持有 `viewMutex` 时调用 `IsOpen()`、`Snapshot()`、`ValidPlayer()`、`Cancel()`、`RequestDirectory(false)` 或任何会再取得 `viewMutex` 的函数（HANDOFF §5.1：`EndSortDrag` 曾因此抛出 `resource deadlock would occur`）。
+- 作废机制：`epoch`（读档/会话变化）、`openSerial`（每次开盘或关闭）、`directoryRevision`（目录内容替换）。排队任务捕获这些值，执行时比对，不一致就丢弃（例如 `src/Wheel.cpp:364-388`、`:682-726`）。
+
+### 4. SKSE 序列化记录总表
+
+所有记录共用插件唯一 ID `0x46574F50`（`SetUniqueID`，`src/Outfits.cpp:142-146`），由 `Outfits::Save/Load/Revert` 统一分发（`:111-140`）。都是文本格式，读档时用 `ResolveFormID` 修正运行时 FormID（plugin 为空表示动态或运行时 ID）。
+
+| 记录类型 | 四字符 | 版本 | 文本头 | 上限 | 定义 / 编解码 | 读档 |
+|---|---|---|---|---|---|---|
+| `0x46574F50` | FWOP | 1 | `FWO 1` | 1 MiB，100 个预设，每个最多 64 件 | `src/Outfits.cpp:20`；`include/OutfitModel.h:55-87` | `src/Outfits.cpp:126-136` |
+| `0x46574350` | FWCP | 1 | `FWC 1` | 1 MiB，100 个预设 | `include/CombatPresets.h:6`；`include/CombatPresetModel.h:71-106` | `src/CombatPresets.cpp:291-298` |
+| `0x4657434B` | FWCK | 1 | `FWQ 1` | 1 KiB，8 个绑定 | `include/CombatPresets.h:7`；`include/CombatPresetModel.h:111-129` | `src/CombatPresets.cpp:299-306` |
+| `0x46574359` | FWCY | 1 | `FWCY 1` | 64 KiB，8 组 × 64 个成员 | `include/CombatCycles.h:5`；`include/CombatCycleModel.h:48-68` | `src/CombatCycles.cpp:124-134`（读完全部记录后调用 `FinalizeLoad`，剔除已不存在的预设） |
+| `0x46575352` | FWSR | 1 | `FWS 1` | 16 MiB，18 组 × 10,000 键 | `include/InventoryOrder.h:6`；`include/InventoryOrderModel.h:81-106` | `src/InventoryOrder.cpp:37-47` |
+
+- 排序模式编号固定为 Default=0 … ValueDescending=10（`include/InventoryOrderModel.h:14`），不得重新编号（HANDOFF §5.4）。
+- 版本不匹配或解码失败的记录会被跳过，下次存档时不会写回（审查 A-15）。0.9.0 新增的排序模式和 `health=0` 换装无法被旧版本完整读取。
+- 换装、战斗、排序记录固定使用 `std::locale::classic()`；循环记录尚未固定（审查 A-03）。
+
+### 5. INI 配置总表
+
+主配置路径固定为 `<SkyrimSE.exe 所在目录>/Data/SKSE/Plugins/FavoriteWheel.ini`（`src/Settings.cpp:22-31`）。启动时只读；缺失的键使用 `include/Settings.h:4-33` 中的默认值；只有“应用”时才创建或写入（`src/Settings.cpp:173-268`）。读取见 `:90-132`，取值约束见 `Clamp` `:62-80`。
+
+| 节 | 键 | 字段 | 默认 | 取值 / 说明 |
+|---|---|---|---|---|
+| General | Enabled | enabled | 1 | 0 时 DataLoaded 不安装任何 hook |
+| General | AllInventory | allInventory | 0 | 1 = 全部背包 |
+| General | HideEmptyCategories | hideEmptyCategories | 1 | |
+| General | RememberLastWheel | rememberLastWheel | 0 | 只在本次会话内记忆，读档时清除 |
+| General | KeepOpen | keepOpen | 1 | 消耗品始终关闭轮盘 |
+| General | TimeMode | timeMode | 0 | 0 暂停 / 1 减速 / 2 正常 |
+| General | SlowTimePercent | slowPercent | 50 | 50–100 |
+| General | Language | language | auto | 语言文件 ID；兼容旧键 `Chinese` |
+| Display | Theme | theme | classic | 主题文件名（不含扩展名） |
+| Display | ShowHints | showHints | 1 | |
+| Display | WheelScalePercent | wheelScale | 100 | 60–150 |
+| Display | ScalePercent | scale | 100 | 60–150（设置面板） |
+| Display | PositionXPercent / PositionYPercent | positionX/Y | 72 / 46 | 0–100 |
+| Display | OverlayOpacityPercent | overlayOpacity | 35 | 0–80 |
+| Display | Font | font | `C:/Windows/Fonts/msyh.ttc` | 语言或主题指定字体优先 |
+| Effects | Sounds / Animations | sounds/animations | 1 / 1 | |
+| Controls | Hotkey / HotkeyModifier | hotkey/hotkeyModifier | -1 / 0 | -1 跟随游戏的 Favorites 键；修饰键 Shift=1、Ctrl=2、Alt=4 |
+| Controls | ActionHotkey / ActionModifier | actionHotkey/actionModifier | -1 / 1 | -1 跟随收藏入口键 |
+| Controls | SwitchWheelKey | switchKey | 19（R） | 2–255，不能是 60（F2） |
+| Controls | GamepadHotkey / GamepadModifier / GamepadActionModifier | … | -1 / -1 / 274（LB） | 266–281，或 -1 |
+| Controls | GamepadCategoryButtons | gamepadCategoryButtons | 0 | 0 LB/RB 切分类，1 LT/RT 切分类 |
+| Controls | GamepadMoveWhileOpen | gamepadMoveWhileOpen | 0 | 只在“应用”成功后切换操作方案 |
+| Controls | SwapMouseHands | swapMouseHands | 0 | |
+| Controls | SensitivityPercent | sensitivity | 100 | 20–300 |
+
+资源目录为 `Data/SKSE/Plugins/FavoriteWheel/{Languages,Themes,Themes/Textures}`（默认根目录见 `include/UIResources.h:27`，相对于进程 CWD，见审查 A-08）。语言文件规范见 `docs/LOCALIZATION.md`，主题键见 `docs/THEME_AUTHORING_0.6.0.md`，主题读取见 `src/UIResources.cpp:338-385`。
+
+### 6. 构建、测试、打包、部署
+
+- 依赖：`scripts/bootstrap.ps1` 下载固定提交的 CommonLibSSE-NG（校验 SHA256）和 ImGui v1.91.9b 到 `extern/`（已被 git 忽略）。
+- 构建：`xmake f -m release -y`，然后 `xmake build -j 2 FavoriteWheel`。`FavoriteWheel` 的 `after_build`（`xmake.lua:33-134`）**会自动部署**到 `deploy_dir`（默认 `H:/Games/Dev Skyrim/mods/36 - FavoriteWheel`，`xmake.lua:12-16`）：复制 DLL；归档并迁移旧主题；只补充缺失的语言或主题文件和键，迁移已知旧提示（`scripts/language_migrations.lua`）；复制 docs 和许可证。不会复制主 INI。部署后要核对 DLL 的 SHA256（AGENTS.md）。
+- 测试：22 个 `set_default(false)` 的独立目标（`xmake.lua:136-282`），逐个执行 `xmake build <Target>` 后运行 `build/windows/x64/release/<Target>.exe`。只依赖 `include/` 和少量 `src/` 的纯逻辑测试**不会触发部署**。`RuntimeLayoutTests` 会检查已构建 DLL 的导出版本；`SettingsVfsTests` 需要 MO2 usvfs；`WheelPreview` 用 WARP 离屏绘图。语言迁移测试：`xmake lua scripts/test_language_migrations.lua`。
+- 打包：`scripts/package.ps1`（PowerShell 7），从 `xmake.lua` 读取版本，生成 `dist/FavoriteWheel-<ver>.zip` 和源码包，并校验 ZIP 内容。目前**不校验 DLL 是否对应当前源码**（审查 A-02）。
+- 版本号目前要手动同步 4 处：`xmake.lua:2`、`src/main.cpp:35,44`、`tests/RuntimeLayoutTests.cpp:121`（审查 A-11）。
+
+### 7. 用户已确认的决策（截至 0.9.0，长期有效）
+
+- 构建后默认自动部署到 MO2 开发目录；保留用户主 INI 和自定义资源；源码里的示例 INI 不进安装包。
+- 不接管键鼠、不启动游戏；需要游戏内验证时交给用户。“部署成功”不等于“游戏验证通过”。
+- 额外功能小轮盘与页脚按钮方案已撤回，F2 直接打开设置；吸血鬼领主能力音效实验已撤回，不得恢复。
+- 排序：T / Shift+T / F2；只对人类形态的收藏或全部背包生效，共 18 组；随角色存档保存；名称排序是字节序，不做拼音排序。
+- 记住上次轮盘：默认关闭，只在本次会话内有效。
+- 换装 `health=0` 精确保留；负数和非有限值仍然拒绝。
+- PureDark Upscaler / Theo's Render Pipeline 的可见性问题尚未解决，不得在发布材料中声称已修复。
+- 0.9.0 只完成了本地发布准备，没有上传到线上。
+
+### 8. 文档组织
+
+`docs/README.md` 是文档索引：按专题和版本归类，并标出已被取代的文档。新的修复计划放在 `docs/plans/<task-id>.md`（模板 `docs/plans/_template.md`），审查和测试报告放在 `docs/reports/`。
