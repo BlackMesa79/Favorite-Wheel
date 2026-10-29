@@ -11,6 +11,9 @@
 namespace Wheel {
     namespace {
         const std::unordered_map<std::string,std::string> english{
+            {"swapMouseHands","Swap mouse hands"},
+            {"swapMouseHandsHelp","On: LMB left hand, RMB right hand. Presets keep LMB apply / RMB manage."},
+            {"compactUseSwapped","LMB USE / LEFT HAND  ·  RMB RIGHT HAND"},
             {"cycleTitle","COMBAT CYCLES"},{"cycleTab","CYCLES"},{"cycleEntries","CYCLE ENTRIES"},{"cycleDefault","Cycle group"},
             {"cycleManage","MANAGE CYCLE GROUP"},{"cycleMemberManage","MANAGE CYCLE ENTRY"},{"cycleCapture","ADD CURRENT HANDS"},
             {"cycleUse","LMB NEXT SET · RMB MANAGE"},{"cycleMemberHint","LMB APPLY · RMB REORDER / REMOVE"},
