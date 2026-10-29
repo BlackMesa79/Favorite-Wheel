@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-param([switch]$SkipSource, [switch]$TestPackage, [ValidatePattern('^[a-z0-9][a-z0-9-]*$')][string]$TestName='test')
+param([switch]$SkipSource, [switch]$TestPackage, [ValidatePattern('^[a-z0-9][a-z0-9-]*$')][string]$TestName='test', [switch]$AllowStaleDll)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $versionMatch = [regex]::Match((Get-Content -LiteralPath (Join-Path $projectRoot 'xmake.lua') -Raw), 'set_version\("([^"]+)"\)')
@@ -8,6 +8,24 @@ $version = $versionMatch.Groups[1].Value
 $buildLabel = if($TestPackage){' - DEVELOPMENT TEST: '+$TestName}else{''}
 $dll = Join-Path $projectRoot 'build/windows/x64/release/FavoriteWheel.dll'
 if (!(Test-Path -LiteralPath $dll)) { throw 'Build the Release DLL before packaging.' }
+$dllInfo = Get-Item -LiteralPath $dll
+$fileVersion = [string]$dllInfo.VersionInfo.FileVersion
+$dllVersionMatch = [regex]::Match($fileVersion, '^(\d+\.\d+\.\d+)(?:\.\d+)?$')
+if (!$dllVersionMatch.Success -or $dllVersionMatch.Groups[1].Value -ne $version) {
+    throw "DLL FileVersion '$fileVersion' does not match project version '$version'. Rebuild FavoriteWheel in Release mode before packaging."
+}
+if (!$AllowStaleDll) {
+    $inputs = @(Get-Item -LiteralPath (Join-Path $projectRoot 'xmake.lua'))
+    foreach ($tree in @('src','include')) {
+        $inputs += Get-ChildItem -LiteralPath (Join-Path $projectRoot $tree) -File -Recurse -Force
+    }
+    $newer = $inputs | Where-Object { $_.LastWriteTimeUtc -gt $dllInfo.LastWriteTimeUtc } | Select-Object -First 1
+    if ($newer) {
+        throw "DLL is stale: '$($newer.FullName)' is newer than '$dll'. Rebuild FavoriteWheel in Release mode before packaging, or use -AllowStaleDll to skip only this freshness check."
+    }
+}
+$dllHash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash
+Write-Output "DLL SHA256: $dllHash"
 $dist = Join-Path $projectRoot 'dist'
 $stage = Join-Path $projectRoot ('build/package-' + [Guid]::NewGuid().ToString('N'))
 $plugins = Join-Path $stage 'SKSE/Plugins'
@@ -311,7 +329,6 @@ foreach ($section in $licenseSections) {
     $readme += Get-Content -LiteralPath (Join-Path $projectRoot $section.File) -Raw
 }
 Set-Content -LiteralPath (Join-Path $stage 'readme.txt') -Value $readme -Encoding utf8NoBOM
-$dllHash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash
 $packageSuffix = if ($TestPackage) { '-'+$TestName } else { '' }
 $binaryZip = Join-Path $dist "FavoriteWheel-$version$packageSuffix.zip"
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $binaryZip -Force
@@ -376,4 +393,3 @@ if (!$SkipSource) {
     Get-Item -LiteralPath $sourceZip | Select-Object FullName,Length
 }
 Get-Item -LiteralPath $binaryZip | Select-Object FullName,Length
-Write-Output "DLL SHA256: $dllHash"

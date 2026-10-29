@@ -15,6 +15,17 @@ option("deploy_dir")
     set_description("MO2 mod root for automatic deployment; empty disables deployment")
 option_end()
 
+rule("favoritewheel.version")
+    on_load(function(target)
+        local version = target:version()
+        local major, minor, patch = version:match("^(%d+)%.(%d+)%.(%d+)$")
+        assert(major, "FavoriteWheel requires a major.minor.patch version")
+        target:add("defines", 'FAVORITEWHEEL_VERSION_STRING="' .. version .. '"',
+            "FAVORITEWHEEL_VERSION_MAJOR=" .. major, "FAVORITEWHEEL_VERSION_MINOR=" .. minor,
+            "FAVORITEWHEEL_VERSION_PATCH=" .. patch)
+    end)
+rule_end()
+
 target("wheel-imgui")
     set_kind("static")
     add_files("extern/imgui/imgui.cpp", "extern/imgui/imgui_draw.cpp", "extern/imgui/imgui_tables.cpp", "extern/imgui/imgui_widgets.cpp", "extern/imgui/backends/imgui_impl_dx11.cpp")
@@ -23,6 +34,7 @@ target("wheel-imgui")
 
 target("FavoriteWheel")
     set_kind("shared")
+    add_rules("favoritewheel.version")
     add_rules("commonlibsse-ng.plugin", {name = "FavoriteWheel", author = "BlackMesa79", description = "Categorized vanilla favorites wheel"})
     add_deps("commonlibsse-ng", "wheel-imgui")
     add_files("src/*.cpp")
@@ -241,6 +253,7 @@ target("FaceLightClientTests")
 
 target("RuntimeLayoutTests")
     set_kind("binary")
+    add_rules("favoritewheel.version")
     set_default(false)
     set_rundir(os.projectdir())
     add_deps("commonlibsse-ng")
