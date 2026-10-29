@@ -7,10 +7,15 @@
 #include <cmath>
 #include <Windows.h>
 #include <initializer_list>
+#include <memory>
+#include <mutex>
 
 namespace Wheel {
     namespace {
         const std::unordered_map<std::string,std::string> english{
+            {"swapMouseHands","Swap mouse hands"},
+            {"swapMouseHandsHelp","On: LMB left hand, RMB right hand. Presets keep LMB apply / RMB manage."},
+            {"compactUseSwapped","LMB USE / LEFT HAND  ·  RMB RIGHT HAND"},
             {"cycleTitle","COMBAT CYCLES"},{"cycleTab","CYCLES"},{"cycleEntries","CYCLE ENTRIES"},{"cycleDefault","Cycle group"},
             {"cycleManage","MANAGE CYCLE GROUP"},{"cycleMemberManage","MANAGE CYCLE ENTRY"},{"cycleCapture","ADD CURRENT HANDS"},
             {"cycleUse","LMB NEXT SET · RMB MANAGE"},{"cycleMemberHint","LMB APPLY · RMB REORDER / REMOVE"},
@@ -224,6 +229,11 @@ namespace Wheel {
         std::vector<Language> languages{{"en","English","",english}};
         std::vector<Theme> themes{Theme{}};
         std::string systemLanguage="en";
+        struct LanguageCache {std::string requested,active;};
+        struct GlyphCache {std::string active;int hotkey,switchKey,actionHotkey;std::string text;};
+        std::mutex cacheMutex; // Leaf lock: only exchange immutable snapshots while held.
+        std::shared_ptr<const LanguageCache> languageCache;
+        std::shared_ptr<const GlyphCache> glyphCache;
         std::vector<std::string> fallbackFonts;
         std::filesystem::path windowsFonts;
         std::string InstalledFont(const char* filename) {
@@ -295,7 +305,10 @@ namespace Wheel {
         std::vector<std::filesystem::path> Files(const std::filesystem::path& dir) {
             std::vector<std::filesystem::path> result; std::error_code error;
             for (std::filesystem::directory_iterator it(dir,error),end; !error && it!=end; it.increment(error))
-                if (it->is_regular_file() && it->path().extension()==".ini") result.push_back(it->path());
+                {
+                std::error_code statusError;
+                if (it->is_regular_file(statusError) && !statusError && it->path().extension()==".ini") result.push_back(it->path());
+            }
             std::sort(result.begin(),result.end()); return result;
         }
         std::uint32_t Color(const std::string& value,std::uint32_t fallback) {
@@ -317,7 +330,15 @@ namespace Wheel {
         }
     }
     void LoadResources(const std::string& root) {
+        try {
+        std::shared_ptr<const LanguageCache> oldLanguage;
+        std::shared_ptr<const GlyphCache> oldGlyphs;
+        {
+            std::lock_guard lock(cacheMutex);
+            oldLanguage=std::move(languageCache);oldGlyphs=std::move(glyphCache);
+        }
         languages={{"en","English","",english}}; themes={Theme{}};
+        auto loadedLanguages=languages;auto loadedThemes=themes;
         systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
         wchar_t windows[MAX_PATH]{};const auto length=GetWindowsDirectoryW(windows,MAX_PATH);
         windowsFonts=length && length<MAX_PATH?std::filesystem::path(windows)/L"Fonts":std::filesystem::path{};
@@ -331,13 +352,13 @@ namespace Wheel {
             const auto name=values.contains("Name")&&!values["Name"].empty()?values["Name"]:id;
             Language entry{id,name,values["Font"],std::move(values)};
             if(entry.font=="auto")entry.font=AutomaticFont(code);
-            if(code=="en") {entry.id="en";languages[0]=std::move(entry);}
-            else if(std::none_of(languages.begin(),languages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
-                languages.push_back(std::move(entry));
+            if(code=="en") {entry.id="en";loadedLanguages[0]=std::move(entry);}
+            else if(std::none_of(loadedLanguages.begin(),loadedLanguages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
+                loadedLanguages.push_back(std::move(entry));
         }
         for (const auto& path:Files(std::filesystem::u8path(root)/"Themes")) {
             auto values=Read(path); Theme entry;
-            entry.id=path.stem().string(); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
+            const auto stem=path.stem().u8string();entry.id.assign(stem.begin(),stem.end()); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
             auto style=Trim(values["Style"]);
             std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
             entry.style=style=="skyrim"?ThemeStyle::Skyrim:style=="classic"?ThemeStyle::ClassicGold:ThemeStyle::Etched;
@@ -381,7 +402,14 @@ namespace Wheel {
             entry.labelScale=Number(values,"LabelScale",entry.labelScale,.9f,1.1f);
             entry.hoverDuration=Number(values,"HoverDuration",entry.hoverDuration,0.f,.25f);
             entry.pageDuration=Number(values,"PageDuration",entry.pageDuration,0.f,.25f);
-            if (entry.id=="classic") themes[0]=entry; else themes.push_back(entry);
+            if (entry.id=="classic") loadedThemes[0]=entry; else loadedThemes.push_back(entry);
+        }
+        languages.swap(loadedLanguages);themes.swap(loadedThemes);
+        } catch(const std::exception& error) {
+            OutputDebugStringA("FavoriteWheel: LoadResources failed; keeping built-in resources: ");
+            OutputDebugStringA(error.what());OutputDebugStringA("\n");
+        } catch(...) {
+            OutputDebugStringA("FavoriteWheel: LoadResources failed; keeping built-in resources (unknown exception).\n");
         }
     }
     const std::vector<Language>& Languages(){return languages;}
@@ -397,7 +425,20 @@ namespace Wheel {
         }
         return "en";
     }
-    std::string ActiveLanguage(const Settings& config){return ResolveLanguage(config.language,systemLanguage);}
+    std::string ActiveLanguage(const Settings& config) {
+        std::shared_ptr<const LanguageCache> cached;
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=languageCache;
+        }
+        if(cached && cached->requested==config.language)return cached->active;
+        auto updated=std::make_shared<const LanguageCache>(LanguageCache{config.language,ResolveLanguage(config.language,systemLanguage)});
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=std::move(languageCache);languageCache=updated;
+        }
+        return updated->active;
+    }
     std::string LanguageLabel(const Settings& config) {
         const auto active=ActiveLanguage(config);
         std::string name=active;
@@ -416,13 +457,26 @@ namespace Wheel {
         const auto it=english.find(key); return it!=english.end()?it->second:key;
     }
     std::string UIGlyphs(const Settings& config) {
+        const auto active=ActiveLanguage(config);
+        std::shared_ptr<const GlyphCache> cached;
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=glyphCache;
+        }
+        if(cached && cached->active==active && cached->hotkey==config.hotkey &&
+            cached->switchKey==config.switchKey && cached->actionHotkey==config.actionHotkey)return cached->text;
         std::string text;
         for(const auto& [key,value]:english) text+=Tr(config,key);
         for(const auto& language:languages) text+=language.name;
         for(const auto& theme:themes) text+=theme.name;
         text+=KeyLabel(config);auto switchConfig=config;switchConfig.hotkey=config.switchKey;text+=KeyLabel(switchConfig);
         switchConfig.hotkey=config.actionHotkey;text+=KeyLabel(switchConfig);
-        return text;
+        auto updated=std::make_shared<const GlyphCache>(GlyphCache{active,config.hotkey,config.switchKey,config.actionHotkey,std::move(text)});
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=std::move(glyphCache);glyphCache=updated;
+        }
+        return updated->text;
     }
     std::string KeyLabel(const Settings& config) {
         if(config.hotkey<0)return Tr(config,"follow");
