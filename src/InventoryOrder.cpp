@@ -43,6 +43,7 @@ namespace Wheel::Ordering {
             if(!api->ResolveFormID(k.form,form) || (k.enchantment && !api->ResolveFormID(k.enchantment,enchantment)))return true;
             k.form=form;k.enchantment=enchantment;return false;
         });
+        RemoveDuplicateKeys(loaded);
         std::lock_guard lock(mutex);state=std::move(loaded);
     }
 }
