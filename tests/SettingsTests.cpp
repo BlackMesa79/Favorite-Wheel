@@ -487,4 +487,13 @@ void Ac8_TranslationCacheConsistency() {
     Settings rebound=english;rebound.switchKey=20;
     Check(UIGlyphs(rebound)!=englishGlyphs,"AC-8: rebinding the switch key refreshes the UI glyph string");
     Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the switch key restores the UI glyph string");
+    Settings favorites=english;favorites.hotkey=20;
+    Check(UIGlyphs(favorites)!=englishGlyphs,"AC-8: rebinding the favorites hotkey refreshes the UI glyph string");
+    Check(UIGlyphs(favorites).find(KeyLabel(favorites))!=std::string::npos,
+        "AC-8: the refreshed UI glyph string preheats the new favorites hotkey label");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the favorites hotkey restores the UI glyph string");
+    Settings actions=english;actions.actionHotkey=21;
+    Check(UIGlyphs(actions)!=englishGlyphs,"AC-8: rebinding the action hotkey refreshes the UI glyph string");
+    Check(UIGlyphs(actions)!=UIGlyphs(favorites),"AC-8: the favorites and action hotkeys occupy separate glyph slots");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the action hotkey restores the UI glyph string");
 }
