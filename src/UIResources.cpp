@@ -7,6 +7,8 @@
 #include <cmath>
 #include <Windows.h>
 #include <initializer_list>
+#include <memory>
+#include <mutex>
 
 namespace Wheel {
     namespace {
@@ -227,6 +229,11 @@ namespace Wheel {
         std::vector<Language> languages{{"en","English","",english}};
         std::vector<Theme> themes{Theme{}};
         std::string systemLanguage="en";
+        struct LanguageCache {std::string requested,active;};
+        struct GlyphCache {std::string active;int hotkey,switchKey,actionHotkey;std::string text;};
+        std::mutex cacheMutex; // Leaf lock: only exchange immutable snapshots while held.
+        std::shared_ptr<const LanguageCache> languageCache;
+        std::shared_ptr<const GlyphCache> glyphCache;
         std::vector<std::string> fallbackFonts;
         std::filesystem::path windowsFonts;
         std::string InstalledFont(const char* filename) {
@@ -324,6 +331,12 @@ namespace Wheel {
     }
     void LoadResources(const std::string& root) {
         try {
+        std::shared_ptr<const LanguageCache> oldLanguage;
+        std::shared_ptr<const GlyphCache> oldGlyphs;
+        {
+            std::lock_guard lock(cacheMutex);
+            oldLanguage=std::move(languageCache);oldGlyphs=std::move(glyphCache);
+        }
         languages={{"en","English","",english}}; themes={Theme{}};
         auto loadedLanguages=languages;auto loadedThemes=themes;
         systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
@@ -412,7 +425,20 @@ namespace Wheel {
         }
         return "en";
     }
-    std::string ActiveLanguage(const Settings& config){return ResolveLanguage(config.language,systemLanguage);}
+    std::string ActiveLanguage(const Settings& config) {
+        std::shared_ptr<const LanguageCache> cached;
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=languageCache;
+        }
+        if(cached && cached->requested==config.language)return cached->active;
+        auto updated=std::make_shared<const LanguageCache>(LanguageCache{config.language,ResolveLanguage(config.language,systemLanguage)});
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=std::move(languageCache);languageCache=updated;
+        }
+        return updated->active;
+    }
     std::string LanguageLabel(const Settings& config) {
         const auto active=ActiveLanguage(config);
         std::string name=active;
@@ -431,13 +457,26 @@ namespace Wheel {
         const auto it=english.find(key); return it!=english.end()?it->second:key;
     }
     std::string UIGlyphs(const Settings& config) {
+        const auto active=ActiveLanguage(config);
+        std::shared_ptr<const GlyphCache> cached;
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=glyphCache;
+        }
+        if(cached && cached->active==active && cached->hotkey==config.hotkey &&
+            cached->switchKey==config.switchKey && cached->actionHotkey==config.actionHotkey)return cached->text;
         std::string text;
         for(const auto& [key,value]:english) text+=Tr(config,key);
         for(const auto& language:languages) text+=language.name;
         for(const auto& theme:themes) text+=theme.name;
         text+=KeyLabel(config);auto switchConfig=config;switchConfig.hotkey=config.switchKey;text+=KeyLabel(switchConfig);
         switchConfig.hotkey=config.actionHotkey;text+=KeyLabel(switchConfig);
-        return text;
+        auto updated=std::make_shared<const GlyphCache>(GlyphCache{active,config.hotkey,config.switchKey,config.actionHotkey,std::move(text)});
+        {
+            std::lock_guard lock(cacheMutex);
+            cached=std::move(glyphCache);glyphCache=updated;
+        }
+        return updated->text;
     }
     std::string KeyLabel(const Settings& config) {
         if(config.hotkey<0)return Tr(config,"follow");

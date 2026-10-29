@@ -26,6 +26,7 @@ namespace Wheel {
         std::vector<ExtraFont> extras; // ImGui retains range pointers until the next atlas clear.
         std::string loadedFont;
         std::string preparedCatalogGlyphs;
+        std::string preparedUIGlyphs;
         FontFile& ReadFont(const std::string& path) {
             auto [entry,inserted]=fontFiles.try_emplace(path);
             auto& font=entry->second;
@@ -78,6 +79,7 @@ namespace Wheel {
             glyphs.Clear();
             glyphs.AddRanges(io.Fonts->GetGlyphRangesDefault());
             preparedCatalogGlyphs.clear();
+            preparedUIGlyphs.clear();
         }
         const auto previous = glyphs.UsedChars;
         if(view.inventoryGlyphs!=preparedCatalogGlyphs) {
@@ -85,7 +87,12 @@ namespace Wheel {
             preparedCatalogGlyphs=view.inventoryGlyphs;
         }
         glyphs.AddText(view.outfitName.text.c_str());
-        glyphs.AddText(UIGlyphs(view.config).c_str());
+        const auto uiGlyphs=UIGlyphs(view.config);
+        // Content also detects resource reloads without exposing cache internals.
+        if(uiGlyphs!=preparedUIGlyphs) {
+            glyphs.AddText(uiGlyphs.c_str());
+            preparedUIGlyphs=uiGlyphs;
+        }
         for (const auto& item : view.items) {glyphs.AddText(item.name.c_str());glyphs.AddText(item.detail.c_str());glyphs.AddText(item.centreNote.c_str());glyphs.AddText(ItemInfoGlyphs(item.info).c_str());}
         bool changed = bakedScale != scale || fontChanged || metricsChanged || fonts.empty();
         for (int i = 0; i < glyphs.UsedChars.Size && !changed; ++i)
