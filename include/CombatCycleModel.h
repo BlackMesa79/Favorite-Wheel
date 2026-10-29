@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <iomanip>
+#include <locale>
 #include <sstream>
 #include <vector>
 
@@ -46,7 +47,7 @@ namespace Wheel::Cycles {
         return true;
     }
     inline std::string Encode(const Groups& groups) {
-        std::ostringstream out;out<<"FWCY 1\n";
+        std::ostringstream out;out.imbue(std::locale::classic());out<<"FWCY 1\n";
         for(const auto& g:groups) {
             out<<g.id<<' '<<std::quoted(g.name)<<' '<<g.key<<' '<<g.modifiers<<' '<<g.current<<' '<<g.members.size();
             for(auto id:g.members)out<<' '<<id;
@@ -56,7 +57,7 @@ namespace Wheel::Cycles {
     }
     inline bool Decode(const std::string& text,Groups& result,std::uint32_t version=1) {
         if(version!=1 || text.size()>65536)return false;
-        std::istringstream in(text);std::string magic;int format=0;Groups loaded;
+        std::istringstream in(text);in.imbue(std::locale::classic());std::string magic;int format=0;Groups loaded;
         if(!(in>>magic>>format) || magic!="FWCY" || format!=1)return false;
         for(auto& g:loaded) {
             int count=0;

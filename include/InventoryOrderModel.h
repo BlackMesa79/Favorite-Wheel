@@ -36,6 +36,12 @@ namespace Wheel::Ordering {
         for(const auto& key:group.order)known.emplace(Token(key),true);
         for(const auto& key:keys)if(group.order.size()<maxKeys && known.emplace(Token(key),true).second)group.order.push_back(key);
     }
+    inline void RemoveDuplicateKeys(State& state) {
+        for(auto& group:state) {
+            std::unordered_map<std::string,bool> seen;
+            std::erase_if(group.order,[&](const Key& key){return !seen.emplace(Token(key),true).second;});
+        }
+    }
     template<class It,class Identify> void Sort(Group& group,It begin,It end,Identify identity) {
         if(group.mode==Mode::Default)return;
         std::unordered_map<std::string,std::size_t> ranks;
