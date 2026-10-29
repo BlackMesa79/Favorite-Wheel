@@ -6,6 +6,7 @@
 using namespace Wheel::Ordering;
 struct Row {Key key;std::string name;bool equipped=false;int sortType=999,sortSlot=999;std::optional<float> sortNumber;};
 void Check(bool ok,const char* why){if(!ok){std::cerr<<why<<'\n';std::exit(1);}}
+void Ac4_RemoveDuplicateKeys();
 int main(){
     std::vector<Row> source{{{1,0,0,0,"B"},"B",false},{{2,0,0,0,"A"},"A",true},{{3,0,0,0,"C"},"C",false}};
     auto id=[](const Row& r){return r.key;};Group g;
@@ -83,5 +84,38 @@ int main(){
         gesture.Move(1,1);Check(!gesture.active,"Late movement cannot revive a canceled drag");
         gesture.Begin(0,0);gesture.Page();Check(gesture.active,"Paging while held cannot fall back to short-click movement");
     }
+    Ac4_RemoveDuplicateKeys();
     std::cout<<"Inventory ordering modes, retained identities, scopes, cross-page moves and serialization passed\n";
+}
+// AC-4: renumbered FormIDs can make two stored keys share one identity after a
+// load. Deduplication keeps the first occurrence so the next save stays decodable;
+// Decode itself still rejects a record that was written with duplicates.
+void Ac4_RemoveDuplicateKeys() {
+    State state;
+    state[0].mode=Mode::Type;
+    state[0].order={{100,0,0,0,"Sword"},{200,0,0,0,"Axe"},{100,0,0,0,"Sword"},{300,0,0,0,"Shield"}};
+    state[3].mode=Mode::NameDescending;
+    state[3].order={{400,0,0,0,"Helmet"},{500,0,0,0,"Boots"}};
+    state[7].mode=Mode::Custom;
+    state[7].order={{600,0,0,0,"Ring"},{600,0,0,0,"Ring"},{600,0,0,0,"Ring"}};
+    State probe;
+    Check(!Decode(Encode(state),probe),"AC-4: a record written with duplicate identities is still rejected");
+    const auto before=state;
+    RemoveDuplicateKeys(state);
+    Check(state[0].order.size()==3 && Token(state[0].order[0])=="100:0:0:0:Sword" &&
+        Token(state[0].order[1])=="200:0:0:0:Axe" && Token(state[0].order[2])=="300:0:0:0:Shield",
+        "AC-4: a repeated key collapses to its first position and the relative order is kept");
+    Check(state[7].order.size()==1 && Token(state[7].order[0])=="600:0:0:0:Ring",
+        "AC-4: a group of identical keys keeps exactly one entry");
+    for(int index=0;index<groupCount;++index) {
+        Check(state[index].mode==before[index].mode,"AC-4: deduplication never changes a sort mode");
+        if(index!=0 && index!=7)
+            Check(state[index].order==before[index].order,"AC-4: groups without duplicates are untouched");
+    }
+    State decoded;
+    Check(Decode(Encode(state),decoded) && Encode(decoded)==Encode(state),
+        "AC-4: the deduplicated state saves and loads again");
+    const auto deduplicated=Encode(state);
+    RemoveDuplicateKeys(state);
+    Check(Encode(state)==deduplicated,"AC-4: deduplication is idempotent");
 }
