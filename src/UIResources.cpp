@@ -295,7 +295,10 @@ namespace Wheel {
         std::vector<std::filesystem::path> Files(const std::filesystem::path& dir) {
             std::vector<std::filesystem::path> result; std::error_code error;
             for (std::filesystem::directory_iterator it(dir,error),end; !error && it!=end; it.increment(error))
-                if (it->is_regular_file() && it->path().extension()==".ini") result.push_back(it->path());
+                {
+                std::error_code statusError;
+                if (it->is_regular_file(statusError) && !statusError && it->path().extension()==".ini") result.push_back(it->path());
+            }
             std::sort(result.begin(),result.end()); return result;
         }
         std::uint32_t Color(const std::string& value,std::uint32_t fallback) {
@@ -317,7 +320,9 @@ namespace Wheel {
         }
     }
     void LoadResources(const std::string& root) {
+        try {
         languages={{"en","English","",english}}; themes={Theme{}};
+        auto loadedLanguages=languages;auto loadedThemes=themes;
         systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
         wchar_t windows[MAX_PATH]{};const auto length=GetWindowsDirectoryW(windows,MAX_PATH);
         windowsFonts=length && length<MAX_PATH?std::filesystem::path(windows)/L"Fonts":std::filesystem::path{};
@@ -331,13 +336,13 @@ namespace Wheel {
             const auto name=values.contains("Name")&&!values["Name"].empty()?values["Name"]:id;
             Language entry{id,name,values["Font"],std::move(values)};
             if(entry.font=="auto")entry.font=AutomaticFont(code);
-            if(code=="en") {entry.id="en";languages[0]=std::move(entry);}
-            else if(std::none_of(languages.begin(),languages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
-                languages.push_back(std::move(entry));
+            if(code=="en") {entry.id="en";loadedLanguages[0]=std::move(entry);}
+            else if(std::none_of(loadedLanguages.begin(),loadedLanguages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
+                loadedLanguages.push_back(std::move(entry));
         }
         for (const auto& path:Files(std::filesystem::u8path(root)/"Themes")) {
             auto values=Read(path); Theme entry;
-            entry.id=path.stem().string(); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
+            const auto stem=path.stem().u8string();entry.id.assign(stem.begin(),stem.end()); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
             auto style=Trim(values["Style"]);
             std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
             entry.style=style=="skyrim"?ThemeStyle::Skyrim:style=="classic"?ThemeStyle::ClassicGold:ThemeStyle::Etched;
@@ -381,7 +386,14 @@ namespace Wheel {
             entry.labelScale=Number(values,"LabelScale",entry.labelScale,.9f,1.1f);
             entry.hoverDuration=Number(values,"HoverDuration",entry.hoverDuration,0.f,.25f);
             entry.pageDuration=Number(values,"PageDuration",entry.pageDuration,0.f,.25f);
-            if (entry.id=="classic") themes[0]=entry; else themes.push_back(entry);
+            if (entry.id=="classic") loadedThemes[0]=entry; else loadedThemes.push_back(entry);
+        }
+        languages.swap(loadedLanguages);themes.swap(loadedThemes);
+        } catch(const std::exception& error) {
+            OutputDebugStringA("FavoriteWheel: LoadResources failed; keeping built-in resources: ");
+            OutputDebugStringA(error.what());OutputDebugStringA("\n");
+        } catch(...) {
+            OutputDebugStringA("FavoriteWheel: LoadResources failed; keeping built-in resources (unknown exception).\n");
         }
     }
     const std::vector<Language>& Languages(){return languages;}
