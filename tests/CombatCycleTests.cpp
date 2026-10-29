@@ -2,8 +2,10 @@
 #include "InputGate.h"
 #include <cstdlib>
 #include <iostream>
+#include <locale>
 
 void Check(bool value,const char* message){if(!value){std::cerr<<message<<'\n';std::exit(1);}}
+void Ac3_CycleRecordsIgnoreDigitGrouping();
 int main() {
     using namespace Wheel;using namespace Wheel::Cycles;
     auto groups=Defaults();Check(Valid(groups),"Fresh/old characters have eight valid empty Shift+1..8 groups");
@@ -58,5 +60,31 @@ int main() {
     Check(gate.Filter(2,true,false,false)==InputGate::Result::Suppress && gate.Filter(2,false,true,false)==InputGate::Result::Suppress,
         "Releasing Shift before the main key cannot leak a held or release event to vanilla");
     Check(gate.Filter(2,true,false,Match(groups,2,0,false)!=0)==InputGate::Result::Pass,"A new unmodified 1 press keeps native behavior");
+    Ac3_CycleRecordsIgnoreDigitGrouping();
     std::cout<<"Combat cycle model, serialization, conflict and input lifecycle tests passed\n";
+}
+// AC-3: preset IDs above 999 are formatted with the process locale unless the
+// record fixes classic, so another component's digit grouping must not change
+// the saved bytes or block a reload.
+void Ac3_CycleRecordsIgnoreDigitGrouping() {
+    using namespace Wheel;using namespace Wheel::Cycles;
+    struct GroupedDigits:std::numpunct<char> {
+        char do_thousands_sep()const override{return ',';}
+        std::string do_grouping()const override{return "\3";}
+    };
+    auto groups=Defaults();
+    Check(Append(groups[0],999999)==AppendResult::Added,"AC-3: fixture appends a six-digit preset");
+    groups[0].current=999999;
+    Check(Append(groups[1],1234)==AppendResult::Added && Append(groups[1],5678)==AppendResult::Added,"AC-3: fixture appends four-digit presets");
+    groups[1].current=1234;
+    Check(Valid(groups),"AC-3: the fixture record is a valid cycle group set");
+    const auto original=std::locale();
+    std::locale::global(std::locale::classic());const auto canonical=Encode(groups);
+    std::locale::global(std::locale(std::locale::classic(),new GroupedDigits));const auto grouped=Encode(groups);
+    Groups fromGrouped,fromCanonical;
+    const bool groupedDecoded=Decode(grouped,fromGrouped),canonicalDecoded=Decode(canonical,fromCanonical);
+    std::locale::global(original);
+    Check(grouped==canonical,"AC-3: digit grouping in the global locale cannot change the cycle record bytes");
+    Check(groupedDecoded && fromGrouped==groups,"AC-3: the cycle record decodes under a grouped global locale");
+    Check(canonicalDecoded && fromCanonical==groups,"AC-3: a classic-locale record loads under a grouped global locale");
 }

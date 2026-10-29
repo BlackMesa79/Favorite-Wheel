@@ -9,6 +9,10 @@
 #include <cstdlib>
 #include <cmath>
 void Check(bool condition,const char* message) { if(!condition){std::cerr<<message<<'\n';std::exit(1);} }
+void Ac1_Utf8ThemeId();
+void Ac2_UnreadableThemeEntry();
+void Ac5_BuiltinEnglishCoverage();
+void Ac8_TranslationCacheConsistency();
 int wmain(int argc,wchar_t** argv) {
     using namespace Wheel;
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
@@ -339,5 +343,148 @@ int wmain(int argc,wchar_t** argv) {
     Check(SettingCount(2)==6 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26,"Gameplay tab includes continuous use, empty categories and wheel memory");
     Check(SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Keyboard tab includes mouse hands; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
+    Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
+}
+// ---------------------------------------------------------------------------
+// Acceptance tests for task 20261028-takeover-review (AC-1, AC-2, AC-5, AC-8).
+// Each function is self-contained so T-1, T-4 and T-6 can be merged separately.
+// ---------------------------------------------------------------------------
+namespace {
+    std::string Utf8(const std::filesystem::path& path) {
+        const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());
+    }
+    std::filesystem::path Scratch(const char* name) {
+        const auto root=std::filesystem::path("build")/("acceptance-"+std::string(name)+"-"+std::to_string(GetCurrentProcessId()));
+        std::error_code error;std::filesystem::remove_all(root,error);
+        std::filesystem::create_directories(root);return root;
+    }
+    void RemoveScratch(const std::filesystem::path& root) {
+        std::error_code error;(void)std::filesystem::remove_all(root,error);
+    }
+    bool TryLoad(const std::string& root,const char* message) {
+        try {Wheel::LoadResources(root);return true;}
+        catch(const std::exception& error) {std::cerr<<message<<": "<<error.what()<<'\n';return false;}
+        catch(...) {std::cerr<<message<<": unknown exception\n";return false;}
+    }
+    std::vector<std::string> CatalogKeys() {
+        std::vector<std::string> keys;
+        std::ifstream catalog("assets/Languages/en.ini",std::ios::binary);std::string line;
+        while(std::getline(catalog,line)) {
+            if(!line.empty() && line.back()=='\r')line.pop_back();
+            const auto equal=line.find('=');
+            if(equal!=std::string::npos && equal)keys.push_back(line.substr(0,equal));
+        }
+        return keys;
+    }
+}
+// AC-1: a theme file named in UTF-8 must produce a UTF-8 theme ID that survives
+// Apply and the next LoadSettings.
+void Ac1_Utf8ThemeId() {
+    using namespace Wheel;
+    const auto root=Scratch("ac1"),resources=root/"Resources",themes=resources/"Themes";
+    std::filesystem::create_directories(themes);
+    const std::u8string name=u8"测试主题";
+    {std::ofstream file(themes/std::filesystem::path(name+u8".ini"),std::ios::binary);
+     file<<"Name=测\nAccent=12AB34FF\nPanel=010203FF\nBorder=44556677\n";}
+    Check(TryLoad(resources.string(),"AC-1: LoadResources must accept a UTF-8 theme file name"),
+        "AC-1: a UTF-8 theme file loads");
+    const std::string wanted(name.begin(),name.end());
+    const Theme* selected=nullptr;
+    for(const auto& theme:Themes())if(theme.id==wanted)selected=&theme;
+    Check(selected!=nullptr,"AC-1: Themes() exposes the UTF-8 theme ID taken from the file name");
+    Check(selected->name=="测","AC-1: the UTF-8 theme Name is read");
+    Check(selected->accent==0xFF34AB12 && selected->panel==0xFF030201 && selected->border==0x77665544,
+        "AC-1: the custom theme color keys still parse for a UTF-8 theme");
+    SetSettingsPath(Utf8(root/"Settings.ini"));LoadSettings();
+    BeginSettings();auto edited=Config();edited.theme=wanted;EditSettings(edited);
+    Check(SaveSettings(),"AC-1: a UTF-8 theme ID can be applied and saved");
+    LoadSettings();
+    Check(Config().theme==wanted,"AC-1: the saved UTF-8 theme ID survives a reload");
+    Check(Style(Config()).id==wanted,"AC-1: the reloaded UTF-8 theme is the active style");
+    RemoveScratch(root);
+}
+// AC-2: damaged or unreadable entries in the resource folders must not abort
+// resource loading; the built-in English catalog and the classic theme stay.
+void Ac2_UnreadableThemeEntry() {
+    using namespace Wheel;
+    const auto root=Scratch("ac2"),resources=root/"Resources",themes=resources/"Themes",languages=resources/"Languages";
+    std::filesystem::create_directories(themes);std::filesystem::create_directories(languages);
+    {std::ofstream file(themes/"plain.ini",std::ios::binary);file<<"Name=Plain\nAccent=FFFFFFFF\n";}
+    std::filesystem::create_directories(themes/"folder.ini"); // A directory cannot be a theme.
+    {std::ofstream file(themes/"empty.ini",std::ios::binary);}
+    {std::ofstream file(themes/"broken.ini",std::ios::binary);file.put(static_cast<char>(0xFF));}
+    {std::ofstream file(languages/"broken.ini",std::ios::binary);file.put(static_cast<char>(0xFF));}
+    const auto busy=themes/"busy.ini";
+    {std::ofstream file(busy,std::ios::binary);file<<"Name=Busy\nAccent=11223344\n";}
+    const HANDLE guard=CreateFileW(busy.c_str(),GENERIC_READ,0,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    Check(guard!=INVALID_HANDLE_VALUE,"AC-2: the fixture locks one theme entry against every reader");
+    const bool loaded=TryLoad(resources.string(),"AC-2: LoadResources must not throw on an unreadable theme entry");
+    CloseHandle(guard);
+    bool classic=false;for(const auto& theme:Themes())if(theme.id=="classic")classic=true;
+    bool english=false;for(const auto& language:Languages())if(language.id=="en")english=true;
+    Settings config;config.language="en";config.theme="classic";
+    Check(loaded,"AC-2: unreadable, empty and unparsable entries are skipped instead of aborting loading");
+    Check(classic && Style(config).style==ThemeStyle::ClassicGold,"AC-2: the built-in classic theme stays usable");
+    Check(english && Tr(config,"apply")=="APPLY","AC-2: the built-in English catalog stays usable");
+    const auto fileRoot=root/"not-a-directory";
+    {std::ofstream file(fileRoot,std::ios::binary);file<<"plain file";}
+    Check(TryLoad(Utf8(fileRoot),"AC-2: a file at the resource root must not throw"),
+        "AC-2: a resource root that is a file still leaves the built-in catalogs");
+    RemoveScratch(root);
+}
+// AC-5: every key of the bundled English catalog except Name/Font needs a built-in
+// English value, and the UI glyph string must preheat the swap-mouse-hands text.
+void Ac5_BuiltinEnglishCoverage() {
+    using namespace Wheel;
+    const auto keys=CatalogKeys();
+    Check(keys.size()>300,"AC-5: the bundled English catalog lists the user-visible keys");
+    const auto root=Scratch("ac5");
+    Settings config;config.language="en";
+    Check(TryLoad(root.string(),"AC-5: an empty resource root falls back to the built-in catalogs"),
+        "AC-5: the built-in catalog loads without any language files");
+    std::size_t checked=0;
+    for(const auto& key:keys) {
+        if(key=="Name" || key=="Font")continue;
+        const auto message=std::string("AC-5: the built-in English table has no value for ")+key;
+        Check(Tr(config,key)!=key,message.c_str());++checked;
+    }
+    Check(checked>=320,"AC-5: every catalog key except Name/Font was checked");
+    const auto swapped=Tr(config,"swapMouseHands");
+    Check(swapped!="swapMouseHands" && UIGlyphs(config).find(swapped)!=std::string::npos,
+        "AC-5: the UI glyph string preheats the swapMouseHands translation");
+    RemoveScratch(root);
+}
+// AC-8: the translation and glyph caches must answer exactly like a fresh
+// LoadResources, for all eight bundled languages, and must follow language and
+// hotkey changes (plan §8).
+void Ac8_TranslationCacheConsistency() {
+    using namespace Wheel;
+    const auto keys=CatalogKeys();
+    Check(keys.size()>300,"AC-8: the bundled English catalog lists the translation keys");
+    Check(TryLoad("assets","AC-8: the bundled resources load"),"AC-8: the bundled resources load");
+    Check(Languages().size()==8,"AC-8: all eight bundled languages are loaded");
+    std::vector<std::string> ids;
+    for(const auto& language:Languages())ids.push_back(language.id);
+    std::vector<std::vector<std::string>> reference(ids.size(),std::vector<std::string>(keys.size()));
+    for(std::size_t language=0;language<ids.size();++language) {
+        Check(TryLoad("assets","AC-8: the bundled resources reload"),"AC-8: the bundled resources reload");
+        Settings config;config.language=ids[language];
+        for(std::size_t key=0;key<keys.size();++key)reference[language][key]=Tr(config,keys[key]);
+    }
+    Check(TryLoad("assets","AC-8: the bundled resources reload"),"AC-8: the bundled resources reload");
+    for(std::size_t key=0;key<keys.size();++key)for(std::size_t language=0;language<ids.size();++language) {
+        Settings config;config.language=ids[language];
+        const auto cached=Tr(config,keys[key]);
+        const auto message=std::string("AC-8: cached Tr differs from a fresh load for ")+ids[language]+"/"+keys[key];
+        Check(cached==reference[language][key],message.c_str());
+    }
+    Settings english;english.language="en";
+    Settings chinese;chinese.language="zh_CN";
+    const auto englishGlyphs=UIGlyphs(english),chineseGlyphs=UIGlyphs(chinese);
+    Check(englishGlyphs!=chineseGlyphs,"AC-8: switching the language changes the UI glyph string");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: switching back restores the original UI glyph string");
+    Settings rebound=english;rebound.switchKey=20;
+    Check(UIGlyphs(rebound)!=englishGlyphs,"AC-8: rebinding the switch key refreshes the UI glyph string");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the switch key restores the UI glyph string");
 }
