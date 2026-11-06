@@ -33,8 +33,9 @@ namespace Wheel {
             {"combatTitle","COMBAT PRESETS"},{"combatTab","COMBAT"},{"combatSave","SAVE HANDS"},{"combatDefault","Combat preset"},
             {"combatManage","MANAGE COMBAT PRESET"},{"combatConfirmOverwrite","Replace this preset with your current hand equipment?"},
             {"combatOverwrite","REPLACE WITH CURRENT HANDS"},
-            {"combatStorageHint","Presets are saved with your game. Empty hand slots are cleared. Spells are equipped, not cast."},
-            {"combatUse","LMB APPLY · RMB MANAGE"},{"combatLeft","Left hand"},{"combatRight","Right hand"},{"combatBoth","Two-handed"},
+            {"combatStorageHint","Presets are saved with your game. Slots can be set, ignored, or unequipped; Voice accepts shouts and powers."},
+            {"combatUse","LMB APPLY · RMB MANAGE"},{"combatLeft","Left hand"},{"combatRight","Right hand"},{"combatVoice","Voice"},{"combatBoth","Two-handed"},
+            {"combatIgnore","Ignore"},{"combatUnequip","Unequip"},{"combatSet","Set"},{"combatSlotUnavailable","Equip an item in this slot before setting it."},
             {"combatEmptyHand","Empty"},{"combatMissing","Item missing"},{"combatChanged","Item changed"},
             {"combatAmbiguous","Ambiguous item instance"},{"combatNotEnough","Not enough matching copies"},
             {"combatSpellMissing","Spell unavailable or not learned"},{"combatUnsupported","Hand equipment cannot be captured/restored."},
@@ -110,7 +111,7 @@ namespace Wheel {
             {"timeSettingsPhysicsHint","Slow time: 50-100% (physics guard). Settings pause; Apply saves."},
             {"inventoryScope","Item source"},{"scopeFavorites","Favorites only"},{"scopeAll","All inventory"},
             {"settingsKeyboard","KEYBOARD"},{"settingsController","CONTROLLER"},
-            {"keepOpen","Keep open after equip"},{"gamepadCategoryButtons","Category buttons"},
+            {"consumableRetentionHelp","Potions and food use a separate switch. Poisons and presets close the wheel; consumption briefly releases pause."},{"keepOpenConsumables","Keep open after potions / food"},{"keepOpen","Keep open after equip"},{"gamepadCategoryButtons","Category buttons"},
             {"gamepadMoveWhileOpen","Left stick movement"},
             {"hideEmptyCategories","Hide empty categories"},
             {"gamepadMoveApplyHint","Stick controls change only after Apply; Cancel keeps the current scheme."},
@@ -213,7 +214,11 @@ namespace Wheel {
             {"outfitPartial","Outfit change was incomplete. Check your equipment and log."},
             {"outfitRemoved","Armor, clothing and jewelry removed. Weapons and shields retained."},
             {"outfitApplied","Outfit equipped."},
-            {"title","F A V O R I T E S"},{"weapons","WEAPONS"},{"armor","APPAREL"},{"potions","POTIONS"},{"poisons","POISONS"},{"food","FOOD"},{"magic","MAGIC"},{"spells","SPELLS"},{"shouts","SHOUTS"},{"powers","POWERS"},{"other","OTHER"},
+            {"frameworkApply","Apply & Save"},
+            {"frameworkDraftHelp","Switching pages keeps your edits. Apply and Cancel affect all pages; Restore Defaults affects this page only."},
+            {"frameworkPending","You have unapplied changes."},
+            {"frameworkHelp","Changes stay in this draft until Apply. Cancel reloads current settings."},{"frameworkCloseWheel","Close the wheel before editing settings here."},{"frameworkSaved","Settings applied and saved."},{"frameworkSaveFailed","Save failed or settings are being edited elsewhere. Cancel to reload; see the log if saving still fails."},{"frameworkConflict","Settings changed elsewhere. Cancel to reload before applying."},
+            {"title","F A V O R I T E S"},{"weapons","WEAPONS"},{"armor","APPAREL"},{"potions","POTIONS"},{"poisons","POISONS"},{"food","FOOD"},{"magic","MAGIC"},{"spells","SPELLS"},{"shouts","SHOUTS"},{"powers","POWERS"},{"other","OTHER"},{"books","BOOKS"},
             {"equipped","EQUIPPED"},{"equippedLeft","EQUIPPED · LEFT HAND"},{"equippedRight","EQUIPPED · RIGHT HAND"},
             {"equippedDual","EQUIPPED · BOTH HANDS"},{"equippedTwoHanded","EQUIPPED · TWO-HANDED"},
             {"select","CLICK TO SELECT"},{"inventory","USE IN INVENTORY"},{"empty","NO FAVORITES"},{"move","MOVE TO SELECT"},{"count","FAVORITES"},
@@ -221,7 +226,7 @@ namespace Wheel {
             {"compactNavigation","A / D CATEGORY  ·  W / S / SCROLL PAGE"},{"compactUse","LMB USE / RIGHT HAND  ·  RMB LEFT HAND"},{"compactClose","ESC CLOSE  ·  F2 SETTINGS"},
             {"wheelSize","Wheel size"},{"positionX","Horizontal position X"},{"positionY","Vertical position Y"},{"overlayOpacity","Background dimming"},{"sounds","Open / close sounds"},{"animations","Open / close animation"},
             {"layoutSettingsHelp","Apply and return to check layout; Esc cancels changes."},{"settings","SETTINGS"},{"settingsTitle","WHEEL SETTINGS"},{"settingsHelp","Changes preview immediately. Apply to save; Esc cancels."},
-            {"scale","Interface size"},{"sensitivity","Mouse sensitivity"},{"dim","Background darkness"},{"hints","Control hints"},{"language","Language"},{"theme","Theme"},{"hotkey","Favorites key"},
+            {"scale","Interface size"},{"sensitivity","Mouse sensitivity"},{"dim","Background darkness"},{"hints","Control hints"},{"actionNotifications","Equipment and cycle notifications"},{"language","Language"},{"theme","Theme"},{"hotkey","Favorites key"},
             {"on","ON"},{"off","OFF"},{"follow","Follow game"},{"capture","Press a key... Esc cancels"},{"bindHint","Click to bind; right-click to follow game"},
             {"apply","APPLY"},{"cancel","CANCEL"},{"defaults","DEFAULTS"},{"saveError","Could not save settings. Check folder access."},
             {"changed","Item changed. Reopen the wheel."},{"unsupported","Use this item in the inventory for now."}
@@ -229,6 +234,7 @@ namespace Wheel {
         std::vector<Language> languages{{"en","English","",english}};
         std::vector<Theme> themes{Theme{}};
         std::string systemLanguage="en";
+        std::string resourceLoadDiagnostic;
         struct LanguageCache {std::string requested,active;};
         struct GlyphCache {std::string active;int hotkey,switchKey,actionHotkey;std::string text;};
         std::mutex cacheMutex; // Leaf lock: only exchange immutable snapshots while held.
@@ -304,8 +310,7 @@ namespace Wheel {
         }
         std::vector<std::filesystem::path> Files(const std::filesystem::path& dir) {
             std::vector<std::filesystem::path> result; std::error_code error;
-            for (std::filesystem::directory_iterator it(dir,error),end; !error && it!=end; it.increment(error))
-                {
+            for (std::filesystem::directory_iterator it(dir,error),end; !error && it!=end; it.increment(error)) {
                 std::error_code statusError;
                 if (it->is_regular_file(statusError) && !statusError && it->path().extension()==".ini") result.push_back(it->path());
             }
@@ -330,88 +335,97 @@ namespace Wheel {
         }
     }
     void LoadResources(const std::string& root) {
+        resourceLoadDiagnostic.clear();
         try {
-        std::shared_ptr<const LanguageCache> oldLanguage;
-        std::shared_ptr<const GlyphCache> oldGlyphs;
-        {
-            std::lock_guard lock(cacheMutex);
-            oldLanguage=std::move(languageCache);oldGlyphs=std::move(glyphCache);
-        }
-        languages={{"en","English","",english}}; themes={Theme{}};
-        auto loadedLanguages=languages;auto loadedThemes=themes;
-        systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
-        wchar_t windows[MAX_PATH]{};const auto length=GetWindowsDirectoryW(windows,MAX_PATH);
-        windowsFonts=length && length<MAX_PATH?std::filesystem::path(windows)/L"Fonts":std::filesystem::path{};
-        fallbackFonts.clear();
-        for(const auto name:{"segoeui.ttf","msyh.ttc","malgun.ttf","YuGothM.ttc","meiryo.ttc","msgothic.ttc","gulim.ttc","msjh.ttc"})
-            if(auto path=InstalledFont(name);!path.empty())fallbackFonts.push_back(std::move(path));
-        for (const auto& path:Files(std::filesystem::u8path(root)/"Languages")) {
-            auto values=Read(path); const auto stem=path.stem().u8string();
-            const std::string id(stem.begin(),stem.end());const auto code=NormalizeLanguage(id);
-            if(code.empty() || code=="auto" || values.empty())continue;
-            const auto name=values.contains("Name")&&!values["Name"].empty()?values["Name"]:id;
-            Language entry{id,name,values["Font"],std::move(values)};
-            if(entry.font=="auto")entry.font=AutomaticFont(code);
-            if(code=="en") {entry.id="en";loadedLanguages[0]=std::move(entry);}
-            else if(std::none_of(loadedLanguages.begin(),loadedLanguages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
-                loadedLanguages.push_back(std::move(entry));
-        }
-        for (const auto& path:Files(std::filesystem::u8path(root)/"Themes")) {
-            auto values=Read(path); Theme entry;
-            const auto stem=path.stem().u8string();entry.id.assign(stem.begin(),stem.end()); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
-            auto style=Trim(values["Style"]);
-            std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
-            entry.style=style=="skyrim"?ThemeStyle::Skyrim:style=="classic"?ThemeStyle::ClassicGold:ThemeStyle::Etched;
-            auto frame=Trim(values["FrameStyle"]);
-            std::transform(frame.begin(),frame.end(),frame.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
-            entry.frameStyle=frame=="nordic"?FrameStyle::Nordic:FrameStyle::Plain;
-            const auto token=[&](const char* key) {
-                auto value=Trim(values[key]);
-                std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
-                return value;
-            };
-            const auto shape=token("WheelShape");
-            entry.layout.shape=shape=="ellipse"?WheelShape::Ellipse:shape=="polygon"?WheelShape::Polygon:WheelShape::Circle;
-            entry.layout.stretchX=Number(values,"WheelStretchX",entry.layout.stretchX,.9f,1.25f);
-            entry.layout.stretchY=Number(values,"WheelStretchY",entry.layout.stretchY,.9f,1.2f);
-            const auto detail=token("DetailPosition");
-            entry.layout.detailPosition=detail=="left"?DetailPosition::Left:detail=="right"?DetailPosition::Right:
-                detail=="top"?DetailPosition::Top:detail=="bottom"?DetailPosition::Bottom:
-                detail=="center"?DetailPosition::Center:DetailPosition::Auto;
-            entry.layout.detailGap=Number(values,"DetailGap",entry.layout.detailGap,16.f,80.f);
-            // Resource paths belong to the theme package, not arbitrary absolute files.
-            const auto texture=std::filesystem::u8path(values["SurfaceTexture"]);
-            const bool traversal=std::any_of(texture.begin(),texture.end(),[](const auto& part){return part=="..";});
-            if(!texture.empty() && !texture.has_root_path() && !traversal &&
-                values["SurfaceTexture"].find(':')==std::string::npos && texture.extension()==".png") {
-                const auto resolved=(path.parent_path()/texture).lexically_normal().generic_u8string();
-                entry.surfaceTexture.assign(resolved.begin(),resolved.end());
+            std::shared_ptr<const LanguageCache> oldLanguage;
+            std::shared_ptr<const GlyphCache> oldGlyphs;
+            {
+                std::lock_guard lock(cacheMutex);
+                oldLanguage=std::move(languageCache);oldGlyphs=std::move(glyphCache);
             }
-            entry.materialStrength=Number(values,"MaterialStrength",entry.materialStrength,0.f,1.f);
-            entry.materialZoom=Number(values,"MaterialZoom",entry.materialZoom,1.f,4.f);
-            for (auto [key,field]:{std::pair{"Accent",&entry.accent},{"Text",&entry.text},{"Muted",&entry.muted},
-                {"Sector",&entry.sector},{"Empty",&entry.empty},{"Hover",&entry.hover},{"Panel",&entry.panel},{"Background",&entry.background},{"Border",&entry.border}})
-                if (values.contains(key)) *field=Color(values[key],*field);
-            entry.borderWidth=Number(values,"BorderWidth",entry.borderWidth,.5f,2.f);
-            entry.cornerRadius=Number(values,"CornerRadius",entry.cornerRadius,0.f,16.f);
-            entry.ornament=Number(values,"Ornament",entry.ornament,0.f,1.f);
-            entry.relief=Number(values,"Relief",entry.relief,0.f,1.f);
-            entry.textShadow=Number(values,"TextShadow",entry.textShadow,0.f,1.f);
-            entry.iconScale=Number(values,"IconScale",entry.iconScale,.8f,1.15f);
-            entry.titleScale=Number(values,"TitleScale",entry.titleScale,.85f,1.15f);
-            entry.labelScale=Number(values,"LabelScale",entry.labelScale,.9f,1.1f);
-            entry.hoverDuration=Number(values,"HoverDuration",entry.hoverDuration,0.f,.25f);
-            entry.pageDuration=Number(values,"PageDuration",entry.pageDuration,0.f,.25f);
-            if (entry.id=="classic") loadedThemes[0]=entry; else loadedThemes.push_back(entry);
-        }
-        languages.swap(loadedLanguages);themes.swap(loadedThemes);
+            languages={{"en","English","",english}}; themes={Theme{}};
+            auto loadedLanguages=languages;auto loadedThemes=themes;
+            systemLanguage=DetectSystemLanguage(); // Once at startup; rendering never queries Windows language settings.
+            wchar_t windows[MAX_PATH]{};const auto length=GetWindowsDirectoryW(windows,MAX_PATH);
+            windowsFonts=length && length<MAX_PATH?std::filesystem::path(windows)/L"Fonts":std::filesystem::path{};
+            fallbackFonts.clear();
+            for(const auto name:{"segoeui.ttf","msyh.ttc","malgun.ttf","YuGothM.ttc","meiryo.ttc","msgothic.ttc","gulim.ttc","msjh.ttc"})
+                if(auto path=InstalledFont(name);!path.empty())fallbackFonts.push_back(std::move(path));
+            for (const auto& path:Files(std::filesystem::u8path(root)/"Languages")) {
+                auto values=Read(path); const auto stem=path.stem().u8string();
+                const std::string id(stem.begin(),stem.end());const auto code=NormalizeLanguage(id);
+                if(code.empty() || code=="auto" || values.empty())continue;
+                const auto name=values.contains("Name")&&!values["Name"].empty()?values["Name"]:id;
+                Language entry{id,name,values["Font"],std::move(values)};
+                if(entry.font=="auto")entry.font=AutomaticFont(code);
+                if(code=="en") {entry.id="en";loadedLanguages[0]=std::move(entry);}
+                else if(std::none_of(loadedLanguages.begin(),loadedLanguages.end(),[&](const auto& language){return NormalizeLanguage(language.id)==code;}))
+                    loadedLanguages.push_back(std::move(entry));
+            }
+            for (const auto& path:Files(std::filesystem::u8path(root)/"Themes")) {
+                auto values=Read(path); Theme entry;
+                const auto stem=path.stem().u8string();entry.id.assign(stem.begin(),stem.end()); entry.name=values.contains("Name")?values["Name"]:entry.id; entry.font=values["Font"];
+                const auto pack=values["IconPack"];
+                if(!pack.empty() && pack.size()<=64 && pack.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")==std::string::npos) {
+                    const auto manifest=(std::filesystem::u8path(root)/"IconPacks"/pack/"icons.ini").generic_u8string();
+                    entry.iconPack.assign(manifest.begin(),manifest.end());
+                }
+                auto style=Trim(values["Style"]);
+                std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+                entry.style=style=="skyrim"?ThemeStyle::Skyrim:style=="classic"?ThemeStyle::ClassicGold:ThemeStyle::Etched;
+                auto frame=Trim(values["FrameStyle"]);
+                std::transform(frame.begin(),frame.end(),frame.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+                entry.frameStyle=frame=="nordic"?FrameStyle::Nordic:FrameStyle::Plain;
+                const auto token=[&](const char* key) {
+                    auto value=Trim(values[key]);
+                    std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+                    return value;
+                };
+                const auto shape=token("WheelShape");
+                entry.layout.shape=shape=="ellipse"?WheelShape::Ellipse:shape=="polygon"?WheelShape::Polygon:WheelShape::Circle;
+                entry.layout.stretchX=Number(values,"WheelStretchX",entry.layout.stretchX,.9f,1.25f);
+                entry.layout.stretchY=Number(values,"WheelStretchY",entry.layout.stretchY,.9f,1.2f);
+                const auto detail=token("DetailPosition");
+                entry.layout.detailPosition=detail=="left"?DetailPosition::Left:detail=="right"?DetailPosition::Right:
+                    detail=="top"?DetailPosition::Top:detail=="bottom"?DetailPosition::Bottom:
+                    detail=="center"?DetailPosition::Center:DetailPosition::Auto;
+                entry.layout.detailGap=Number(values,"DetailGap",entry.layout.detailGap,16.f,80.f);
+                // Resource paths belong to the theme package, not arbitrary absolute files.
+                const auto texture=std::filesystem::u8path(values["SurfaceTexture"]);
+                const bool traversal=std::any_of(texture.begin(),texture.end(),[](const auto& part){return part=="..";});
+                if(!texture.empty() && !texture.has_root_path() && !traversal &&
+                    values["SurfaceTexture"].find(':')==std::string::npos && texture.extension()==".png") {
+                    const auto resolved=(path.parent_path()/texture).lexically_normal().generic_u8string();
+                    entry.surfaceTexture.assign(resolved.begin(),resolved.end());
+                }
+                entry.materialStrength=Number(values,"MaterialStrength",entry.materialStrength,0.f,1.f);
+                entry.materialZoom=Number(values,"MaterialZoom",entry.materialZoom,1.f,4.f);
+                for (auto [key,field]:{std::pair{"Accent",&entry.accent},{"Text",&entry.text},{"Muted",&entry.muted},
+                    {"Sector",&entry.sector},{"Empty",&entry.empty},{"Hover",&entry.hover},{"Panel",&entry.panel},{"Background",&entry.background},{"Border",&entry.border}})
+                    if (values.contains(key)) *field=Color(values[key],*field);
+                entry.borderWidth=Number(values,"BorderWidth",entry.borderWidth,.5f,2.f);
+                entry.cornerRadius=Number(values,"CornerRadius",entry.cornerRadius,0.f,16.f);
+                entry.ornament=Number(values,"Ornament",entry.ornament,0.f,1.f);
+                entry.relief=Number(values,"Relief",entry.relief,0.f,1.f);
+                entry.textShadow=Number(values,"TextShadow",entry.textShadow,0.f,1.f);
+                entry.iconScale=Number(values,"IconScale",entry.iconScale,.8f,1.15f);
+                entry.titleScale=Number(values,"TitleScale",entry.titleScale,.85f,1.15f);
+                entry.labelScale=Number(values,"LabelScale",entry.labelScale,.9f,1.1f);
+                entry.hoverDuration=Number(values,"HoverDuration",entry.hoverDuration,0.f,.25f);
+                entry.pageDuration=Number(values,"PageDuration",entry.pageDuration,0.f,.25f);
+                if (entry.id=="classic") loadedThemes[0]=entry; else loadedThemes.push_back(entry);
+            }
+            languages.swap(loadedLanguages);themes.swap(loadedThemes);
         } catch(const std::exception& error) {
+            resourceLoadDiagnostic=error.what();
             OutputDebugStringA("FavoriteWheel: LoadResources failed; keeping built-in resources: ");
             OutputDebugStringA(error.what());OutputDebugStringA("\n");
         } catch(...) {
+            resourceLoadDiagnostic="unknown exception";
             OutputDebugStringA("FavoriteWheel: LoadResources failed; keeping built-in resources (unknown exception).\n");
         }
     }
+    const std::string& ResourceLoadDiagnostic(){return resourceLoadDiagnostic;}
     const std::vector<Language>& Languages(){return languages;}
     const std::string& SystemLanguage(){return systemLanguage;}
     std::string ResolveLanguage(const std::string& requested,const std::string& systemLocale) {
@@ -456,7 +470,8 @@ namespace Wheel {
         if(translated!=languages[0].text.end()&&!translated->second.empty())return translated->second;
         const auto it=english.find(key); return it!=english.end()?it->second:key;
     }
-    std::string UIGlyphs(const Settings& config) {
+    std::string UIGlyphs(const Settings& config) {return *UIGlyphSnapshot(config);}
+    std::shared_ptr<const std::string> UIGlyphSnapshot(const Settings& config) {
         const auto active=ActiveLanguage(config);
         std::shared_ptr<const GlyphCache> cached;
         {
@@ -464,7 +479,7 @@ namespace Wheel {
             cached=glyphCache;
         }
         if(cached && cached->active==active && cached->hotkey==config.hotkey &&
-            cached->switchKey==config.switchKey && cached->actionHotkey==config.actionHotkey)return cached->text;
+            cached->switchKey==config.switchKey && cached->actionHotkey==config.actionHotkey)return {cached,&cached->text};
         std::string text;
         for(const auto& [key,value]:english) text+=Tr(config,key);
         for(const auto& language:languages) text+=language.name;
@@ -476,7 +491,7 @@ namespace Wheel {
             std::lock_guard lock(cacheMutex);
             cached=std::move(glyphCache);glyphCache=updated;
         }
-        return updated->text;
+        return {updated,&updated->text};
     }
     std::string KeyLabel(const Settings& config) {
         if(config.hotkey<0)return Tr(config,"follow");

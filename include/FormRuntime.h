@@ -9,7 +9,9 @@ namespace Wheel {
         auto menus=RE::MenuControls::GetSingleton();
         auto defaults=RE::BGSDefaultObjectManager::GetSingleton();
         auto race=defaults?defaults->GetObject<RE::TESRace>(RE::DEFAULT_OBJECT::kVampireRace):nullptr;
-        return ClassifyFormMode(menus && menus->InBeastForm(),player && race && player->GetRace()==race);
+        auto werewolf=defaults?defaults->GetObject<RE::TESRace>(RE::DEFAULT_OBJECT::kWerewolfRace):nullptr;
+        return ClassifyFormMode(menus && menus->InBeastForm(),player && race && player->GetRace()==race,
+            player && werewolf && player->GetRace()==werewolf);
     }
     inline RE::BGSListForm* VampireSpellList() {
         auto defaults=RE::BGSDefaultObjectManager::GetSingleton();
@@ -24,7 +26,18 @@ namespace Wheel {
     }
     inline bool CurrentActionAllowed(const Item& item) {
         const auto mode=CurrentFormMode();
+        if(mode==FormMode::Werewolf) {
+            switch(item.action) {
+            case ActionKind::Combat:case ActionKind::SaveCombat:case ActionKind::Cycle:
+            case ActionKind::CycleMember:case ActionKind::CycleCapture:case ActionKind::FunctionBack:return true;
+            default:break;
+            }
+        }
         return FormActionAllowed(mode,item.action==ActionKind::Favorite,
-            mode==FormMode::VampireLord && item.magic && AllowedVampireSpell(RE::TESForm::LookupByID(item.key.form)));
+            (mode==FormMode::VampireLord || mode==FormMode::Werewolf) && item.magic &&
+                (mode==FormMode::VampireLord?AllowedVampireSpell(RE::TESForm::LookupByID(item.key.form)):
+                    [&] {auto form=RE::TESForm::LookupByID(item.key.form);auto spell=form?form->As<RE::SpellItem>():nullptr;
+                        return form && (form->As<RE::TESShout>() || (spell && MagicCategory(false,spell->GetSpellType())==Category::Powers)); }()),
+            item.magic && (item.category==Category::Powers || item.category==Category::Shouts));
     }
 }

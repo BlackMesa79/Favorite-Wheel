@@ -69,6 +69,8 @@ int main(int argc, char** argv) {
     ComPtr<ID3D11DeviceContext> context;
     D3D_FEATURE_LEVEL level;
     Check(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
+    const auto icons=Wheel::IconLibrary::Initialize(device.Get(),context.Get(),Wheel::Themes());
+    for(const auto& warning:icons.warnings)std::cout<<warning<<'\n';
     const auto materials=Wheel::SkinTextures::Initialize(device.Get(),context.Get(),Wheel::Themes());
     std::cout<<"Skin materials: textures="<<materials.textures<<", texels="<<materials.texels<<'\n';
     for(const auto& warning:materials.warnings)std::cout<<warning<<'\n';
@@ -540,6 +542,19 @@ int main(int argc, char** argv) {
             d->AddText(font,labelSize,{at.x-size.x/2,at.y+52*sheetScale},IM_COL32(173,180,187,255),labels[i]);
         }
     }
+    if(argc>4 && std::string(argv[4])=="schools") {
+        auto d=ImGui::GetForegroundDrawList();
+        d->AddRectFilled({width*.05f,height*.08f},{width*.95f,height*.92f},IM_COL32(18,23,29,255));
+        const char* labels[]={"Alteration","Conjuration","Destruction","Illusion","Restoration","Shout","Power","Book","Other","Healing override"};
+        const auto& theme=Wheel::Style(config);
+        for(int i=0;i<10;++i) {
+            Wheel::Item item;item.icon=i==8?Wheel::IconKind::Other:static_cast<Wheel::IconKind>(static_cast<int>(Wheel::IconKind::Alteration)+i);
+            if(i==9){item.icon=Wheel::IconKind::Restoration;item.iconForm=Wheel::IconLibrary::FormKey("Skyrim.esm",0x12FCC);}
+            const ImVec2 at{width*(.14f+.18f*(i%5)),height*(.32f+.36f*(i/5))};
+            Wheel::DrawIcon(d,at,item,1.5f,theme.accent,&theme);
+            d->AddText({at.x-42,at.y+45},theme.text,labels[i]);
+        }
+    }
     ImGui::Render();
     const auto drawData=ImGui::GetDrawData();
     int drawCalls=0;
@@ -561,7 +576,7 @@ int main(int argc, char** argv) {
         const int dim=static_cast<int>((config.overlayOpacity*255/100)*opacity);
         require(std::abs(int(pixel[channel])-int(std::round(scene[channel]*(1.f-dim/255.f))))<=1);
     }
-    if(expansion==1 && !Wheel::preview.settingsOpen && !Wheel::preview.outfitDialog) {
+    if(expansion==1 && !Wheel::preview.settingsOpen && !Wheel::preview.outfitDialog && !(argc>4 && std::string(argv[4])=="schools")) {
         const auto centre=Wheel::ViewCentre(float(width),float(height),Wheel::preview);
         const auto& skin=Wheel::Style(config).layout;
         // Avoid the large central title's snapped one-pixel shadow at tiny scales.
@@ -600,7 +615,7 @@ int main(int argc, char** argv) {
         out.write(reinterpret_cast<char*>(row.data()),row.size());
     }
     context->Unmap(staging.Get(),0);
-    Wheel::SkinTextures::Reset();ImGui_ImplDX11_Shutdown(); ImGui::DestroyContext();
+    Wheel::IconLibrary::Reset();Wheel::SkinTextures::Reset();ImGui_ImplDX11_Shutdown(); ImGui::DestroyContext();
     if (!out) return 4;
     std::cout << "Rendered actual wheel UI at " << width << "x" << height << '\n';
 }

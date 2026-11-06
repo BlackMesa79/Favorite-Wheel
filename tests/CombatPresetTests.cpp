@@ -28,10 +28,15 @@ int main() {
     Piece spell{{"Skyrim.esm",0x5678},{},{},0,1.f,"","Flames"};
     Preset magic{4,"Dual flames",{Kind::Spell,spell},{Kind::Spell,spell}};
     Preset both{5,"Bow",{Kind::Object,sword},{},true};
-    const std::vector<Preset> all{pair,empty,magic,both};std::vector<Preset> decoded;
+    Piece shout{{"Skyrim.esm",0x6789},{},{},0,1.f,"","Unrelenting Force"};
+    Preset voice{6,"Shout"};voice.voice={Kind::Voice,shout};
+    Preset preserve{7,"Preserve hands"};preserve.right.kind=Kind::Ignore;preserve.left.kind=Kind::Ignore;preserve.voice=voice.voice;
+    const std::vector<Preset> all{pair,empty,magic,both,voice,preserve};std::vector<Preset> decoded;
     Check(Decode(Encode(all),decoded) && decoded==all,"Character records round trip empty, mixed, dual-spell and two-handed targets with Unicode names");
     auto invalid=both;invalid.left={Kind::Spell,spell};
     Check(!Valid(invalid),"Two-handed presets cannot contain an independent left-hand target");
+    invalid=both;invalid.left.kind=Kind::Ignore;
+    Check(Valid(invalid),"A two-handed target may mark the displaced left slot as ignored");
     invalid=empty;invalid.right.piece=sword;
     Check(!Valid(invalid),"Empty targets cannot hide an item reference");
     Check(!Decode(Encode({empty,empty}),decoded) && decoded==all,"Invalid duplicate IDs preserve the previous result");
@@ -49,6 +54,10 @@ int main() {
         "Restoring an already equipped spell does not clear or toggle it");
     Check(StepComplete(pair,Step::ClearLeft,magic.left),"A nonempty replacement uses native equip to replace the old spell");
     Check(StepComplete(both,Step::EquipLeft,magic.left),"A two-handed target uses one equip operation, not an empty-left cleanup after equip");
+    Check(StepComplete(preserve,Step::ClearRight,{Kind::Object,sword}) &&
+        StepComplete(preserve,Step::EquipLeft,{Kind::Spell,spell}),"Ignored hands accept any observed state without changing the target");
+    Check(StepComplete(voice,Step::EquipVoice,voice.voice) && !StepComplete(voice,Step::ClearVoice,voice.voice) &&
+        StepComplete(empty,Step::ClearVoice,{}),"Voice targets equip, clear and verify independently from hand slots");
     auto damaged=pair.right;damaged.piece.health+=.1f;
     Check(!SameTarget(pair.right,damaged),"Observed completion must match the exact target weapon signature");
     auto bindings=all;int assigned=-1;
@@ -59,12 +68,12 @@ int main() {
     Check(AssignQuickSlot(bindings,magic.id,7) && !PresetForQuickSlot(bindings,0) && PresetForQuickSlot(bindings,7)==magic.id,
         "Moving a preset to slot 8 releases its old slot");
     std::vector<SlotBinding> savedBindings;
-    Check(Decode(Encode(bindings),decoded,1) && decoded==all && DecodeBindings(EncodeBindings(bindings),savedBindings),
-        "Equipment retains the original FWC1 format; shortcuts have a separate record");
+    Check(Decode(Encode(bindings),decoded,2) && decoded==all && DecodeBindings(EncodeBindings(bindings),savedBindings),
+        "Equipment uses FWC2 for slot states; shortcuts have a separate record");
     ApplyBindings(decoded,savedBindings);
     Check(decoded==bindings,"Independent shortcut and equipment records restore the complete preset");
     auto beforeEquipment=std::vector<Preset>{};ApplyBindings(beforeEquipment,savedBindings);
-    Check(Decode(Encode(all),beforeEquipment,1),"Bindings can load before equipment");ApplyBindings(beforeEquipment,savedBindings);
+    Check(Decode(Encode(all),beforeEquipment,2),"Bindings can load before equipment");ApplyBindings(beforeEquipment,savedBindings);
     Check(beforeEquipment==bindings,"Record load order does not change restored shortcuts");
     const auto unchanged=bindings;
     Check(!AssignQuickSlot(bindings,999,1) && !AssignQuickSlot(bindings,pair.id,8) && bindings==unchanged,
@@ -73,8 +82,8 @@ int main() {
         "Pressing the same slot again unbinds without affecting another slot");
     // A genuine legacy FWC1 fixture must load without interpreting item tokens as bindings.
     const std::string legacy="FWC 1 1\n3 \"Unarmed\" 0\n0 \"\" 0 \"\" 0 \"\" 0 0 1 \"\" \"\"\n0 \"\" 0 \"\" 0 \"\" 0 0 1 \"\" \"\"\n";
-    Check(Decode(legacy,decoded,1) && decoded==std::vector<Preset>{empty} && decoded[0].quickSlot==-1,
-        "Old 0.6.2 combat records load with no default hotkeys");
+    Check(Decode(legacy,decoded,1) && decoded==std::vector<Preset>{Preset{3,"Unarmed"}} && decoded[0].quickSlot==-1,
+        "Legacy two-hand-slot records migrate with an empty Voice slot");
     auto bad=empty;bad.quickSlot=8;
     Check(!Valid(bad) && !DecodeBindings("FWQ 1 1\n3 8\n",savedBindings),"Corrupt slot values are rejected");
     auto collision=all;collision[0].quickSlot=0;collision[1].quickSlot=0;

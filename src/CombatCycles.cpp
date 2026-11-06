@@ -11,7 +11,7 @@ namespace Wheel::Cycles {
         Groups groups=Defaults();
         std::uint64_t generation=1;
         Group* Find(std::uint32_t id){return id>=1 && id<=groupCount?&groups[id-1]:nullptr;}
-        void Tell(const char* key){RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),key).c_str());}
+        void Tell(const char* key){if(Config().showActionNotifications)RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),key).c_str());}
         std::string Name(const Group& g){return g.name.empty()?Tr(Config(),"cycleDefault")+" "+std::to_string(g.id):g.name;}
         std::string Chord(const Group& g) {
             if(g.key<0)return Tr(Config(),"modifierNone");
@@ -75,7 +75,7 @@ namespace Wheel::Cycles {
         const auto result=Append(*g,preset);
         if(result==AppendResult::Duplicate){Tell("cycleDuplicate");return true;}
         if(result!=AppendResult::Added){Tell("cycleFull");return false;}
-        RE::SendHUDMessage::ShowHUDMessage((Tr(Config(),"cycleAdded")+": "+Name(*g)+" ("+std::to_string(g->members.size())+")").c_str());
+        if(Config().showActionNotifications)RE::SendHUDMessage::ShowHUDMessage((Tr(Config(),"cycleAdded")+": "+Name(*g)+" ("+std::to_string(g->members.size())+")").c_str());
         SKSE::log::info("Cycle appended: group={} preset={} members={}",id,preset,g->members.size());return true;
     }
     bool Rename(std::uint32_t id,const std::string& name) {
@@ -112,7 +112,7 @@ namespace Wheel::Cycles {
         Combat::Apply(next,[id,next,stamp](bool success) {
             std::lock_guard lock(mutex);auto g=Find(id);
             if(stamp!=generation || !g || !Commit(*g,next,success))return;
-            RE::SendHUDMessage::ShowHUDMessage((Name(*g)+": "+Position(*g)).c_str());
+            if(Config().showActionNotifications)RE::SendHUDMessage::ShowHUDMessage((Name(*g)+": "+Position(*g)).c_str());
             SKSE::log::info("Cycle committed: group={} preset={} position={}",id,next,Position(*g));
         });
     }

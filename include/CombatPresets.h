@@ -3,6 +3,7 @@
 #include <functional>
 namespace SKSE {class SerializationInterface;}
 namespace Wheel::Combat {
+    enum class Slot;
     constexpr std::uint32_t record=0x46574350;
     constexpr std::uint32_t bindingRecord=0x4657434b;
     std::vector<Item> Entries();
@@ -12,6 +13,8 @@ namespace Wheel::Combat {
     bool Exists(std::uint32_t id);
     std::uint32_t FirstAvailable(const std::vector<std::uint32_t>& ids);
     bool Rename(std::uint32_t id,const std::string& name);
+    bool CycleSlot(std::uint32_t id,Slot slot);
+    std::string SlotLabel(std::uint32_t id,Slot slot);
     bool Remove(std::uint32_t id);
     bool BindQuickSlot(std::uint32_t id,int slot,int* assignment=nullptr);
     void ClearQuickSlot(int slot,std::uint32_t expectedId=0);

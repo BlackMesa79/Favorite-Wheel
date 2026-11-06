@@ -124,11 +124,18 @@ inline std::uint16_t ControllerModifierMask(std::uint32_t raw) {
   std::uint16_t result=static_cast<std::uint16_t>(raw & 0x3FFu);
   return static_cast<std::uint16_t>(result | ((raw & 0xF000u)>>2));
 }
+inline bool ForeignGamepadChord(std::uint16_t held,int mainKey,std::uint16_t nativeRequired,
+    bool followNative,int favoriteModifier,int actionModifier) {
+  const auto allowed=ControllerKeyBit(mainKey) | (followNative?nativeRequired:0) |
+      ControllerKeyBit(favoriteModifier) | ControllerKeyBit(actionModifier);
+  return (held & ~allowed)!=0;
+}
 inline Opening ResolvedGamepadOpening(std::uint32_t code,int mainKey,
     std::uint16_t held,std::uint16_t nativeRequired,bool followNative,
     int favoriteModifier,int actionModifier) {
   if(mainKey<266 || mainKey>281 || code!=static_cast<std::uint32_t>(mainKey))return Opening::None;
   const auto mainBit=ControllerKeyBit(mainKey);
+  if(ForeignGamepadChord(held,mainKey,nativeRequired,followNative,favoriteModifier,actionModifier))return Opening::None;
   const auto base=followNative?nativeRequired:std::uint16_t{0};
   if((base & mainBit) || (held & base)!=base)return Opening::None;
   const auto favoriteRequired=favoriteModifier<0?base:ControllerKeyBit(favoriteModifier);

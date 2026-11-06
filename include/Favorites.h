@@ -16,7 +16,7 @@ namespace Wheel {
         bool operator==(const ItemKey&) const = default;
     };
     enum class ActionKind { Favorite, Outfit, SaveOutfit, ImportOutfits, FaceLightMenu, FaceLightFollowers, FunctionBack, FaceLightCommand, Combat, SaveCombat, Cycle, CycleMember, CycleCapture };
-    enum class IconKind { Auto, Sword, Dagger, Axe, Mace, Bow, Crossbow, Staff, Arrow, Armor, Robe, Helmet, Gloves, Boots, Ring, Amulet, Shield, Potion, Food, Magic, Scroll, Torch, Other, LightPlayer, LightTarget, LightGroup, Back, Poison };
+    enum class IconKind { Auto, Sword, Dagger, Axe, Mace, Bow, Crossbow, Staff, Arrow, Armor, Robe, Helmet, Gloves, Boots, Ring, Amulet, Shield, Potion, Food, Magic, Scroll, Torch, Other, LightPlayer, LightTarget, LightGroup, Back, Poison, Alteration, Conjuration, Destruction, Illusion, Restoration, Shout, Power, Book };
     struct Item {
         ItemKey key;
         Category category = Category::Other;
@@ -43,6 +43,9 @@ namespace Wheel {
         std::string centreNote; // Selected-item centre only; never added to sector labels.
         std::optional<float> sortNumber; // Active numeric sort only; refreshed with the directory.
         int sortType=999,sortSlot=999; // Lightweight game-thread classification; not persisted identity.
+        bool scriptedInstrument=false; // Native use request after closing; no synthetic script events.
+        bool book=false; // Reading opens native UI; never retain the wheel.
+        std::string iconForm; // Stable plugin|local FormID snapshot for icon mappings.
         bool miscDisplayStack=false; // Display-only aggregate; native bindings remain per instance.
     };
     inline void SetQuickSlotSnapshot(Item& item,int slot) {

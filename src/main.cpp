@@ -3,11 +3,12 @@
 #include "Outfits.h"
 #include "Settings.h"
 #include "UIResources.h"
+#include "FrameworkSettings.h"
 namespace {
     void OnMessage(SKSE::MessagingInterface::Message* message) {
         if (!message) return;
         switch (message->type) {
-        case SKSE::MessagingInterface::kPostPostLoad: Wheel::FaceLight::Discover(); break;
+        case SKSE::MessagingInterface::kPostPostLoad: Wheel::FaceLight::Discover(); Wheel::FrameworkSettings::Register(); break;
         case SKSE::MessagingInterface::kDataLoaded:
             if (Wheel::Config().enabled) {
                 if (!Wheel::InstallRenderer() || !Wheel::InstallWheel())
@@ -27,6 +28,8 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     Wheel::LoadSettings();
     SKSE::log::info("Settings load: {}",Wheel::SettingsDiagnostic());
     Wheel::LoadResources();
+    if(!Wheel::ResourceLoadDiagnostic().empty())
+        SKSE::log::warn("UI resource loading failed; keeping built-in resources: {}",Wheel::ResourceLoadDiagnostic());
     const auto config=Wheel::Config();
     SKSE::log::info("UI resources: {} languages, {} themes; language={} system={} resolved={} theme={}",
         Wheel::Languages().size(),Wheel::Themes().size(),config.language,Wheel::SystemLanguage(),Wheel::ActiveLanguage(config),config.theme);

@@ -149,6 +149,7 @@ namespace Wheel {
             auto ui = RE::UI::GetSingleton();
             auto controls = RE::ControlMap::GetSingleton();
             if (!Config().enabled) return "disabled";
+            if(auto camera=RE::PlayerCamera::GetSingleton();camera && camera->IsInFreeCameraMode())return "free camera";
             if (!RendererReady()) return "renderer not ready";
             if (closing) return "wheel still closing";
             if(Outfits::Busy() || Combat::Busy())return "preset changing";
@@ -179,8 +180,27 @@ namespace Wheel {
                 queue->AddMessage(pauseMenuName,pause?RE::UI_MESSAGE_TYPE::kShow:RE::UI_MESSAGE_TYPE::kHide,nullptr);
             }
         }
+        bool textInputClaimed=false; // lifecycleMutex; balance only our own claim.
+        void ReleaseTextInput() {
+            if(textInputClaimed) {
+                textInputClaimed=false;
+                if(auto controls=RE::ControlMap::GetSingleton())controls->AllowTextInput(false);
+            }
+            SimpleIME::End();
+        }
+        void SyncTextInput() {
+            const auto current=Snapshot();
+            const bool naming=current.open && (current.outfitDialog==1 || current.outfitDialog==2);
+            if(!naming){ReleaseTextInput();return;}
+            // Let the click/Enter that opened either naming dialog finish before IME focus changes.
+            if((GetAsyncKeyState(VK_LBUTTON)|GetAsyncKeyState(VK_RBUTTON)|GetAsyncKeyState(VK_MBUTTON)|GetAsyncKeyState(VK_RETURN))&0x8000)return;
+            if(!textInputClaimed && SimpleIME::Available())if(auto controls=RE::ControlMap::GetSingleton()) {
+                SimpleIME::Begin();textInputClaimed=true;controls->AllowTextInput(true);
+            }
+        }
         void SyncWheelTime() {
             std::lock_guard lifecycle(lifecycleMutex);
+            SyncTextInput();
             bool open,settings;int dialog;
             {std::lock_guard lock(viewMutex);open=view.open;settings=view.settingsOpen;dialog=view.outfitDialog;}
             if(!open){TimeControl::EndSession();RequestPause(false);return;}
@@ -413,10 +433,12 @@ namespace Wheel {
             }
         }
         void RefreshFunctions() {
-            if(CurrentFormMode()!=FormMode::Human)return;
+            const auto mode=CurrentFormMode();if(mode!=FormMode::Human && mode!=FormMode::Werewolf)return;
             const auto current=Snapshot();const auto section=current.functionSection;
+            if(mode==FormMode::Werewolf && section!=FaceLight::Section::Combat && section!=FaceLight::Section::Cycles && section!=FaceLight::Section::CycleMembers)return;
             auto entries=section==FaceLight::Section::Outfits?Outfits::Entries():section==FaceLight::Section::Combat?Combat::Entries():
                 section==FaceLight::Section::Cycles || section==FaceLight::Section::CycleMembers?Cycles::Entries(section==FaceLight::Section::CycleMembers?current.cycleGroup:0):FaceLight::Entries(section);
+            if(mode==FormMode::Werewolf)std::erase_if(entries,[](const Item& item){return item.action!=ActionKind::Combat && item.action!=ActionKind::SaveCombat && item.action!=ActionKind::Cycle && item.action!=ActionKind::CycleMember && item.action!=ActionKind::CycleCapture && item.action!=ActionKind::FunctionBack;});
             Cycles::AnnotateMembership(entries);
             auto fontGlyphs=CatalogFontGlyphs(entries,Outfits::Names()+Combat::Names()+Cycles::Names()+FaceLight::Names());
             std::lock_guard lock(viewMutex);
@@ -424,11 +446,12 @@ namespace Wheel {
             functionItems=std::move(entries);FilterItems();
         }
         void SwitchWheel() {
-            if(CurrentFormMode()!=FormMode::Human)return;
+            const auto mode=CurrentFormMode();if(mode!=FormMode::Human && mode!=FormMode::Werewolf)return;
             bool functions,needsDirectory=false;
             {std::lock_guard lock(viewMutex);
                 if(view.functions)RememberFunctionPage();else favoritePage=view.page;
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
+                if(mode==FormMode::Werewolf && functionCategory!=FaceLight::Section::Combat && functionCategory!=FaceLight::Section::Cycles)functionCategory=FaceLight::Section::Combat;
                 view.sortingEdit=false;CancelSortDrag();functions=view.functions=!view.functions;openingMemory.Observe(functions,true);view.functionSection=functionCategory;
                 view.page=functions?FunctionPage(functionCategory):favoritePage;view.x=view.y=0;
                 if(!functions) {
@@ -444,6 +467,7 @@ namespace Wheel {
             openedForm=CurrentFormMode();
             {std::lock_guard lock(viewMutex);
                 functions=openingMemory.Resolve(functions,Config().rememberLastWheel,openedForm==FormMode::Human);
+                if(openedForm==FormMode::Werewolf)functions=true;
             }
             if(openedForm==FormMode::Human)FaceLight::Capture(); // Before pause.
             const bool scope=Config().allInventory;
@@ -455,6 +479,7 @@ namespace Wheel {
                 view.faceLightAvailable=FaceLight::Available();
                 view.vampireRestricted=openedForm==FormMode::VampireLord;
                 functionCategory=FaceLight::VisibleSection(functionCategory,view.faceLightAvailable);
+                if(openedForm==FormMode::Werewolf && functionCategory!=FaceLight::Section::Combat && functionCategory!=FaceLight::Section::Cycles)functionCategory=FaceLight::Section::Combat;
                 ++directoryRevision;inventoryLoaded=false;inventoryPages.Set({});functionItems.clear();
                 view.visibleCategories={0};
                 inventoryStamp=stamp;nextInventoryRefresh=std::chrono::steady_clock::now();
@@ -497,6 +522,7 @@ namespace Wheel {
         void FunctionNavigate(FaceLight::Section section,bool preservePointer=false) {
             {std::lock_guard lock(viewMutex);
                 section=FaceLight::VisibleSection(section,view.faceLightAvailable);
+                if(CurrentFormMode()==FormMode::Werewolf && section!=FaceLight::Section::Combat && section!=FaceLight::Section::Cycles && section!=FaceLight::Section::CycleMembers)section=FaceLight::Section::Combat;
                 RememberFunctionPage();
                 functionCategory=section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section;
                 view.functionSection=section;view.page=FunctionPage(section);
@@ -506,7 +532,7 @@ namespace Wheel {
         }
         void FunctionBack() {
             const auto section=Snapshot().functionSection;
-            FunctionNavigate(section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:FaceLight::Section::Outfits);
+            FunctionNavigate(CurrentFormMode()==FormMode::Werewolf?FaceLight::Section::Combat:section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:FaceLight::Section::Outfits);
         }
         void ChangeCategory(int direction) {
             const auto current=Snapshot();
@@ -605,7 +631,8 @@ namespace Wheel {
             }
             // Outfit changes close the overlay so the player can observe the full transition.
             const bool consumable=selected.action==ActionKind::Favorite && ConsumableCategory(selected.category);
-            const bool keep=selected.action!=ActionKind::Outfit && selected.action!=ActionKind::Combat && selected.action!=ActionKind::Cycle && selected.action!=ActionKind::CycleMember && KeepWheelAfterUse(current.config.keepOpen,consumable);
+            const bool keep=selected.action!=ActionKind::Outfit && selected.action!=ActionKind::Combat && selected.action!=ActionKind::Cycle && selected.action!=ActionKind::CycleMember && KeepWheelAfterUse(current.config.keepOpen,consumable,current.config.keepOpenConsumables &&
+                (selected.category==Category::Potions || selected.category==Category::Food),selected.book || selected.scriptedInstrument);
             const bool keepPaused=KeepPausedForUse(keep,selected.action==ActionKind::Favorite,consumable,current.config.timeMode);
             {
                 std::lock_guard lock(actionMutex);
@@ -776,7 +803,8 @@ namespace Wheel {
                         }
                         if(!submit && Combat::Busy()) {
                             auto ui=RE::UI::GetSingleton();
-                            Combat::Tick(CurrentFormMode()==FormMode::Human && outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
+                            const auto mode=CurrentFormMode();
+                            Combat::Tick((mode==FormMode::Human || mode==FormMode::Werewolf) && outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
                         }
                     },failed);
                 });else actionTaskQueued=false;
@@ -887,6 +915,8 @@ namespace Wheel {
             if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad)
                 return button->GetIDCode()==FavoritesScanCode(RE::INPUT_DEVICE::kGamepad) &&
                     static_cast<int>(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()))==EffectiveGamepadKey(config) &&
+                    !ForeignGamepadChord(OpeningControllerHeld(sample),EffectiveGamepadKey(config),NativeGamepadModifiers(),
+                        config.gamepadHotkey<0,config.gamepadModifier,config.gamepadActionModifier) &&
                     (OpeningControllerHeld(sample) & NativeGamepadModifiers())==NativeGamepadModifiers();
             return false;
         }
@@ -912,7 +942,7 @@ namespace Wheel {
                 config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier,config.switchKey);
         }
         bool TryCycleShortcut(int key,int modifiers,bool entrance) {
-            if(CurrentFormMode()!=FormMode::Human)return false;
+            const auto mode=CurrentFormMode();if(mode!=FormMode::Human && mode!=FormMode::Werewolf)return false;
             const auto current=Snapshot();
             if(entrance || current.settingsOpen || current.outfitDialog || closing || openQueued ||
                 !Config().enabled || !gameSession.Active() || !Focused() || !ValidPlayer() || BlockedMenu())return false;
@@ -1000,6 +1030,8 @@ namespace Wheel {
             case 24: config.hideEmptyCategories=!config.hideEmptyCategories; break;
             case 25: config.swapMouseHands=!config.swapMouseHands; break;
             case 26: config.rememberLastWheel=!config.rememberLastWheel; break;
+            case 27: config.keepOpenConsumables=!config.keepOpenConsumables; break;
+            case 28: config.showActionNotifications=!config.showActionNotifications; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -1068,6 +1100,9 @@ namespace Wheel {
             if(outfitNameButton.Contains(x,y))OutfitDialog(2,current.outfitId,current.outfitName.text,current.combatDialog);
             else if(outfitOverwriteButton.Contains(x,y))OutfitDialog(4,current.outfitId,current.outfitName.text,current.combatDialog);
             else if(outfitDeleteButton.Contains(x,y))OutfitDialog(5,current.outfitId,current.outfitName.text,current.combatDialog);
+            else if(current.combatDialog && combatLeftButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Left))RefreshFunctions();}
+            else if(current.combatDialog && combatRightButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Right))RefreshFunctions();}
+            else if(current.combatDialog && combatVoiceButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Voice))RefreshFunctions();}
             else if(!current.combatDialog && outfitExportButton.Contains(x,y))Outfits::Export(current.outfitId);
         }
         void NameKey(std::uint32_t code,bool fallback) {
@@ -1120,7 +1155,9 @@ namespace Wheel {
                 (ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)));
             movementStick.Capture(captureBatch);
             if (IsOpen() && (!Focused() || !ValidPlayer() || BlockedMenu())) Cancel();
-            const auto bridge=TextBridge::Query();
+            auto bridge=TextBridge::Query();
+            const bool simpleIME=SimpleIME::Available();
+            bridge.composing=bridge.composing || SimpleIME::Composing();
             bool characterBatch=false;
             // Resolve chords from the whole physical batch before mutating events.
             // The main button may precede its modifier in the same input poll.
@@ -1230,8 +1267,8 @@ namespace Wheel {
                         code,pad,button->IsDown(),inputGate.Swallowed(identity),current.settingsOpen,current.outfitDialog);
                     const bool naming=current.open && (current.outfitDialog==1 || current.outfitDialog==2);
                     if(naming && nameRepeat && (code==14 || code==211 || code==203 || code==205) && !bridge.composing)NameKey(code,false);
-                    const bool bridgeKey=naming && bridge.available && bridge.enabled && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
-                        (code==bridge.hotkey || code==29 || code==157 || code==42 || code==54 || (bridge.active && code==57 && (GetAsyncKeyState(VK_CONTROL)&0x8000)));
+                    const bool bridgeKey=naming && ((bridge.available && bridge.enabled) || simpleIME) && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
+                        (code==bridge.hotkey || code==29 || code==157 || code==42 || code==54 || ((bridge.active || simpleIME) && code==57 && (GetAsyncKeyState(VK_CONTROL)&0x8000)));
                     if(up && current.sortDrag.held && button->GetDevice()==RE::INPUT_DEVICE::kMouse && code==0) {
                         EndSortDrag();consume=true; // Release is owned even though the press is swallowed by InputGate.
                     } else if(down && current.sortDrag.held &&
@@ -1270,7 +1307,7 @@ namespace Wheel {
                             }else if(naming && bridge.composing) { /* IME owns candidate editing/confirmation. */ }
                             else if(code==1 || code==15)EndOutfitDialog();
                             else if(code==28)OutfitAccept();
-                            else if(naming)NameKey(code,!bridge.active && !characterBatch);
+                            else if(naming)NameKey(code,!simpleIME && !bridge.active && !characterBatch);
                         } else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse && code==0)OutfitClick();
                         else if(pad==277)EndOutfitDialog();
                         else if(pad==276)OutfitClick();
@@ -1446,18 +1483,41 @@ namespace Wheel {
             PumpDetails();
         }
 
+        // SimpleIME delivers committed text through the native UI message queue.
+        // CommonLib exposes GFxEvent but not the Scaleform character payload.
+        struct ScaleformCharacter : RE::GFxEvent {
+            std::uint32_t code;
+            std::uint8_t keyboard;
+        };
+        static_assert(sizeof(ScaleformCharacter)==0x0C);
+        bool ReceiveTextMessage(RE::UIMessage& message) {
+            if(message.type!=RE::UI_MESSAGE_TYPE::kScaleformEvent || !message.data)return false;
+            const auto data=static_cast<RE::BSUIScaleformData*>(message.data);
+            const auto event=data->scaleformEvent;
+            if(!event || (event->type.get()!=RE::GFxEvent::EventType::kCharEvent &&
+                static_cast<std::uint32_t>(event->type.get())!=0x80000001u))return false;
+            std::lock_guard lock(viewMutex);
+            if(!view.open || (view.outfitDialog!=1 && view.outfitDialog!=2))return false;
+            const auto character=static_cast<const ScaleformCharacter*>(event);
+            // Zero is SimpleIME's channel probe, not input.
+            if(character->code)view.outfitName.Insert(character->code);
+            return true;
+        }
+
         class WheelMenu final : public RE::IMenu {
         public:
             WheelMenu() {
                 depthPriority = 3;
                 // This is an input-gated overlay. Native menu mode resets held
                 // gameplay movement; input ownership is handled in InputHook.
-                menuFlags.set(Flag::kDisablePauseMenu,Flag::kRequiresUpdate);
+                menuFlags.set(Flag::kDisablePauseMenu,Flag::kRequiresUpdate,Flag::kCustomRendering);
             }
             static RE::IMenu* Create() { return new WheelMenu; }
             RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
                 std::lock_guard lifecycle(lifecycleMutex);
+                if(ReceiveTextMessage(message))return RE::UI_MESSAGE_RESULTS::kHandled;
                 if (message.type == RE::UI_MESSAGE_TYPE::kHide || message.type == RE::UI_MESSAGE_TYPE::kForceHide) {
+                    ReleaseTextInput();
                     const auto old=Snapshot();
                     if(old.outfitDialog==1 || old.outfitDialog==2)TextBridge::Reset();
                     TimeControl::EndSession();RequestPause(false);
@@ -1476,7 +1536,7 @@ namespace Wheel {
                 return RE::UI_MESSAGE_RESULTS::kPassOn;
             }
             void AdvanceMovie(float, std::uint32_t) override {SyncWheelTime();}
-            void PostDisplay() override {}
+            void PostDisplay() override {RenderTextInputLayer();}
         };
 
         class MenuObserver final : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
@@ -1497,6 +1557,7 @@ namespace Wheel {
             static RE::IMenu* Create(){return new PauseGuardMenu;}
             RE::UI_MESSAGE_RESULTS ProcessMessage(RE::UIMessage& message) override {
                 std::lock_guard lifecycle(lifecycleMutex);
+                if(ReceiveTextMessage(message))return RE::UI_MESSAGE_RESULTS::kHandled;
                 if(message.type==RE::UI_MESSAGE_TYPE::kShow) {
                     bool wanted;{std::lock_guard lock(pauseMutex);wanted=pauseRequested;}
                     if(!wanted)if(auto q=RE::UIMessageQueue::GetSingleton())q->AddMessage(pauseMenuName,RE::UI_MESSAGE_TYPE::kHide,nullptr);
@@ -1507,7 +1568,7 @@ namespace Wheel {
                         else if(auto q=RE::UIMessageQueue::GetSingleton())q->AddMessage(pauseMenuName,RE::UI_MESSAGE_TYPE::kShow,nullptr);
                     }
                 }
-                return RE::UI_MESSAGE_RESULTS::kHandled;
+                return message.type==RE::UI_MESSAGE_TYPE::kScaleformEvent?RE::UI_MESSAGE_RESULTS::kPassOn:RE::UI_MESSAGE_RESULTS::kHandled;
             }
             void AdvanceMovie(float,std::uint32_t)override{}
             void PostDisplay()override{}
@@ -1535,7 +1596,11 @@ namespace Wheel {
                 }
                 std::lock_guard lock(viewMutex);
                 if(view.open)for(auto event=events?*events:nullptr;event;event=event->next)if(auto c=event->AsCharEvent()) {
-                    if(view.outfitDialog==1 || view.outfitDialog==2)view.outfitName.Insert(c->keyCode);
+                    const bool naming=view.outfitDialog==1 || view.outfitDialog==2;
+                    // With SimpleIME, let native characters reach its Scaleform filter.
+                    // Reading them here leaks pinyin; clearing them breaks English with IME off.
+                    if(naming && SimpleIME::Available())continue;
+                    if(naming)view.outfitName.Insert(c->keyCode);
                     c->keyCode=0;
                 }
                 return RE::BSEventNotifyControl::kContinue;
@@ -1560,6 +1625,7 @@ namespace Wheel {
         retainedAction=false;retainedKeepsPause=false;retainedSubmitted=false;
         {std::lock_guard lock(openMutex);++openSerial;openQueued=false;pendingOpen.reset();}
         const auto current=Snapshot();
+        ReleaseTextInput();
         if(current.outfitDialog==1 || current.outfitDialog==2)TextBridge::Reset();
         RevertSettings();
         TimeControl::EndSession();RequestPause(false);

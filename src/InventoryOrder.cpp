@@ -5,7 +5,7 @@ namespace Wheel::Ordering {
     namespace {
         std::mutex mutex;
         State state;
-        int Index(bool all,Category category){return (all?9:0)+static_cast<int>(category);}
+        int Index(bool all,Category category){return category==Category::Books?18+int(all):(all?9:0)+static_cast<int>(category);}
         Key Identity(const Item& item) {
             // Never serialize native ExtraDataList addresses or quick-slot assignments.
             return {item.key.form,item.key.enchantment,std::bit_cast<std::uint32_t>(item.key.health),
@@ -21,10 +21,10 @@ namespace Wheel::Ordering {
     }
     void Apply(std::vector<Item>& items,bool all) {
         std::lock_guard lock(mutex);
-        for(int c=0;c<9;++c) {
+        for(int c=0;c<categoryCount;++c) {
             auto begin=std::find_if(items.begin(),items.end(),[&](const Item& x){return int(x.category)==c;});
             auto end=std::find_if(begin,items.end(),[&](const Item& x){return int(x.category)!=c;});
-            Sort(state[(all?9:0)+c],begin,end,Identity);
+            Sort(state[Index(all,static_cast<Category>(c))],begin,end,Identity);
         }
     }
     bool MoveItem(bool all,Category category,const Item& a,const Item& b){std::lock_guard lock(mutex);return Move(state[Index(all,category)],Identity(a),Identity(b));}

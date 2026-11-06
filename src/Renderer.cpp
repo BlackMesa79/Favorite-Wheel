@@ -2,7 +2,9 @@
 #include "Settings.h"
 #include "WheelFonts.h"
 #include "SkinTextures.h"
+#include "IconLibrary.h"
 #include "Transition.h"
+#include "TextBridgeClient.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <dxgi.h>
@@ -24,6 +26,7 @@ namespace Wheel {
         std::atomic<bool> ready{false};
         bool failed = false;
         bool fading = false;
+        bool renderedInMenu = false; // Render thread; consumed by the next real Present.
         auto lastFrame = std::chrono::steady_clock::now();
         struct TransitionPerformance {
             bool active=false,opening=false,animated=false;
@@ -87,6 +90,9 @@ namespace Wheel {
                 }
             }
             if(!ImGui_ImplDX11_CreateDeviceObjects()) return false;
+            const auto icons=IconLibrary::Initialize(device.Get(),context.Get(),Themes());
+            for(const auto& warning:icons.warnings)SKSE::log::warn("{}",warning);
+            SKSE::log::info("Icon library ready: textures={} texels={}",icons.textures,icons.texels);
             const auto materials=SkinTextures::Initialize(device.Get(),context.Get(),Themes());
             for(const auto& warning:materials.warnings)SKSE::log::warn("{}",warning);
             SKSE::log::info("Skin materials ready: textures={} texels={} (mipmapped, startup only)",materials.textures,materials.texels);
@@ -191,17 +197,36 @@ namespace Wheel {
                         failed = true;
                         SKSE::log::error("D3D11 initialization failed; retaining vanilla menu");
                     }
-                    if (ready && (IsOpen() || fading)) Render(chain);
+                    if (ready && !renderedInMenu && (IsOpen() || fading)) Render(chain);
                 } catch (const std::exception& e) {
-                    SkinTextures::Reset();
+                    IconLibrary::Reset();SkinTextures::Reset();
                     ready = false; failed = true;
                     SKSE::log::error("Wheel rendering disabled: {}", e.what());
                     if (auto tasks = SKSE::GetTaskInterface()) tasks->AddTask([] { Cancel(); });
                 }
                 ImGui::SetCurrentContext(previousContext);
+                renderedInMenu=false;
             }
             return previousPresent(chain, interval, flags);
         }
+    }
+    void RenderTextInputLayer() {
+        if(!ready || failed || renderedInMenu || !SimpleIME::Available())return;
+        const auto current=Snapshot();
+        if(!current.open || (current.outfitDialog!=1 && current.outfitDialog!=2))return;
+        // WheelMenu depth 3 draws before SimpleIME's depth 13. Present is too late:
+        // it would paint the opaque naming panel over already-rendered candidates.
+        const auto previousContext=ImGui::GetCurrentContext();
+        try {
+            ImGui::SetCurrentContext(imgui);
+            Render(targetSwapChain);
+            renderedInMenu=true;
+        } catch(const std::exception& e) {
+            IconLibrary::Reset();SkinTextures::Reset();ready=false;failed=true;
+            SKSE::log::error("Wheel menu rendering disabled: {}",e.what());
+            if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([]{Cancel();});
+        }
+        ImGui::SetCurrentContext(previousContext);
     }
     bool RendererReady() { return ready; }
     bool InstallRenderer() {

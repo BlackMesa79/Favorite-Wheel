@@ -141,6 +141,18 @@ int wmain(int argc,wchar_t** argv) try {
     const auto before=Bytes(rejected);
     SetSettingsPath(Utf8(rejected));LoadSettings();BeginSettings();auto bad=Config();bad.font="x\n[General]\nEnabled=0";EditSettings(bad);
     Require(!SaveSettings() && Bytes(rejected)==before,"invalid multiline value cannot damage existing configuration");
+    // Optional framework drafts must not overwrite the wheel editor or stale settings.
+    RevertSettings();SetSettingsPath(Utf8(root/"framework.ini"));LoadSettings();
+    const auto original=Config();auto external=original;external.keepOpenConsumables=!original.keepOpenConsumables;
+    BeginSettings();
+    Require(!SaveExternalSettings(original,external) && Config()==original,"external apply refuses active wheel transaction");
+    RevertSettings();
+    Require(SaveExternalSettings(original,external),"external draft saves through the existing writer");
+    LoadSettings();Require(Config()==external,"external settings survive reload");
+    Require(!SaveExternalSettings(original,original) && Config()==external,"stale external draft cannot overwrite newer changes");
+    const auto stableBytes=Bytes(root/"framework.ini");auto invalidExternal=external;invalidExternal.theme="bad\n[General]";
+    Require(!SaveExternalSettings(external,invalidExternal) && Config()==external && Bytes(root/"framework.ini")==stableBytes,
+        "failed external save restores runtime settings and preserves the file");
     std::cout<<"INI profile-cache, independent-process and deployment hardlink regressions passed\n";
     return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

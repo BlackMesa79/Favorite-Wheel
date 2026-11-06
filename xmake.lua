@@ -128,6 +128,11 @@ target("FavoriteWheel")
                 end
             end
         end
+        for _, source in ipairs(os.files("assets/IconPacks/**")) do
+            local file = path.join(pluginsdir, "FavoriteWheel", "IconPacks", path.relative(source, "assets/IconPacks"))
+            os.mkdir(path.directory(file))
+            if not os.isfile(file) then os.cp(source, file) end
+        end
         local texturesdir = path.join(pluginsdir, "FavoriteWheel", "Themes", "Textures")
         os.mkdir(texturesdir)
         for _, source in ipairs(os.files("assets/Themes/Textures/*.png")) do
@@ -177,7 +182,7 @@ target("WheelPreview")
     set_default(false)
     set_rundir(os.projectdir())
     add_deps("wheel-imgui")
-    add_files("tests/WheelPreview.cpp", "src/Draw.cpp", "src/WheelFonts.cpp", "src/UIResources.cpp", "src/Settings.cpp", "src/ItemInfo.cpp", "src/SkinTextures.cpp")
+    add_files("tests/WheelPreview.cpp", "src/Draw.cpp", "src/WheelFonts.cpp", "src/UIResources.cpp", "src/Settings.cpp", "src/ItemInfo.cpp", "src/SkinTextures.cpp", "src/IconLibrary.cpp")
     add_includedirs("include")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
     add_syslinks("d3d11", "dxgi", "d3dcompiler", "windowscodecs", "ole32")
@@ -293,3 +298,22 @@ target("InventoryOrderTests")
     set_default(false)
     add_includedirs("include")
     add_files("tests/InventoryOrderTests.cpp")
+
+-- 独立上下文中的框架页面离屏预览，不加载 SKSE 或框架 DLL。
+target("FrameworkSettingsPreview")
+    set_kind("binary")
+    set_default(false)
+    add_deps("wheel-imgui")
+    add_files("tests/FrameworkSettingsPreview.cpp", "src/Settings.cpp", "src/UIResources.cpp")
+    add_includedirs("include")
+    add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
+    add_syslinks("d3d11", "dxgi", "d3dcompiler", "user32")
+
+ target("IconLibraryTests")
+    set_kind("binary")
+    set_default(false)
+    set_rundir(os.projectdir())
+    add_files("tests/IconLibraryTests.cpp", "src/IconLibrary.cpp")
+    add_includedirs("include")
+    add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
+    add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")

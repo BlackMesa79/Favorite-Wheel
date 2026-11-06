@@ -1,9 +1,16 @@
 #include "NameEditor.h"
+#include "TextInputPolicy.h"
 #include <cstdlib>
 #include <iostream>
 void Check(bool ok) {if(!ok){std::cerr<<"Name editor regression failed\n";std::exit(1);}}
 #define assert(value) Check(value)
 int main() {
+    assert(!Wheel::FreshComposition(0,1000));
+    assert(Wheel::FreshComposition(1000,1499));
+    assert(!Wheel::FreshComposition(1000,1500) && !Wheel::FreshComposition(1000,999));
+    assert(!Wheel::AcceptIMECharacter(true,'n') && !Wheel::AcceptIMECharacter(true,'1'));
+    assert(Wheel::AcceptIMECharacter(true,0x4e2d) && Wheel::AcceptIMECharacter(false,'n'));
+
     Wheel::NameEditor e;e.InsertUtf16(u"旅人\U0001f6e1甲");
     assert(e.text.size()==13 && e.cursor==13);
     e.Move(-1,false);assert(e.cursor==10);

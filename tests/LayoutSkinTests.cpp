@@ -22,7 +22,8 @@ int main() {
     memory.Observe(true,true);memory.Observe(false,false);
     Check(!memory.Resolve(true,true,false) && memory.Resolve(false,true,true),"Restricted forms force inventory without overwriting human memory");
     memory.Reset();Check(!memory.Resolve(false,true,true),"Loading a save resets opening memory");
-    Check(SettingCount(2)==6 && SettingRow(2,5)==26,"Gameplay settings expose the remembered-wheel option");
+    Check(SettingCount(2)==7 && SettingRow(2,6)==27,"Gameplay settings expose all current gameplay options");
+    Check(SettingCount(0)==11 && SettingRow(0,10)==28,"Display settings expose action-notification control");
     int hits=0,placements=0;
     for(const auto shape:{WheelShape::Circle,WheelShape::Ellipse,WheelShape::Polygon})
         for(const float x:{.9f,1.2f,1.25f})for(const float y:{.9f,.94f,1.2f}) {

@@ -3,7 +3,7 @@
 namespace Wheel {
     enum class ActionDecision { Wait, Submit, Discard };
     enum class ActionExecutor { TaskQueue, PlayerUpdate };
-    constexpr bool KeepWheelAfterUse(bool enabled,bool consumable) {return enabled && !consumable;}
+    constexpr bool KeepWheelAfterUse(bool enabled,bool consumable,bool retainConsumable=false,bool opensMenu=false) {return !opensMenu && (consumable?retainConsumable:enabled);}
     constexpr bool KeepPausedForUse(bool retained,bool favorite,bool consumable,int timeMode) {
         return retained && favorite && !consumable && timeMode==0;
     }

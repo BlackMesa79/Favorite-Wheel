@@ -1,3 +1,5 @@
+> 后续版本更新：现已支持主题引用自定义图标包和法术学派图标，见 [图标库文档](ICON_LIBRARY.md)。以下为 0.6.0 历史说明。
+
 # Making themes for Favorite Wheel 0.6.0
 
 The bundled themes are **Classic Gold**, **Skyrim** and **Skyrim Polygon**. You can mix component style, colors, materials and wheel layout in a separate theme INI. No plugin compilation is needed.

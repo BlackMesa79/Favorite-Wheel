@@ -132,7 +132,7 @@ int main() {
     Check(Wrap(-1, 6) == 5 && Wrap(6, 6) == 0 && Wrap(1, 0) == 0, "wrap");
     {
         enum class Type {kSpell,kPower,kLesserPower,kVoicePower,kAbility,kDisease,kEnchantment,kScroll};
-        Check(categoryCount==9,"Poison, spells, shouts and powers have independent top-level categories");
+        Check(categoryCount==10,"Poison, spells, shouts and powers have independent top-level categories");
         Check(MagicCategory(false,Type::kSpell)==Category::Spells,"Ordinary spells are separated from voice-slot actions");
         for(auto type:{Type::kPower,Type::kLesserPower,Type::kVoicePower})
             Check(MagicCategory(false,type)==Category::Powers,"Active greater, lesser and voice powers share the powers category");
@@ -436,6 +436,19 @@ int main() {
     Check(sx==0 && sy==-1,"controller Y axis points up on screen");
     AimStick(sx,sy,.1f,.1f);Check(sx==0 && sy==-1,"releasing stick preserves selection for confirmation");
     Check(StickAxis(.19f)==0 && StickAxis(1)==1 && StickAxis(-1)==-1,"settings pointer deadzone and full range");
+    {
+        const auto main=ControllerKeyBit(266),lb=ControllerKeyBit(274),rb=ControllerKeyBit(275);
+        Check(ResolvedGamepadOpening(266,266,main|rb,0,true,-1,274)==Opening::None,
+            "An unassigned shoulder chord yields instead of opening favorites");
+        Check(ForeignGamepadChord(main|rb,266,0,true,-1,274),
+            "Foreign chords also bypass replacement entrance consumption");
+        Check(ResolvedGamepadOpening(266,266,main|lb|rb,0,true,-1,274)==Opening::None,
+            "An additional foreign key also yields the Actions chord");
+        Check(ResolvedGamepadOpening(266,266,main|lb,0,true,-1,274)==Opening::Actions,
+            "The configured Actions chord remains available");
+        Check(ResolvedGamepadOpening(266,266,main|rb,rb,true,-1,274)==Opening::Favorites,
+            "The native inherited chord remains available");
+    }
     for(unsigned key=2;key<=9;++key)Check(QuickSlotFromKey(key,"")==static_cast<int>(key)-2,"1..8 map to native quick slots, not radial sectors");
     Check(QuickSlotFromKey(10,"")==-1 && QuickSlotFromKey(11,"")==-1 && QuickSlotFromKey(82,"")==-1,"9/0 and unmapped Numpad are not invented native slots");
     Check(QuickSlotFromKey(79,"Hotkey1")==0 && QuickSlotFromKey(80,"Hotkey8")==7 && QuickSlotFromKey(2,"Hotkey3")==2,"explicit game slot remaps take priority");
@@ -463,6 +476,9 @@ int main() {
     Check(DecideAction(1,1,false,false,false,false,false)==A::Discard, "focus loss, blocking menu or invalid player cancels use");
     Check(DecideAction(1,1,true,false,false,true,true)==A::Discard, "timeout cannot consume later");
     using E=ActionExecutor;
+    Check(!KeepWheelAfterUse(true,false,false,true) && !KeepWheelAfterUse(true,true,true,true),"Reading closes the wheel regardless of retention settings");
+    Check(KeepWheelAfterUse(false,true,true) && KeepWheelAfterUse(true,true,true),"Consumable retention is independent of equipment retention");
+    Check(!KeepPausedForUse(true,true,true,0),"Retained consumables release pause for engine and animation updates");
     Check(KeepWheelAfterUse(true,false) && !KeepWheelAfterUse(true,true) && !KeepWheelAfterUse(false,false) && !KeepWheelAfterUse(false,true),"Equipment can stay open; consumables and default mode always close");
     for(const auto category:{Category::Potions,Category::Poisons,Category::Food})
         Check(!KeepWheelAfterUse(true,ConsumableCategory(category)) &&

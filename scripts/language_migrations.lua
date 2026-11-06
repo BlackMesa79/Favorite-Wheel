@@ -27,6 +27,16 @@ local old = {
     compactClose = {["ESC CLOSE  ·  F2 TOOLS"]=true,["Esc 关闭  ·  F2 工具"]=true},
     useHint = {["LMB USE / RIGHT HAND    RMB LEFT HAND    ESC CLOSE    F2 TOOLS"]=true,
         ["左键 使用 / 右手    右键 左手    Esc 关闭    F2 工具"]=true},
+    combatStorageHint = {
+        ["Presets are saved with your game. Empty hand slots are cleared. Spells are equipped, not cast."]=true,
+        ["Voreinstellungen werden mit dem Spiel gespeichert. Leere Handplätze werden geleert. Zauber werden ausgerüstet, nicht gewirkt."]=true,
+        ["Les préréglages sont enregistrés avec la partie. Les emplacements vides sont libérés. Les sorts sont équipés, pas lancés."]=true,
+        ["プリセットはゲームのセーブに保存されます。空の手スロットは空に戻します。魔法は装備のみで自動発動しません。"]=true,
+        ["프리셋은 게임 저장과 함께 보관됩니다. 빈 손 슬롯은 비워집니다. 주문은 장착만 하며 자동으로 시전하지 않습니다."]=true,
+        ["As predefinições são salvas com o jogo. Espaços vazios são desocupados. Feitiços são equipados, não lançados."]=true,
+        ["Наборы сохраняются вместе с игрой. Пустые слоты освобождаются. Заклинания экипируются, но не применяются."]=true,
+        ["预设随游戏存档保存。空手槽会清空；法术只装备，不自动施放。"]=true,
+    },
 }
 function main(current, source)
     local desired = {}

@@ -1,4 +1,5 @@
 #include "Favorites.h"
+#include "IconLibrary.h"
 #include "Settings.h"
 #include "ActorRuntime.h"
 #include "UIResources.h"
@@ -46,7 +47,13 @@ namespace Wheel {
             if (const auto potion = form->As<RE::AlchemyItem>()) {
                 return AlchemyCategory(potion->IsPoison(),potion->IsFood());
             }
+            if (form->As<RE::TESObjectBOOK>()) return Category::Books;
             return Category::Other;
+        }
+        std::string IconForm(RE::TESForm* form) {
+            if(form && form->GetFormID()<0xFF000000)if(auto file=form->GetFile(0))
+                return IconLibrary::FormKey(std::string(file->GetFilename()),form->GetLocalFormID());
+            return {};
         }
         IconKind ClassifyIcon(RE::TESBoundObject* form) {
             if(auto weapon=form->As<RE::TESObjectWEAP>()) {
@@ -60,6 +67,7 @@ namespace Wheel {
                 default:return IconKind::Sword;
                 }
             }
+            if(form->As<RE::TESObjectBOOK>())return IconKind::Scroll;
             if(form->As<RE::TESAmmo>())return IconKind::Arrow;
             if(auto armor=form->As<RE::TESObjectARMO>()) {
                 using Slot=RE::BGSBipedObjectForm::BipedObjectSlot;
@@ -73,6 +81,7 @@ namespace Wheel {
                 return IconKind::Armor;
             }
             if(auto potion=form->As<RE::AlchemyItem>())return potion->IsPoison()?IconKind::Poison:potion->IsFood()?IconKind::Food:IconKind::Potion;
+            if(form->As<RE::TESObjectBOOK>())return IconKind::Book;
             if(form->As<RE::ScrollItem>())return IconKind::Scroll;
             if(form->As<RE::TESObjectLIGH>())return IconKind::Torch;
             return IconKind::Other;
@@ -94,10 +103,32 @@ namespace Wheel {
                 }
             }
         }
+        bool TalentInstrument(RE::TESForm* form) {
+            if(!form || !form->As<RE::TESObjectMISC>())return false;
+            auto data=RE::TESDataHandler::GetSingleton();
+            if(!data || !data->LookupModByName("SkyrimsGotTalent-Bards.esp"))return false;
+            // Vanilla instruments verified in the 1.76 plugin; exclude its dummy objects.
+            switch(form->GetFormID()) {
+            case 0xDABA7:case 0xDABA9:case 0xDABAB:case 0x105177:case 0x105109:return true;
+            default:return false;
+            }
+        }
         bool Supported(RE::TESBoundObject* form) {
-            if (form->As<RE::TESObjectWEAP>() || form->As<RE::TESAmmo>() || form->As<RE::TESObjectARMO>() || form->As<RE::ScrollItem>() || form->As<RE::AlchemyItem>()) return true;
+            if(TalentInstrument(form))return true;
+            if (form->As<RE::TESObjectBOOK>() || form->As<RE::TESObjectWEAP>() || form->As<RE::TESAmmo>() || form->As<RE::TESObjectARMO>() || form->As<RE::ScrollItem>() || form->As<RE::AlchemyItem>()) return true;
             if (auto light = form->As<RE::TESObjectLIGH>()) return light->CanBeCarried();
             return false;
+        }
+        bool PlainInstrument(RE::ExtraDataList* extra) {
+            // UniqueIDs do not split ordinary instruments; unknown extras cannot anchor untracked copies.
+            for(const auto& data:*extra)switch(data.GetType()) {
+            case RE::ExtraDataType::kCount:case RE::ExtraDataType::kUniqueID:break;
+            case RE::ExtraDataType::kHotkey:
+                if(static_cast<int>(extra->GetByType<RE::ExtraHotkey>()->hotkey.underlying())!=255)return false;
+                break;
+            default:return false;
+            }
+            return true;
         }
         bool Plain(RE::ExtraDataList* extra) {
             return !extra->HasType<RE::ExtraEnchantment>() && !extra->HasType<RE::ExtraHealth>() &&
@@ -187,11 +218,14 @@ namespace Wheel {
             RE::InventoryEntryData* entry,bool allInventory,const Item* exact=nullptr) {
             if(!object || count<=0)return;
             const auto category=Classify(object);const auto icon=ClassifyIcon(object);const bool usable=Supported(object);
+            const bool instrument=TalentInstrument(object);
+            // A favorite marker may cover just one instrument. Keep ordinary copies for display grouping.
+            const bool collectUnfavorited=allInventory || instrument;
             auto append=[&](RE::ExtraDataList* extra,int amount,const PlainWeaponStack* stack=nullptr) {
                 if(amount<=0)return;
                 const auto hotkey=extra?extra->GetByType<RE::ExtraHotkey>():nullptr;
                 const bool favorite=IsFavorite(hotkey);
-                if(!InventoryVisible(allInventory,favorite))return;
+                if(!InventoryVisible(collectUnfavorited,favorite))return;
                 if(exact) {
                     if(exact->weaponStack) {
                         if(!stack || stack->hotkey!=exact->weaponStackHotkey || (exact->favorited && !favorite))return;
@@ -203,7 +237,7 @@ namespace Wheel {
                 result.push_back({Key(object,extra),category,name && *name?name:"?",amount,
                     extra && (extra->HasType<RE::ExtraWorn>() || extra->HasType<RE::ExtraWornLeft>()),
                     false,usable,ActionKind::Favorite,0,icon});
-                auto& item=result.back();SetSortClassification(item,object);item.favorited=favorite;item.inventoryWide=allInventory;
+                auto& item=result.back();item.iconForm=IconForm(object);item.scriptedInstrument=instrument;item.book=object->As<RE::TESObjectBOOK>()!=nullptr;SetSortClassification(item,object);item.favorited=favorite;item.inventoryWide=allInventory;
                 item.handEquip=InventoryHand(object,extra && extra->HasType<RE::ExtraWorn>(),extra && extra->HasType<RE::ExtraWornLeft>());
                 if(stack) {
                     item.weaponStack=true;item.weaponStackHotkey=stack->hotkey;item.equipped=stack->right || stack->left;
@@ -223,10 +257,10 @@ namespace Wheel {
             if(entry && entry->extraLists)for(auto extra:*entry->extraLists)if(extra) {
                 const int amount=budget.Take(extra->GetCount());
                 const bool favorite=IsFavorite(extra->GetByType<RE::ExtraHotkey>());
-                if(amount>0 && (!anchor || (!anchorFavorite && favorite)) && InventoryVisible(allInventory,favorite) && Plain(extra)) {
+                if(amount>0 && (!anchor || (!anchorFavorite && favorite)) && InventoryVisible(collectUnfavorited,favorite) && (instrument?PlainInstrument(extra):Plain(extra))) {
                     // Preserve native favorites behavior; all-inventory merging
                     // additionally protects ownership/charge/poison/soul differences.
-                    const bool compatible=!allInventory || (!extra->HasType<RE::ExtraOwnership>() &&
+                    const bool compatible=(!allInventory && !instrument) || (!extra->HasType<RE::ExtraOwnership>() &&
                         !extra->HasType<RE::ExtraCharge>() && !extra->HasType<RE::ExtraPoison>() && !extra->HasType<RE::ExtraSoul>());
                     if(compatible){anchor=extra;anchorFavorite=favorite;}
                 }
@@ -236,7 +270,7 @@ namespace Wheel {
                 const int amount=budget.Take(extra->GetCount());
                 append(extra,amount+(extra==anchor?spare:0));
             }
-            if(allInventory && !anchor)append(nullptr,spare);
+            if(collectUnfavorited && !anchor)append(nullptr,spare);
         }
         std::optional<Item> ResolveItem(const Item& requested) {
             if(!CurrentActionAllowed(requested))return {};
@@ -313,7 +347,7 @@ namespace Wheel {
             std::vector<Item> grouped;grouped.reserve(result.size());MiscDisplayStacks stacks;
             for(auto& item:result) {
                 auto object=RE::TESForm::LookupByID(item.key.form);
-                bool compatible=object && object->As<RE::TESObjectMISC>() && !item.usable;
+                bool compatible=object && object->As<RE::TESObjectMISC>() && (!item.usable || item.scriptedInstrument);
                 if(!compatible){grouped.push_back(std::move(item));continue;}
                 auto extra=reinterpret_cast<RE::ExtraDataList*>(item.key.extra);
                 int marker=-1;RE::FormID owner=0;
@@ -327,9 +361,14 @@ namespace Wheel {
                 }
                 default:compatible=false;break;
                 }
-                stacks.Append(grouped,std::move(item),compatible,marker,owner);
+                const bool instrument=item.scriptedInstrument;
+                stacks.Append(grouped,std::move(item),compatible,marker,owner,instrument);
             }
+            std::erase_if(grouped,[allInventory](const Item& item){return !InventoryVisible(allInventory,item.favorited);});
             result=std::move(grouped);
+            for(const auto& item:result)if(item.scriptedInstrument)
+                SKSE::log::info("SGT instrument display: form={:08X} count={} favorite={} grouped={} extra={:X}",
+                    item.key.form,item.count,item.favorited,item.miscDisplayStack,item.key.extra);
         }
         if (auto favorites = RE::MagicFavorites::GetSingleton()) {
             std::vector<RE::TESForm*> magicForms;
@@ -346,6 +385,7 @@ namespace Wheel {
                 if ((!spell || !player->HasSpell(spell)) && (!shout || !player->HasShout(shout))) continue;
                 const auto category=MagicCategory(shout!=nullptr,spell?spell->GetSpellType():RE::MagicSystem::SpellType::kVoicePower);
                 if(!category)continue;
+                if(formMode==FormMode::Werewolf && *category!=Category::Powers && *category!=Category::Shouts)continue;
                 const char* name = form->GetName();
                 const bool wornRight=player->GetEquippedObject(false)==form,wornLeft=player->GetEquippedObject(true)==form;
                 bool equipped = wornRight || wornLeft;
@@ -354,10 +394,19 @@ namespace Wheel {
                         equipped |= player->GetEquippedObjectInSlot(slot) == form;
                 }
                 result.push_back({{form->GetFormID()}, *category, name && *name ? name : "?", 1, equipped, true, true});
-                result.back().inventoryWide=allInventory;
+                result.back().inventoryWide=allInventory;result.back().iconForm=IconForm(form);
                 if(spell) {
                     const auto school=spell->GetAssociatedSkill();
                     result.back().sortType=school==RE::ActorValue::kNone?999:static_cast<int>(school);
+                    if(*category==Category::Spells)switch(school) {
+                    case RE::ActorValue::kAlteration:result.back().icon=IconKind::Alteration;break;
+                    case RE::ActorValue::kConjuration:result.back().icon=IconKind::Conjuration;break;
+                    case RE::ActorValue::kDestruction:result.back().icon=IconKind::Destruction;break;
+                    case RE::ActorValue::kIllusion:result.back().icon=IconKind::Illusion;break;
+                    case RE::ActorValue::kRestoration:result.back().icon=IconKind::Restoration;break;
+                    default:result.back().icon=IconKind::Magic;break;
+                    }
+
                 }
                 if(spell && *category==Category::Spells && Ordering::Numeric(sortModes[static_cast<int>(*category)]))
                     result.back().sortNumber=ValidStat(spell->CalculateMagickaCost(player));
@@ -529,6 +578,26 @@ namespace Wheel {
         if (!object) return;
         // This address was matched against a fresh inventory walk above, on this same game-thread task.
         auto extra = reinterpret_cast<RE::ExtraDataList*>(found->key.extra);
+        if(TalentInstrument(object)) {
+            // Match inventory ToggleEquipItem: the queued Actor path drops MISC
+            // before its native TESEquipEvent can be sent.
+            manager->EquipObject(player,object,extra,1,nullptr,false,false,true,false);
+            SKSE::log::info("SGT instrument native use requested: form={:08X} extra={:X} queueEquip=false count=1",
+                object->GetFormID(),found->key.extra);
+            return;
+        }
+        if(auto book=object->As<RE::TESObjectBOOK>()) {
+            if(book->TeachesSpell()) {
+                const bool learned=book->Read(player);
+                if(learned)player->RemoveItem(book,1,RE::ITEM_REMOVE_REASON::kRemove,extra,nullptr);
+                SKSE::log::info("Book spell learning: form={:08X} learned={}",book->GetFormID(),learned);
+            }else {
+                RE::NiMatrix3 rotation{};rotation.SetEulerAnglesXYZ(-0.05f,-0.05f,1.50f);
+                RE::BookMenu::OpenMenuFromBaseForm(book,extra,RE::NiPoint3(),rotation,1.0f,true);
+                SKSE::log::info("Book menu requested: form={:08X} extra={:X}",book->GetFormID(),found->key.extra);
+            }
+            return;
+        }
         if (auto potion = object->As<RE::AlchemyItem>()) {
             if (potion->IsPoison()) {
                 // Vanilla handles the weapon checks, confirmation and consumption.

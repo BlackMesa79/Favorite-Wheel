@@ -5,6 +5,8 @@
 #include "UILayout.h"
 #include "UIResources.h"
 #include "Wheel.h"
+#include "CombatPresets.h"
+#include "CombatPresetModel.h"
 #include "QuickSlots.h"
 #include "WheelFonts.h"
 #include "WheelIcons.h"
@@ -21,7 +23,7 @@ namespace Wheel
 {
     namespace
     {
-        constexpr const char *categoryKeys[] = {"weapons", "armor", "potions", "poisons", "food", "spells", "shouts", "powers", "other"};
+        constexpr const char *categoryKeys[] = {"weapons", "armor", "potions", "poisons", "food", "spells", "shouts", "powers", "other", "books"};
         static_assert(std::size(categoryKeys)==categoryCount);
         struct Feedback
         {
@@ -621,7 +623,11 @@ namespace Wheel
             {
                 Button(d, c, s, v, outfitOverwriteButton, v.cycleCaptureKey?tr("cycleCaptureKey"):tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveUp":"cycleBind"):v.combatDialog?"combatOverwrite":"outfitOverwrite"));
                 Button(d, c, s, v, outfitDeleteButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveDown":"cycleClear"):"outfitDelete"), false, !v.cycleMemberDialog);
-                if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleRemove":"cycleEdit"):"outfitExport"));
+                if(v.combatDialog && !v.cycleDialog) {
+                    Button(d,c,s,v,combatLeftButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Left));
+                    Button(d,c,s,v,combatRightButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Right));
+                    Button(d,c,s,v,combatVoiceButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Voice));
+                } else if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleRemove":"cycleEdit"):"outfitExport"));
             }
             else if (v.outfitDialog == 4 || v.outfitDialog == 5)
                 Text(d, {c.x, c.y - 40 * s}, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleConfirmRemove":"cycleConfirmClear"):v.combatDialog && v.outfitDialog==4?"combatConfirmOverwrite":v.outfitDialog == 4 ? "outfitConfirmOverwrite" : "outfitConfirmDelete"),
@@ -630,7 +636,7 @@ namespace Wheel
             {
                 Item item;
                 item.action = v.combatDialog?ActionKind::Combat:ActionKind::Outfit;
-                DrawIcon(d, {c.x, c.y - 38 * s}, item, 1.65f * s * t.iconScale, Alpha(t.accent, .65f));
+                DrawIcon(d, {c.x, c.y - 38 * s}, item, 1.65f * s * t.iconScale, Alpha(t.accent, .65f), &t);
             }
             Rule(d, {c.x, c.y + 74 * s}, 240 * s, t, s);
             Text(d, {c.x, c.y + 120 * s}, Wrapped(v.cycleDialog?(v.cycleCaptureKey?tr("cycleCaptureHint"):v.cycleBinding+"\n"+tr("cycleStorage")):tr(v.combatDialog?"combatStorageHint":"outfitStorageHint"), 16 * s, 535 * s, 3), 16 * s, t.muted,
@@ -655,7 +661,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -674,7 +680,7 @@ namespace Wheel
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
                                           tr(config.allInventory?"scopeAll":"scopeFavorites"),
                                           tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
-                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off")};
+                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off"),tr(config.keepOpenConsumables?"on":"off"),tr(config.showActionNotifications?"on":"off")};
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);
@@ -700,7 +706,7 @@ namespace Wheel
             }
             if(v.settingsTab==1)Text(d,{c.x,c.y+36*s},Wrapped(tr("swapMouseHandsHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             if(v.settingsTab==2) {
-                Text(d,{c.x,c.y+40*s},Wrapped(tr("keepOpenHelp"),15*s,575*s,3),15*s,t.muted,575*s,t.textShadow);
+                Text(d,{c.x,c.y+61*s},Wrapped(tr("consumableRetentionHelp"),14*s,575*s,2),15*s,t.muted,575*s,t.textShadow);
                 Text(d,{c.x,c.y+104*s},Wrapped(tr("rememberLastWheelHelp"),14*s,575*s,3),14*s,t.muted,575*s,t.textShadow);
             }
             if(v.settingsTab==3)Text(d,{c.x,c.y+10*s},Wrapped(tr("controllerSchemeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
@@ -808,7 +814,7 @@ namespace Wheel
                         bodyWidth = bodyRight - bodyLeft, bodyTop = top + extra * s;
             const int first = d->VtxBuffer.Size;
             Surface(d, a, b, t, s, true);
-            DrawIcon(d, {bodyLeft + 14 * s, bodyTop + 32 * s}, item, .82f * s * t.iconScale, item.usable ? t.accent : t.muted);
+            DrawIcon(d, {bodyLeft + 14 * s, bodyTop + 32 * s}, item, .82f * s * t.iconScale, item.usable ? t.accent : t.muted, &t);
             LeftText(d, {bodyLeft + 38 * s, bodyTop + 25 * s}, Fit(typeTitle, 14 * s, bodyWidth - 38 * s), 14 * s, t.muted);
             d->AddLine({bodyLeft, bodyTop + 56 * s}, {bodyRight, bodyTop + 56 * s}, Alpha(t.border, .65f), s);
             LeftText(d, {bodyLeft, bodyTop + 72 * s}, Wrapped(item.name, 20 * s, bodyWidth, 2), 20 * s, t.text, bodyWidth);
@@ -1005,7 +1011,7 @@ namespace Wheel
                     const auto state = State(v, item,true);
                     const auto ink = item.usable ? Mix(t.text, t.accent, weight) : t.muted;
                     const float size = 16 * s * t.labelScale;
-                    DrawIcon(d, {at.x, at.y - 19 * s}, item, 1.05f * s * t.iconScale, Alpha(ink, pageFade));
+                    DrawIcon(d, {at.x, at.y - 19 * s}, item, 1.05f * s * t.iconScale, Alpha(ink, pageFade), &t);
                     float nameWidth=item.handEquip==HandEquip::Left || item.handEquip==HandEquip::Right?88.f:
                         item.handEquip!=HandEquip::None?102.f:109.f;
                     if(ValidQuickSlot(item.quickSlot)) {
@@ -1113,7 +1119,7 @@ namespace Wheel
             {
                 const auto &item = v.items[index];
                 const auto state = State(v, item);
-                DrawIcon(d, {c.x, c.y - 44 * s}, item, 1.15f * s * t.iconScale, item.usable ? t.accent : t.muted);
+                DrawIcon(d, {c.x, c.y - 44 * s}, item, 1.15f * s * t.iconScale, item.usable ? t.accent : t.muted, &t);
                 Text(d, {c.x, c.y + 4 * s}, Fit(item.name, 20 * s, 188 * s), 20 * s, t.text, 0, t.textShadow);
                 const bool card = DetailCard(d, c, s, v, item, state, typeTitle, expansion);
                 const auto info = !card && !item.detail.empty() ? item.detail
@@ -1206,7 +1212,7 @@ namespace Wheel
             at.y=std::clamp(at.y,40*s,io.DisplaySize.y-40*s);
             d->AddRectFilled({at.x-70*s,at.y-33*s},{at.x+70*s,at.y+33*s},t.panel|0xFF000000u,5*s);
             d->AddRect({at.x-70*s,at.y-33*s},{at.x+70*s,at.y+33*s},t.accent,5*s,0,1.5f*s);
-            DrawIcon(d,{at.x,at.y-10*s},*feedback.ghostItem,.65f*s*t.iconScale,t.accent);
+            DrawIcon(d,{at.x,at.y-10*s},*feedback.ghostItem,.65f*s*t.iconScale,t.accent, &t);
             Text(d,{at.x,at.y+17*s},Fit(feedback.ghostItem->name,13*s,126*s),13*s,t.text,0,t.textShadow);
             Reveal(d,start,feedback.ghostAlpha);
         }

@@ -92,6 +92,10 @@ int wmain(int argc,wchar_t** argv) {
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     Check(Config().keepOpen,"Saving fresh defaults persists keep-open on");
+    Check(!Config().keepOpenConsumables,"Consumable retention is opt-in");
+    BeginSettings();auto consumables=Config();consumables.keepOpenConsumables=true;EditSettings(consumables);
+    Check(SaveSettings(),"Save consumable retention");LoadSettings();
+    Check(Config().keepOpenConsumables,"Consumable retention survives reload");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     const auto initialBytes=bytes(path);
     SetSettingsPath(path.string()); LoadSettings();
@@ -231,14 +235,17 @@ int wmain(int argc,wchar_t** argv) {
     LoadResources("assets");
     Check(Languages().size()==8 && Themes().size()>=2,"All eight bundled languages load");
     auto skin=Config();skin.theme="skyrim";
-    Check(Themes().size()==3 && Style(skin).style==ThemeStyle::Skyrim,"Only the three current bundled themes load");
+    Check(Themes().size()>=3 && std::all_of(Themes().begin(),Themes().end(),[](const Theme& theme){
+        return theme.id=="classic" || theme.id=="skyrim" || theme.id=="polygon" || theme.id=="icon-pack-test";
+    }) && Style(skin).style==ThemeStyle::Skyrim,"Core themes and the custom icon-pack test theme load");
     Check(Style(skin).frameStyle==FrameStyle::Nordic && Style(skin).surfaceTexture.ends_with("Textures/skyrim-charcoal.png") &&
         Style(skin).materialStrength==.9f,"Skyrim skin enables its external material and Nordic framing");
     skin.theme="classic";
     Check(Style(skin).style==ThemeStyle::ClassicGold && Style(skin).name=="Classic Gold" &&
         Style(skin).accent==Theme{}.accent && Style(skin).panel==Theme{}.panel && Style(skin).surfaceTexture.empty(),
         "Classic Gold uses the redesigned components and the built-in fallback palette");
-    for(const auto& theme:Themes())Check(theme.id=="classic" || theme.id=="skyrim" || theme.id=="polygon","Retired themes are absent from the bundled selector");
+    for(const auto& id:{"frost","engraved","minimal","ellipse"})
+        Check(std::none_of(Themes().begin(),Themes().end(),[&](const Theme& theme){return theme.id==id;}),"Retired themes are absent from the selector");
     skin.theme="polygon";Check(Style(skin).style==ThemeStyle::Skyrim && Style(skin).layout.shape==WheelShape::Polygon,
         "Skyrim Polygon retains the Nordic renderer and ten-sided shape");
     for(const auto& id:{"frost","engraved","minimal","ellipse","missing-theme"}) {
@@ -336,12 +343,12 @@ int wmain(int argc,wchar_t** argv) {
     for(int tab:{0,1,2,3})for(int slot=0;slot<SettingCount(tab);++slot) {
         const auto valueRect=ValueButton(slot);
         Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
-        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
+        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && (tab==0 || valueRect.y+valueRect.h<145),"Settings rows stay below tabs and clear contextual help text");
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
-    Check(SettingCount(2)==6 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26,"Gameplay tab includes continuous use, empty categories and wheel memory");
-    Check(SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Keyboard tab includes mouse hands; controller retains its separate settings");
+    Check(SettingCount(2)==7 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27,"Gameplay tab includes continuous use, empty categories and wheel memory");
+    Check(SettingCount(0)==11 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
@@ -461,6 +468,17 @@ void Ac5_BuiltinEnglishCoverage() {
 void Ac8_TranslationCacheConsistency() {
     using namespace Wheel;
     const auto keys=CatalogKeys();
+    const auto root=Scratch("ac8-reload");
+    Settings reloadConfig;reloadConfig.language="en";
+    LoadResources(root.string());
+    const auto beforeReload=UIGlyphSnapshot(reloadConfig);
+    Check(UIGlyphSnapshot(reloadConfig)==beforeReload,"AC-8: unchanged keys reuse the snapshot");
+    LoadResources("assets");
+    const auto afterReload=UIGlyphSnapshot(reloadConfig);
+    Check(afterReload!=beforeReload && *afterReload!=*beforeReload,
+        "AC-8: resource reload replaces the cached glyph content and snapshot");
+    Check(UIGlyphSnapshot(reloadConfig)==afterReload,"AC-8: reloaded snapshot remains stable");
+    RemoveScratch(root);
     Check(keys.size()>300,"AC-8: the bundled English catalog lists the translation keys");
     Check(TryLoad("assets","AC-8: the bundled resources load"),"AC-8: the bundled resources load");
     Check(Languages().size()==8,"AC-8: all eight bundled languages are loaded");

@@ -12,7 +12,7 @@ $dllInfo = Get-Item -LiteralPath $dll
 $fileVersion = [string]$dllInfo.VersionInfo.FileVersion
 $dllVersionMatch = [regex]::Match($fileVersion, '^(\d+\.\d+\.\d+)(?:\.\d+)?$')
 if (!$dllVersionMatch.Success -or $dllVersionMatch.Groups[1].Value -ne $version) {
-    throw "DLL FileVersion '$fileVersion' does not match project version '$version'. Rebuild FavoriteWheel in Release mode before packaging."
+    throw "DLL FileVersion '$fileVersion' does not match project version '$version'. Run xmake build -r FavoriteWheel in Release mode before packaging."
 }
 if (!$AllowStaleDll) {
     $inputs = @(Get-Item -LiteralPath (Join-Path $projectRoot 'xmake.lua'))
@@ -21,7 +21,7 @@ if (!$AllowStaleDll) {
     }
     $newer = $inputs | Where-Object { $_.LastWriteTimeUtc -gt $dllInfo.LastWriteTimeUtc } | Select-Object -First 1
     if ($newer) {
-        throw "DLL is stale: '$($newer.FullName)' is newer than '$dll'. Rebuild FavoriteWheel in Release mode before packaging, or use -AllowStaleDll to skip only this freshness check."
+        throw "DLL is stale: '$($newer.FullName)' is newer than '$dll'. Run xmake build -r FavoriteWheel in Release mode before packaging, or use -AllowStaleDll to skip only this freshness check."
     }
 }
 $dllHash = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash

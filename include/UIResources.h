@@ -3,6 +3,7 @@
 #include "LayoutSkin.h"
 #include <cstdint>
 #include <string>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 namespace Wheel {
@@ -14,6 +15,7 @@ namespace Wheel {
         ThemeStyle style=ThemeStyle::ClassicGold; // Component shapes, independent of colors and layout.
         FrameStyle frameStyle=FrameStyle::Plain;
         LayoutSkin layout;
+        std::string iconPack; // Resolved IconPacks/<id>/icons.ini; empty uses built-in icons.
         std::string surfaceTexture; // Resolved local PNG; empty means the solid-color fallback.
         float materialStrength=.85f, materialZoom=1.f;
         std::uint32_t accent=0xFF9CD6EF, text=0xFFE0E9F2, muted=0xFFA1ADB9;
@@ -25,6 +27,7 @@ namespace Wheel {
         float hoverDuration=.10f, pageDuration=.12f;
     };
     void LoadResources(const std::string& root="Data/SKSE/Plugins/FavoriteWheel");
+    const std::string& ResourceLoadDiagnostic(); // Startup-only diagnostic; empty on success.
     const std::vector<Language>& Languages();
     std::string ResolveLanguage(const std::string& requested,const std::string& systemLocale);
     std::string ActiveLanguage(const Settings& config);
@@ -34,6 +37,7 @@ namespace Wheel {
     const Theme& Style(const Settings& config);
     std::string Tr(const Settings& config, const std::string& key);
     std::string UIGlyphs(const Settings& config);
+    std::shared_ptr<const std::string> UIGlyphSnapshot(const Settings& config);
     std::string FontPath(const Settings& config);
     const std::vector<std::string>& FallbackFontPaths(); // Installed Windows fonts, resolved at resource load.
     std::string KeyLabel(const Settings& config);

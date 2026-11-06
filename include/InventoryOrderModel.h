@@ -25,7 +25,7 @@ namespace Wheel::Ordering {
         bool operator==(const Key&)const=default;
     };
     struct Group {Mode mode=Mode::Default;std::vector<Key> order;};
-    constexpr int groupCount=18;
+    constexpr int groupCount=20;
     using State=std::array<Group,groupCount>;
     constexpr std::size_t maxKeys=10000;
     inline std::string Token(const Key& k) {
@@ -85,7 +85,7 @@ namespace Wheel::Ordering {
         return true;
     }
     inline std::string Encode(const State& state) {
-        std::ostringstream out;out.imbue(std::locale::classic());out<<"FWS 1\n";
+        std::ostringstream out;out.imbue(std::locale::classic());out<<"FWS 2\n";
         for(const auto& g:state) {
             out<<static_cast<int>(g.mode)<<' '<<g.order.size()<<'\n';
             for(const auto& k:g.order)out<<k.form<<' '<<k.enchantment<<' '<<k.health<<' '<<k.unique<<' '<<std::quoted(k.name)<<'\n';
@@ -94,9 +94,10 @@ namespace Wheel::Ordering {
     inline bool Decode(const std::string& text,State& state) {
         if(text.size()>16*1024*1024)return false;
         std::istringstream in(text);in.imbue(std::locale::classic());std::string magic;int version;
-        if(!(in>>magic>>version) || magic!="FWS" || version!=1)return false;
+        if(!(in>>magic>>version) || magic!="FWS" || (version!=1 && version!=2))return false;
         State next;
-        for(auto& g:next) {
+        for(int index=0;index<(version==1?18:groupCount);++index) {
+            auto& g=next[index];
             int mode;std::size_t n;
             if(!(in>>mode>>n) || mode<0 || mode>10 || n>maxKeys)return false;
             g.mode=static_cast<Mode>(mode);std::unordered_map<std::string,bool> seen;

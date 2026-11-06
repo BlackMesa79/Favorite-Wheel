@@ -118,4 +118,14 @@ void Ac4_RemoveDuplicateKeys() {
     const auto deduplicated=Encode(state);
     RemoveDuplicateKeys(state);
     Check(Encode(state)==deduplicated,"AC-4: deduplication is idempotent");
+    std::string legacy="FWS 1\n";
+    for(int i=0;i<18;++i)legacy+=(i==9?"2 0\n":"0 0\n");
+    State migrated;
+    Check(Decode(legacy,migrated) && migrated[9].mode==Mode::NameDescending &&
+        migrated[18].mode==Mode::Default && migrated[19].order.empty(),
+        "Legacy sorting preserves both inventory scopes and initializes book groups");
+    State loaded; migrated[18].mode=Mode::NameAscending;migrated[19].mode=Mode::Custom;
+    Check(Decode(Encode(migrated),loaded) && loaded[18].mode==Mode::NameAscending && loaded[19].mode==Mode::Custom,
+        "Book groups round trip independently");
+
 }

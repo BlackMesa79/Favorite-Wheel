@@ -14,13 +14,16 @@ int main() {
     using namespace Wheel;
     {
         Check(ClassifyFormMode(false,false)==FormMode::Human,"Humanoid vampires retain normal behavior");
-        Check(ClassifyFormMode(true,false)==FormMode::UnsupportedBeast,"Werewolves still yield to vanilla");
+        Check(ClassifyFormMode(true,false,true)==FormMode::Werewolf,"Werewolves have a dedicated restricted mode");
+        Check(ClassifyFormMode(false,false,true)==FormMode::Werewolf,"Werewolf race detection does not depend on delayed menu state");
+        Check(ClassifyFormMode(true,false)==FormMode::UnsupportedBeast,"Other beast forms still yield to vanilla");
         Check(ClassifyFormMode(false,true)==FormMode::VampireLord && ClassifyFormMode(true,true)==FormMode::VampireLord,
             "Vampire race restricts actions even before the menu beast flag arrives");
-        for(auto mode:{FormMode::Human,FormMode::VampireLord,FormMode::UnsupportedBeast})
+        for(auto mode:{FormMode::Human,FormMode::VampireLord,FormMode::Werewolf,FormMode::UnsupportedBeast})
             for(bool favorite:{false,true})for(bool spell:{false,true})
-                Check(FormActionAllowed(mode,favorite,spell)==(mode==FormMode::Human || (mode==FormMode::VampireLord && favorite && spell)),
-                    "Only allowlisted favorite spells cross the Vampire Lord execution boundary");
+                for(bool voice:{false,true})
+                Check(FormActionAllowed(mode,favorite,spell,voice)==(mode==FormMode::Human || (mode==FormMode::VampireLord && favorite && spell) ||
+                    (mode==FormMode::Werewolf && favorite && spell && voice)),"Beast-form actions stay within their explicit allowlists");
         std::vector<Item> rows;MiscDisplayStacks groups;
         for(unsigned form=1;form<=3;++form)for(unsigned copy=1;copy<=30;++copy) {
             Item item;item.key={form,copy,static_cast<std::uint16_t>(copy)};item.name="Instrument";item.count=1;item.usable=false;
@@ -40,6 +43,39 @@ int main() {
         Check(rows.back().count==250 && !rows.back().miscDisplayStack,"An existing ore stack stays one row with its original quantity");
         special.count=std::numeric_limits<int>::max();groups.Append(rows,special,true,255,0);
         Check(rows.back().count==std::numeric_limits<int>::max(),"Aggregated counts saturate without signed overflow");
+    }
+    {
+        // A single favorited copy must retain the physical total and the exact action anchor.
+        for(bool favoriteFirst:{false,true}) {
+            std::vector<Item> rows;MiscDisplayStacks groups;
+            for(unsigned form:{0xDABA9u,0xDABA7u}) {
+                const int copies=form==0xDABA9u?3:2;
+                for(int copy=0;copy<copies;++copy) {
+                    const bool favorite=copy==(favoriteFirst?0:copies-1);
+                    Item item;item.key={form,static_cast<std::uintptr_t>(form+copy),static_cast<std::uint16_t>(copy)};
+                    item.name=form==0xDABA9u?"Drum":"Flute";item.count=1;item.favorited=favorite;item.scriptedInstrument=true;
+                    groups.Append(rows,item,true,favorite?255:-1,0,true);
+                }
+            }
+            Check(rows.size()==2 && rows[0].count==3 && rows[1].count==2,
+                "Three drums and two flutes retain their physical totals with only one favorite per form");
+            Check(rows[0].favorited && rows[1].favorited && rows[0].miscDisplayStack && rows[1].miscDisplayStack,
+                "An unfavorited copy encountered first cannot hide the aggregate in favorite-only scope");
+            Check(rows[0].key.extra==0xDABA9u+(favoriteFirst?0:2) && rows[1].key.extra==0xDABA7u+(favoriteFirst?0:1),
+                "The exact favorited native anchor survives either collection order");
+        }
+        std::vector<Item> rows;MiscDisplayStacks groups;
+        Item item;item.key.form=0xDABA9;item.name="Drum";item.count=1;item.favorited=true;
+        groups.Append(rows,item,true,255,0,true);
+        auto ordinary=item;ordinary.favorited=false;ordinary.key.extra=17;ordinary.count=2;
+        groups.Append(rows,ordinary,true,-1,0,true);
+        Check(rows.size()==1 && rows[0].count==3,"Untracked ordinary copies join the favorite display pool");
+        groups.Append(rows,item,true,1,0,true);groups.Append(rows,item,true,250,0,true);
+        groups.Append(rows,ordinary,true,-1,42,true);
+        ordinary.name="Named drum";groups.Append(rows,ordinary,true,-1,0,true);
+        groups.Append(rows,item,false,255,0,true);
+        Check(rows.size()==6 && rows[0].count==3,
+            "Instrument grouping preserves independent bindings, Important markers, ownership, names and unknown extras");
     }
     InventoryBudget plain{300};Check(plain.Spare()==300,"A stack with no extra lists remains visible");
     InventoryBudget mixed{12};Check(mixed.Take(2)==2 && mixed.Take(3)==3 && mixed.Spare()==7,"Special and plain counts partition the inventory without double counting");

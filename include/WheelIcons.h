@@ -1,13 +1,20 @@
 #pragma once
 #include "Favorites.h"
+#include "IconLibrary.h"
 #include <imgui.h>
 #include <initializer_list>
 
 namespace Wheel {
 // North Etch: original outline pictograms, centred in a 40 x 40 design box.
-// One silhouette and a restrained fine engraving; no fills, textures or game access.
-inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, ImU32 ink) {
+// Built-in silhouettes with optional cached PNG overrides; no disk or game access.
+inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, ImU32 ink, const Theme* theme=nullptr) {
     if (s <= 0.f) return;
+    if(theme)if(const auto image=IconLibrary::Find(*theme,item);image.view) {
+        const float w=20*s*std::min(1.f,image.aspect),h=20*s/std::max(1.f,image.aspect);
+        d->AddImage((ImTextureID)image.view,{origin.x-w,origin.y-h},{origin.x+w,origin.y+h},{0,0},{1,1},
+            image.tint?ink:(ink&IM_COL32_A_MASK)|IM_COL32(255,255,255,0));
+        return;
+    }
     auto p = [&](float x, float y) { return ImVec2{origin.x + x*s, origin.y + y*s}; };
     const float stroke = 1.75f*s;
     const float fine = 1.15f*s;
@@ -27,7 +34,16 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
     auto bend = [&](float x, float y, float a, float b, float u, float v) {
         d->PathBezierCubicCurveTo(p(x,y),p(a,b),p(u,v));
     };
-    auto end = [&](bool closed = false) { d->PathStroke(ink,closed ? ImDrawFlags_Closed : ImDrawFlags_None,stroke); };
+    auto end = [&](bool closed = false) {
+        // A closed stroke supplies its own last-to-first edge. Curves often
+        // already end at their first point; remove that duplicate to avoid a
+        // zero-length segment and broken antialiased joins at the seam.
+        if(closed && d->_Path.Size>1) {
+            const auto first=d->_Path.front(),last=d->_Path.back();
+            if(std::abs(first.x-last.x)<.001f && std::abs(first.y-last.y)<.001f)d->_Path.pop_back();
+        }
+        d->PathStroke(ink,closed ? ImDrawFlags_Closed : ImDrawFlags_None,stroke);
+    };
     auto circle = [&](float x, float y, float r) { d->AddCircle(p(x,y),r*s,ink,24,stroke); };
     auto gem = [&](float x, float y, float r) { shape({{x,y-r},{x+r*.72f,y},{x,y+r},{x-r*.72f,y}}); };
     auto hanger = [&]() {
@@ -76,12 +92,7 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
         // Keep the save badge in clear space beside the right grip.
         if(save){line(13,7,21,7);line(17,3,17,11);}return;
     }
-    auto kind = item.icon;
-    if (kind == IconKind::Auto) {
-        constexpr IconKind fallback[] = {IconKind::Sword,IconKind::Armor,IconKind::Potion,IconKind::Poison,IconKind::Food,IconKind::Magic,IconKind::Magic,IconKind::Magic,IconKind::Other};
-        static_assert(std::size(fallback)==categoryCount);
-        kind = fallback[static_cast<int>(item.category)];
-    }
+    const auto kind = IconLibrary::EffectiveKind(item);
     switch (kind) {
     case IconKind::Sword:
         path({{-3,5},{-4,-12},{0,-19},{4,-12},{3,5}});
@@ -183,6 +194,45 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
         start(0,-8); bend(-1,-12,0,-16,3,-18); end();
         start(3,-14); bend(6,-20,11,-19,14,-17); bend(10,-12,7,-11,3,-14); end();
         start(-8,-5); bend(-11,-2,-10,2,-9,4); end(); break;
+    case IconKind::Destruction:
+        // A single flame contour with a separate, open inner flame.
+        start(2,-19);bend(3,-9,-10,-7,-10,2);
+        bend(-13,0,-14,-3,-14,-5);bend(-20,8,-10,18,0,18);
+        bend(11,18,18,9,14,0);bend(12,-5,8,-7,8,-11);
+        bend(7,-6,5,-4,3,-3);bend(6,-10,6,-14,2,-19);end(true);
+        start(-4,11);bend(-7,6,-1,3,0,-1);bend(1,4,8,7,4,12);end();break;
+    case IconKind::Restoration:
+        // Cupped hands shelter a healing cross; no sun or radiating rays.
+        line(-5,-10,5,-10);line(0,-15,0,-5);
+        start(-3,17);to(-12,10);bend(-15,7,-16,1,-17,-5);
+        bend(-18,-9,-14,-10,-12,-6);to(-8,2);
+        bend(-5,1,-3,4,0,7);bend(3,4,5,1,8,2);to(12,-6);
+        bend(14,-10,18,-9,17,-5);bend(16,1,15,7,12,10);to(3,17);end();
+        path({{-8,2},{-5,7},{-2,9}});path({{8,2},{5,7},{2,9}});break;
+    case IconKind::Illusion:
+        // Clean almond silhouette and iris, with a solid pupil at small sizes.
+        start(-19,0);bend(-8,-14,8,-14,19,0);
+        bend(8,14,-8,14,-19,0);end(true);
+        circle(0,0,6);d->AddCircleFilled(p(0,0),2*s,ink,12);
+        start(-11,-14);bend(-5,-18,5,-18,11,-14);end();break;
+    case IconKind::Conjuration:
+        // Summoning portal with an emerging star.
+        d->AddEllipse(p(0,7),{17*s,9*s},ink,0,32,stroke);
+        path({{-10,6},{-10,-9},{-5,-15}});path({{10,6},{10,-9},{5,-15}});
+        gem(0,-7,8);line(0,1,0,9);break;
+    case IconKind::Alteration:
+        // Transmutation: angular and circular forms joined by an arrow.
+        shape({{-17,-16},{-5,-16},{-5,-4},{-17,-4}});circle(10,10,8);
+        path({{-13,5},{-13,13},{-3,13}});path({{-7,9},{-3,13},{-7,17}});
+        path({{4,-13},{13,-13},{13,-4}});path({{9,-8},{13,-4},{17,-8}});break;
+    case IconKind::Shout:
+        path({{-15,-7},{-7,-7},{1,-15},{1,15},{-7,7},{-15,7},{-15,-7}});
+        start(6,-8);bend(12,-5,12,5,6,8);end();start(11,-14);bend(22,-8,22,8,11,14);end();break;
+    case IconKind::Power:
+        circle(0,0,17);path({{3,-13},{-7,2},{1,2},{-3,13},{9,-3},{1,-3},{3,-13}});break;
+    case IconKind::Book:
+        shape({{0,-12},{-8,-16},{-18,-16},{-18,12},{-8,12},{0,16},{8,12},{18,12},{18,-16},{8,-16}});
+        line(0,-12,0,16);etch(-13,-8,-5,-6);etch(5,-6,13,-8);etch(-13,-1,-5,1);etch(5,1,13,-1);break;
     case IconKind::Magic:
         // Four elongated points echo the wheel's diamond page markers.
         shape({{0,-19},{5,-5},{15,0},{5,5},{0,19},{-5,5},{-15,0},{-5,-5}});

@@ -100,6 +100,7 @@ namespace Wheel {
             settings.allInventory = number(L"General",L"AllInventory",settings.allInventory) != 0;
             settings.rememberLastWheel=number(L"General",L"RememberLastWheel",settings.rememberLastWheel)!=0;
             settings.hideEmptyCategories=number(L"General",L"HideEmptyCategories",settings.hideEmptyCategories)!=0;
+            settings.keepOpenConsumables=number(L"General",L"KeepOpenConsumables",settings.keepOpenConsumables)!=0;
             settings.keepOpen = number(L"General",L"KeepOpen",settings.keepOpen) != 0;
             settings.timeMode=number(L"General",L"TimeMode",settings.timeMode);
             settings.slowPercent=number(L"General",L"SlowTimePercent",settings.slowPercent);
@@ -108,6 +109,7 @@ namespace Wheel {
                 (number(L"General",L"Chinese",1) ? "zh_CN" : "en"));
             settings.theme = Read(file,L"Display",L"Theme",settings.theme);
             settings.showHints = number(L"Display",L"ShowHints",settings.showHints) != 0;
+            settings.showActionNotifications=number(L"Display",L"ShowActionNotifications",settings.showActionNotifications)!=0;
             settings.wheelScale=number(L"Display",L"WheelScalePercent",static_cast<int>(settings.wheelScale*100))/100.f;
             settings.positionX=number(L"Display",L"PositionXPercent",settings.positionX);
             settings.positionY=number(L"Display",L"PositionYPercent",settings.positionY);
@@ -170,8 +172,7 @@ namespace Wheel {
         defaults.enabled=settings.enabled; defaults.font=settings.font;
         settings=std::move(defaults);
     }
-    bool SaveSettings() {
-        std::lock_guard lock(settingsMutex);
+    static bool SaveSettingsLocked() { // settingsMutex held.
         // Serialize in memory, then write through the destination's own handle.
         // This preserves MO2 mappings and Vortex hardlinks while bypassing the
         // Windows profile API's cache/redirected view of staged INI files.
@@ -200,11 +201,13 @@ namespace Wheel {
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
             write(L"General",L"RememberLastWheel",settings.rememberLastWheel?"1":"0") &&
             write(L"General",L"HideEmptyCategories",settings.hideEmptyCategories?"1":"0") &&
+            write(L"General",L"KeepOpenConsumables",settings.keepOpenConsumables?"1":"0") &&
             write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&
             write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&
             write(L"General",L"SlowTimePercent",std::to_string(settings.slowPercent)) &&
             write(L"Display",L"Theme",settings.theme) &&
             write(L"Display",L"ShowHints",settings.showHints?"1":"0") &&
+            write(L"Display",L"ShowActionNotifications",settings.showActionNotifications?"1":"0") &&
             write(L"Display",L"WheelScalePercent",std::to_string(static_cast<int>(settings.wheelScale*100+.5f))) &&
             write(L"Display",L"PositionXPercent",std::to_string(settings.positionX)) &&
             write(L"Display",L"PositionYPercent",std::to_string(settings.positionY)) &&
@@ -266,4 +269,17 @@ namespace Wheel {
         settings=persisted;saved=settings;editing=false;
         Report("saved-verified");diagnostic+=" bytes="+std::to_string(bytes.size());return true;
     }
+    bool SaveSettings() {
+        std::lock_guard lock(settingsMutex);return SaveSettingsLocked();
+    }
+    bool SaveExternalSettings(const Settings& expected,Settings values) {
+        std::lock_guard lock(settingsMutex);
+        if(editing || settings!=expected)return Report("external-settings-conflict",ERROR_BUSY);
+        // Startup-only settings are not exposed by the optional menu.
+        values.enabled=settings.enabled;values.font=settings.font;Clamp(values);
+        const auto before=settings;settings=std::move(values);
+        if(SaveSettingsLocked())return true;
+        settings=before;return false;
+    }
+
 }

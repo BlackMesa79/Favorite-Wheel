@@ -6,7 +6,8 @@
 namespace Wheel::Combat {
     using Outfits::Piece;
     using Outfits::FormRef;
-    enum class Kind {Empty, Object, Spell};
+    enum class Kind {Empty, Object, Spell, Voice, Ignore};
+    enum class Slot {Right, Left, Voice};
     struct Target {
         Kind kind=Kind::Empty;
         Piece piece;
@@ -18,6 +19,7 @@ namespace Wheel::Combat {
         Target right,left;
         bool twoHanded=false;
         int quickSlot=-1; // Shared native keyboard slots 1..8; stored per character.
+        Target voice;
         bool operator==(const Preset&) const=default;
     };
     enum class Problem {None, Missing, Changed, Ambiguous, NotEnough};
@@ -54,27 +56,31 @@ namespace Wheel::Combat {
     inline bool Valid(const Preset& p) {
         if(!p.id || p.id>1000000 || !Outfits::ValidName(p.name))return false;
         if(p.quickSlot!=-1 && !ValidQuickSlot(p.quickSlot))return false;
-        if(p.twoHanded && (p.right.kind==Kind::Empty || p.left.kind!=Kind::Empty))return false;
-        for(const auto* target:{&p.right,&p.left}) {
-            if(target->kind<Kind::Empty || target->kind>Kind::Spell)return false;
-            if(target->kind==Kind::Empty) {
+        if(p.twoHanded && (p.right.kind==Kind::Empty || p.right.kind==Kind::Ignore ||
+            (p.left.kind!=Kind::Empty && p.left.kind!=Kind::Ignore)))return false;
+        for(const auto* target:{&p.right,&p.left,&p.voice}) {
+            if(target->kind<Kind::Empty || target->kind>Kind::Ignore)return false;
+            if(target->kind==Kind::Ignore || target->kind==Kind::Empty) {
                 if(target->piece!=Piece{})return false;
-            }else {
-                const auto& x=target->piece;
-                if(!x.base.id || x.base.plugin.size()>=260 || x.enchantment.plugin.size()>=260 || x.owner.plugin.size()>=260 ||
-                    !std::isfinite(x.health) || x.health<=0 || x.customName.size()>512 || x.label.size()>512)return false;
-                if(target->kind==Kind::Spell && (x.unique || x.enchantment.id || x.owner.id || x.health!=1.f || !x.customName.empty()))return false;
+                continue;
             }
+            const auto& x=target->piece;
+            if(!x.base.id || x.base.plugin.size()>=260 || x.enchantment.plugin.size()>=260 || x.owner.plugin.size()>=260 ||
+                !std::isfinite(x.health) || x.health<=0 || x.customName.size()>512 || x.label.size()>512)return false;
+            if((target->kind==Kind::Spell || target->kind==Kind::Voice) &&
+                (x.unique || x.enchantment.id || x.owner.id || x.health!=1.f || !x.customName.empty()))return false;
+            if(target==&p.voice && target->kind!=Kind::Voice && target->kind!=Kind::Empty && target->kind!=Kind::Ignore)return false;
+            if(target!=&p.voice && target->kind==Kind::Voice)return false;
         }
         return true;
     }
     inline std::string Encode(const std::vector<Preset>& presets) {
         std::ostringstream out;out.imbue(std::locale::classic());
-        out<<"FWC 1 "<<presets.size()<<'\n'<<std::setprecision(std::numeric_limits<float>::max_digits10);
+        out<<"FWC 2 "<<presets.size()<<'\n'<<std::setprecision(std::numeric_limits<float>::max_digits10);
         auto ref=[&](const FormRef& r){out<<std::quoted(r.plugin)<<' '<<r.id<<' ';};
         for(const auto& p:presets) {
             out<<p.id<<' '<<std::quoted(p.name)<<' '<<p.twoHanded<<'\n';
-            for(const auto* target:{&p.right,&p.left}) {
+            for(const auto* target:{&p.right,&p.left,&p.voice}) {
                 const auto& x=target->piece;out<<static_cast<int>(target->kind)<<' ';
                 ref(x.base);ref(x.enchantment);ref(x.owner);
                 out<<x.unique<<' '<<x.health<<' '<<std::quoted(x.customName)<<' '<<std::quoted(x.label)<<'\n';
@@ -85,7 +91,7 @@ namespace Wheel::Combat {
     inline bool Decode(const std::string& text,std::vector<Preset>& result,unsigned expectedVersion=0) {
         if(text.size()>1024*1024)return false;
         std::istringstream in(text);in.imbue(std::locale::classic());std::string magic;unsigned version=0,count=0;
-        if(!(in>>magic>>version>>count) || magic!="FWC" || version!=1 ||
+        if(!(in>>magic>>version>>count) || magic!="FWC" || (version!=1 && version!=2) ||
             (expectedVersion && expectedVersion!=version) || count>100)return false;
         std::vector<Preset> next;
         auto ref=[&](FormRef& r){return bool(in>>std::quoted(r.plugin)>>r.id) && r.plugin.size()<260;};
@@ -95,9 +101,15 @@ namespace Wheel::Combat {
             p.twoHanded=twoHanded!=0;
             for(auto* target:{&p.right,&p.left}) {
                 unsigned kind=0,unique=0;auto& x=target->piece;
-                if(!(in>>kind) || kind>2 || !ref(x.base) || !ref(x.enchantment) || !ref(x.owner) ||
+                if(!(in>>kind) || kind>(version==1?2:4) || !ref(x.base) || !ref(x.enchantment) || !ref(x.owner) ||
                     !(in>>unique>>x.health>>std::quoted(x.customName)>>std::quoted(x.label)) || unique>65535)return false;
                 target->kind=static_cast<Kind>(kind);x.unique=static_cast<std::uint16_t>(unique);
+            }
+            if(version==2) {
+                unsigned kind=0,unique=0;auto& x=p.voice.piece;
+                if(!(in>>kind) || (kind!=0 && kind!=3 && kind!=4) || !ref(x.base) || !ref(x.enchantment) || !ref(x.owner) ||
+                    !(in>>unique>>x.health>>std::quoted(x.customName)>>std::quoted(x.label)) || unique>65535)return false;
+                p.voice.kind=static_cast<Kind>(kind);x.unique=static_cast<std::uint16_t>(unique);
             }
             if(!Valid(p) || std::any_of(next.begin(),next.end(),[&](const auto& other){return other.id==p.id;}))return false;
             next.push_back(std::move(p));
@@ -152,17 +164,21 @@ namespace Wheel::Combat {
     }
     // Explicit restore, never toggle. Engine calls are issued once and their
     // observable completion is checked before advancing to the next hand.
-    enum class Step {ClearRight, ClearLeft, EquipRight, EquipLeft, Verify};
+    enum class Step {ClearRight, ClearLeft, ClearVoice, EquipRight, EquipLeft, EquipVoice, Verify};
     enum class Decision {Issue, Wait, Advance, Timeout};
     inline bool SameTarget(const Target& a,const Target& b) {
-        return a.kind==b.kind && (a.kind==Kind::Empty || (a.kind==Kind::Spell?a.piece.base==b.piece.base:Outfits::Same(a.piece,b.piece)));
+        return a.kind==Kind::Ignore || (a.kind==b.kind && (a.kind==Kind::Empty ||
+            (a.kind==Kind::Spell || a.kind==Kind::Voice?a.piece.base==b.piece.base:Outfits::Same(a.piece,b.piece))));
     }
     inline bool StepComplete(const Preset& p,Step step,const Target& actual,bool callbackPending=false) {
+        if(callbackPending)return false;
+        if(step==Step::Verify)return false;
+        if(step==Step::ClearVoice)return p.voice.kind==Kind::Ignore || actual.kind==Kind::Empty;
+        if(step==Step::EquipVoice)return p.voice.kind==Kind::Ignore || SameTarget(p.voice,actual);
         const bool left=step==Step::ClearLeft || step==Step::EquipLeft;
         const auto& desired=left?p.left:p.right;
         const bool clearing=step==Step::ClearRight || step==Step::ClearLeft;
-        if(callbackPending)return false;
-        return SameTarget(desired,actual) || (clearing && (actual.kind==Kind::Empty ||
+        return desired.kind==Kind::Ignore || SameTarget(desired,actual) || (clearing && (actual.kind==Kind::Empty ||
             (actual.kind==Kind::Spell && (desired.kind!=Kind::Empty || p.twoHanded)))) ||
             (!clearing && left && p.twoHanded);
     }

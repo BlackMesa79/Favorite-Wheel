@@ -52,6 +52,7 @@ namespace Wheel {
     void Cancel(bool effects=false);
     bool InstallRenderer();
     bool RendererReady();
+    void RenderTextInputLayer(); // Menu render stage, below the IME overlay.
     void DrawWheel(const View& view,float opacity=1.f,float expansion=1.f);
     void ResetVisualFeedback(); // Render thread only; new open/session must not reuse old hover state.
     void SetViewport(float width, float height);
