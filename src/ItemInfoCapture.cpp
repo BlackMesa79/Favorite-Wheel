@@ -15,7 +15,7 @@ namespace Wheel {
             }
         }
     }
-    ItemInfo CaptureItemInfo(RE::TESBoundObject* object,RE::ExtraDataList* extra,RE::PlayerCharacter* player) {
+    ItemInfo CaptureItemInfo(RE::TESBoundObject* object,RE::ExtraDataList* extra,RE::PlayerCharacter* player,bool includeEffects) {
         ItemInfo info;if(!object || !player)return info;
         // Own only the temporary list container. It borrows this exact instance;
         // the entry destructor deletes list nodes, never the game's extra data.
@@ -29,6 +29,7 @@ namespace Wheel {
         if(const auto ammo=object->As<RE::TESAmmo>()) {
             info.damage=ValidStat(ammo->GetRuntimeData().data.damage);info.baseDamage=true;
         }
+        if(!includeEffects)return info;
         if(const auto potion=object->As<RE::AlchemyItem>())Effects(info,potion);
         else if(const auto scroll=object->As<RE::ScrollItem>())Effects(info,scroll);
         else if(const auto enchantment=instance.GetEnchantment()) {

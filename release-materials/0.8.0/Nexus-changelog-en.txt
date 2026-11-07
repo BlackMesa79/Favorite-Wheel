@@ -1,0 +1,9 @@
+0.8.0
+
+- Added eight combat cycle groups with custom shortcuts and per-character saves.
+- Combat presets now show their cycle group numbers in the wheel centre.
+- Fixed favorited misc stacks, including drums, flutes and lutes, filling multiple slots.
+- Added a restricted Vampire Lord skill wheel that avoids human equipment and preset actions.
+- Includes the custom LB+Y Favorites shortcut fix from 0.7.3.
+
+Disable older standalone test patches when upgrading. Keep your existing settings and SKSE co-saves.

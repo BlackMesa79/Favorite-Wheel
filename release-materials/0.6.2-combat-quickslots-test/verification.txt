@@ -1,0 +1,23 @@
+Deployment verified: 8 language files append two new keys; player INIs, themes, textures and previous ZIPs preserved.
+DLL SHA256: E561432A7E2D0FD73D263DF0FE729C102CAC9AACA2EE966C209015F8A3F7B2B2
+SettingsTests : exit 0
+SettingsPersistenceTests : exit 0
+SettingsVfsTests : exit 0
+WheelLogicTests : exit 0
+TimeTests : exit 0
+RuntimeLayoutTests : exit 0
+InventoryTests : exit 0
+OutfitTests : exit 0
+NameEditorTests : exit 0
+ItemInfoTests : exit 0
+FaceLightClientTests : exit 0
+ActorRuntimeTests : exit 0
+SkinTextureTests : exit 0
+LayoutSkinTests : exit 0
+SectorMeshTests : exit 0
+CombatPresetTests : exit 0
+Category font trace: catalog_prewarm=1 initial_prewarm_ms=59.9298 switches=15 font_rebuilds=0 total_switch_ms=0.979 max_switch_ms=0.1309
+Final DLL metadata and input/serialization checks passed after the final build.
+Native font tests: missing font 1080p/4K, custom Georgia 4K, glyph coverage, native size 13, reuse and resize.
+Native layout checks: English Skyrim 1080p, Chinese Classic 720p, combat slot badges and footer hint.
+Final game testing of combat shortcuts and reporter pixelation remains pending; official 0.6.2 archives preserved.

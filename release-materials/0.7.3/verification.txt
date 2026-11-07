@@ -1,0 +1,34 @@
+Favorite Wheel 0.7.3 formal release preparation
+Date: 2026-10-18 (Asia/Hong_Kong)
+
+The affected user confirmed the 0.7.2 independent controller-chord patch
+successfully fixes the reported problem and authorized formal integration.
+Built from the isolated stable source, excluding combat-cycle development.
+Compared with that accepted patch's source archive, src/include/tests differ
+only in main.cpp version strings and the exported-version test (0.7.3).
+
+Release DLL SHA256:
+7FFDF8CA4679B3747141EC926481D2BE88E5F9B3AD67481F31AF447ECC99FCAA
+Exported/file/product version: 0.7.3.0.
+18 automated test suites passed after the release rebuild:
+HandEquipTests, GameSessionTests, SettingsTests, SettingsPersistenceTests,
+SettingsVfsTests, WheelLogicTests, TimeTests, RuntimeLayoutTests, InventoryTests,
+OutfitTests, NameEditorTests, ItemInfoTests, FaceLightClientTests,
+ActorRuntimeTests, SkinTextureTests, LayoutSkinTests, SectorMeshTests,
+CombatPresetTests.
+RuntimeLayout checks exported metadata and seven real Address Library databases,
+including the controller RTTI/cast IDs and current/previous packet layouts.
+
+Renderer.cpp stable hash:
+12CC5D767CB783E823412FC6950978668B10EC9F865752249F79794ABE0CC727
+No rendering or UI-layout changes. BBCode tags validated and preview regenerated.
+
+Player configuration, custom resources, existing local combat-cycle test DLL,
+and previous dist artifacts are preserved. No local DLL deployment is performed
+because the installed development build is still being tested separately.
+Full installation ZIP omits the player-owned INI. Matching stable source ZIP
+includes per-file hashes. Disable the old controller-chord patch when upgrading.
+
+Other controller environments and frame-generation/TRP compatibility are not
+declared universally fixed by this report. No upload, commit, push or remote
+release creation was performed.

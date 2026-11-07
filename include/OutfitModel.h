@@ -40,6 +40,18 @@ namespace Wheel::Outfits {
             std::none_of(name.begin(),name.end(),[](unsigned char c){return c<32 || c==127;}) &&
             std::any_of(name.begin(),name.end(),[](unsigned char c){return c>32;});
     }
+    // Shared by the reader and capture diagnostics; keep rejected fields intact
+    // so a failing modded item can be identified rather than silently altered.
+    inline const char* PieceDataProblem(const Piece& x) {
+        if(!x.base.id)return "base-id-zero";
+        if(x.base.plugin.size()>=260 || x.enchantment.plugin.size()>=260 || x.owner.plugin.size()>=260)return "plugin-name-too-long";
+        if(!std::isfinite(x.health))return "health-not-finite";
+        // Zero is observed on real apparel instances; preserve it for exact matching.
+        if(x.health<0)return "health-negative";
+        if(x.customName.size()>512)return "custom-name-too-long";
+        if(x.label.size()>512)return "display-label-too-long";
+        return nullptr;
+    }
     inline std::string Encode(const std::vector<Preset>& presets) {
         std::ostringstream out;out.imbue(std::locale::classic());out<<"FWO 1 "<<presets.size()<<'\n'<<std::setprecision(std::numeric_limits<float>::max_digits10);
         auto ref=[&](const FormRef& r){out<<std::quoted(r.plugin)<<' '<<r.id<<' ';};
@@ -65,7 +77,7 @@ namespace Wheel::Outfits {
             for(unsigned j=0;j<n;++j) {
                 Piece x;unsigned uid=0;
                 if(!ref(x.base)||!ref(x.enchantment)||!ref(x.owner)||!(in>>uid>>x.health>>std::quoted(x.customName)>>std::quoted(x.label)) ||
-                    !x.base.id || uid>65535 || !std::isfinite(x.health) || x.health<=0 || x.customName.size()>512 || x.label.size()>512) return false;
+                    uid>65535 || PieceDataProblem(x)) return false;
                 x.unique=static_cast<std::uint16_t>(uid);p.pieces.push_back(std::move(x));
             }
             next.push_back(std::move(p));

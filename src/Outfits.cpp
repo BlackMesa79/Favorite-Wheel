@@ -2,6 +2,9 @@
 #include "OutfitModel.h"
 #include "OutfitStep.h"
 #include "OutfitPlan.h"
+#include "CombatPresets.h"
+#include "CombatCycles.h"
+#include "InventoryOrder.h"
 #include "UIResources.h"
 #include "Settings.h"
 #include <filesystem>
@@ -107,12 +110,19 @@ namespace Wheel::Outfits {
         std::uint32_t NextID() {std::uint32_t id=1;for(const auto& p:presets)id=std::max(id,p.id+1);return id;}
         void Save(SKSE::SerializationInterface* api) {
             std::lock_guard lock(mutex);const auto text=Encode(presets);
-            if(!api->WriteRecord(record,1,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets");
+            if(!api->WriteRecord(record,1,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets: presets={} bytes={}",presets.size(),text.size());
+            else SKSE::log::info("Outfit co-save written: presets={} bytes={}",presets.size(),text.size());
+            Combat::Save(api);Cycles::Save(api);Ordering::Save(api);
         }
-        void Revert(SKSE::SerializationInterface*) {std::lock_guard lock(mutex);presets.clear();reportedProblems.clear();}
+        void Revert(SKSE::SerializationInterface*) {std::lock_guard lock(mutex);presets.clear();reportedProblems.clear();Combat::Revert();Cycles::Revert();Ordering::Revert();}
         void Load(SKSE::SerializationInterface* api) {
             std::lock_guard lock(mutex);presets.clear();reportedProblems.clear();std::uint32_t type,version,length;
+            Combat::Revert();Cycles::Revert();Ordering::Revert();
             while(api->GetNextRecordInfo(type,version,length)) {
+                if(type==Combat::record){Combat::Load(api,version,length);continue;}
+                if(type==Combat::bindingRecord){Combat::LoadBindings(api,version,length);continue;}
+                if(type==Cycles::record){Cycles::Load(api,version,length);continue;}
+                if(type==Ordering::record){Ordering::Load(api,version,length);continue;}
                 if(type!=record || version!=1 || length>1024*1024)continue;
                 std::string text(length,'\0');std::vector<Preset> loaded;
                 if(api->ReadRecordData(text.data(),length)!=length || !Decode(text,loaded)) {SKSE::log::error("Invalid outfit record");continue;}
@@ -125,6 +135,7 @@ namespace Wheel::Outfits {
                 }
                 presets=std::move(loaded);
             }
+            Cycles::FinalizeLoad();
             SKSE::log::info("Loaded {} outfit presets from character co-save",presets.size());
         }
     }
@@ -156,7 +167,8 @@ namespace Wheel::Outfits {
         Preset next;next.name=name;if(!ValidName(name))return false;
         const auto inventory=Inventory(0,true);
         for(const auto& c:inventory)if(c.worn)next.pieces.push_back(c.piece);
-        if(next.pieces.empty()||next.pieces.size()>64){Tell("outfitEmpty");return false;}
+        if(next.pieces.empty()){Tell("outfitEmpty");return false;}
+        if(next.pieces.size()>64){SKSE::log::warn("Outfit capture rejected: reason=piece-count pieces={} maximum=64",next.pieces.size());Tell("outfitSaveInvalid");return false;}
         std::vector<int> matches;ResolveProblem problem;
         if(!Resolve(next,inventory,matches,&problem)) {
             LogProblem(next,inventory,problem,"capture");Tell("outfitCaptureMismatch");return false;
@@ -164,12 +176,30 @@ namespace Wheel::Outfits {
         std::lock_guard lock(mutex);
         auto found=std::find_if(presets.begin(),presets.end(),[&](const auto& p){return p.id==replace;});
         if(replace && found==presets.end())return false;
-        if(!replace && presets.size()>=100){Tell("outfitLimit");return false;}
+        if(!replace && presets.size()>=100){SKSE::log::warn("Outfit capture rejected: reason=preset-count presets={} maximum=100",presets.size());Tell("outfitLimit");return false;}
         next.id=replace?replace:NextID();
         auto updated=presets;
         if(replace)updated[std::distance(presets.begin(),found)]=next;else updated.push_back(next);
         std::vector<Preset> validated;
-        if(!Decode(Encode(updated),validated)){Tell("outfitLimit");return false;}
+        const auto encoded=Encode(updated);
+        if(!Decode(encoded,validated)) {
+            const char* reason=encoded.size()>1024*1024?"record-size":"record-validation";
+            bool diagnosed=false;
+            for(const auto& p:updated) {
+                for(std::size_t i=0;i<p.pieces.size();++i)if(const auto issue=PieceDataProblem(p.pieces[i])) {
+                    const auto& x=p.pieces[i];reason=issue;
+                    auto label=x.label.substr(0,120);for(auto& c:label)if(static_cast<unsigned char>(c)<32)c=' ';
+                    SKSE::log::warn("Outfit capture item rejected: reason={} preset={} piece={}/{} label='{}' base={}:{:X} runtime={:08X} uid={} health={} label_bytes={} custom_name_bytes={} plugin_bytes={}/{}/{} diagnostic=outfit-capture-v1",
+                        reason,p.id,i+1,p.pieces.size(),label,x.base.plugin.substr(0,80),x.base.id,RuntimeID(x.base),x.unique,x.health,
+                        x.label.size(),x.customName.size(),x.base.plugin.size(),x.enchantment.plugin.size(),x.owner.plugin.size());
+                    diagnosed=true;break;
+                }
+                if(diagnosed)break;
+            }
+            SKSE::log::warn("Outfit capture rejected: reason={} existing_presets={} requested_id={} replace={} pieces={} name_bytes={} record_bytes={} diagnostic=outfit-capture-v1",
+                reason,presets.size(),next.id,replace,next.pieces.size(),next.name.size(),encoded.size());
+            Tell("outfitSaveInvalid");return false;
+        }
         presets=std::move(updated);
         reportedProblems.erase(next.id);
         SKSE::log::info("Outfit saved: preset={} name='{}' pieces={}",next.id,next.name,next.pieces.size());
@@ -242,7 +272,8 @@ namespace Wheel::Outfits {
         }catch(const std::exception& e){SKSE::log::warn("Outfit import canceled: {}",e.what());Tell("outfitImportFailed");return false;}
     }
     void Apply(std::uint32_t id) {
-        if(busy)return;
+        if(busy){SKSE::log::info("Outfit {} apply ignored: busy",id);return;}
+        SKSE::log::info("Outfit {} apply requested",id);
         Preset p;{std::lock_guard lock(mutex);for(const auto& entry:presets)if(entry.id==id)p=entry;}
         if(!p.id)return;
         auto inventory=Inventory();std::vector<int> matches;ResolveProblem problem;

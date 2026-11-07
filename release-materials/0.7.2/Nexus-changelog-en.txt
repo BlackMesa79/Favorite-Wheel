@@ -1,0 +1,4 @@
+0.7.2
+- Fixed dual wielding identical weapons when only one copy is favorited.
+- Fixed false "item changed" errors after weapon stacks split or merge.
+- Fixed cursor recentering when first equipping a stacked weapon.

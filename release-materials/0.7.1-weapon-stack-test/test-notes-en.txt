@@ -1,0 +1,11 @@
+Favorite Wheel 0.7.1 - weapon stack development test (October 16, 2026)
+
+Test two ordinary identical swords, favorite one and leave the other unfavorited.
+Equip right, equip left to get L+R, then toggle each hand and equip again without reopening.
+Test both split-looking steel swords and other normally stacked swords.
+Repeat with Pause + KeepOpen and swapped mouse hands. Check binding a quick slot and equipping without reopening too.
+
+The test groups compatible ordinary copies and chooses an unworn physical copy instead of reusing a worn favorite anchor. Split/merged native lists can be re-resolved as the same logical plain stack. Modified/protected instances stay separate.
+Game validation in the reporter's Skyrim 1.5.97 environment is pending.
+New log entries: Weapon stack selection / Weapon exact selection / Weapon hand request (with afterL and afterR).
+Keep the formal release package; this development archive does not contain the main INI.

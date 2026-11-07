@@ -1,0 +1,10 @@
+Date: 2026-10-26
+Release: 0.9.0.0
+DLL SHA256: 1FB3738D44C66BD94668044401BE35169E6F39EB47C689B29C0CE28935A46058
+Release x64 build passed; installed DLL hash matches; main INI hash unchanged.
+Test programs passed: RuntimeLayoutTests, InventoryOrderTests, WheelLogicTests, HandEquipTests, OutfitTests, SettingsTests, SettingsPersistenceTests, CombatPresetTests, CombatCycleTests, InventoryTests, LayoutSkinTests, ItemInfoTests, GameSessionTests
+RuntimeLayoutTests verifies the exported plugin version; runtime checks use fixtures, not game sessions.
+Language migration tests passed. BBCode tags balanced; HTML preview regenerated.
+User reported the reviewed build passed in-game before this version bump.
+No new gameplay testing, online upload, Git commit or push performed by the agent.
+Binary/source archives are prepared by scripts/package.ps1; package checksums are stored separately in dist.

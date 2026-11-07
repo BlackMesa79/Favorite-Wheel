@@ -1,0 +1,6 @@
+0.7.1
+- Fixed wheel initialization after title-screen console commands such as coc qasmoke.
+- Fixed controller Favorites modifiers from custom control maps, preserving unmodified button actions.
+- Favorites now takes priority when its controller chord overlaps Actions.
+- Fixed switching a single weapon directly between hands.
+- Spells equipped in both hands now keep only the selected hand when clicked again.

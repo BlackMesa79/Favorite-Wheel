@@ -1,0 +1,15 @@
+Favorite Wheel 0.6.0 - Skyrim theme preview
+
+Upload: FavoriteWheel-Skyrim-theme-en-2560x1440.png
+Resolution: 2560 x 1440. All visible labels, item names and effects are English.
+Generated with the actual production DrawWheel path using D3D11 WARP and
+synthetic inventory data. The backdrop and small captions are for presentation.
+The image labels itself as an offscreen UI preview with sample inventory.
+No Bethesda screenshot, artwork or font file is included.
+
+Reproduce from the matching source checkout:
+  xmake build WheelPreview
+  pwsh -NoProfile -File release-materials/0.6.0/render-skyrim-showcase.ps1
+
+The showcase changes only the offline renderer fixture; the released plugin
+DLL and gameplay behavior are unchanged.

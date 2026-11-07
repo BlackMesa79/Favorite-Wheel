@@ -1,0 +1,21 @@
+Outfit-save diagnostics test, 2026-10-19 (Asia/Hong_Kong)
+Built on stable 0.7.3, with its accepted controller fix; no combat cycles.
+DLL SHA256: FF7F925722508E2D10002DEEDD4907D8499BC025B1EFA3562ED2E3813693B66D
+Version remains 0.7.3.0; identify added logs by diagnostic=outfit-capture-v1.
+
+18 isolated stable test suites passed after the patch rebuild. These include
+OutfitTests, Settings/SettingsVfs tests and real address-library/runtime checks.
+OutfitTests covers all four Windows process locales (nb-NO, de-DE, fr-FR,
+en-US), exactly 100 vs 101 presets, one invalid item below the count limit,
+transactional rejection, generated-label boundaries and field-specific reasons.
+
+Existing equipment-data acceptance conditions and FWO 1 serialization remain
+unchanged. No invalid item values are normalized, omitted or silently accepted.
+The observed misleading count message is corrected, but the specific equipment
+field responsible for the reporter's failure is NOT established by the old log.
+Actual reporter-side validation remains necessary.
+
+The patch contains only DLL + English instructions/full license notices.
+No main INI, language or theme files are deployed. Source translations are
+updated; missing installed keys use the built-in English fallback.
+Existing local installation and all earlier release/test archives are preserved.

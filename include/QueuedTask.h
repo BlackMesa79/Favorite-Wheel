@@ -4,6 +4,12 @@
 #include <utility>
 
 namespace Wheel {
+    // An invalidated refresh may leave an old directory loaded but unusable.
+    // Retry after the previous task releases its slot, not only on first load.
+    constexpr bool DirectoryRequestNeeded(bool loaded,bool loading,bool queued) {
+        return (!loaded || loading) && !queued;
+    }
+
     // Always relinquish the queue slot, including early returns and C++ errors.
     // A failed task reports once; the caller decides whether to close its menu.
     template<class Work,class Error>

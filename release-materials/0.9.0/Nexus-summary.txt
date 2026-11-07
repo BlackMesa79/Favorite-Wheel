@@ -1,0 +1,1 @@
+Categorized Favorites and action wheels with drag-and-drop sorting, damage/armor/cost ordering, combat cycles, outfit and weapon presets, optional wheel memory, and keyboard/mouse/controller support.

@@ -1,0 +1,162 @@
+[center][size=6][b]Favorite Wheel - Radial Actions[/b][/size]
+[color=#C9AA72]Your favorites and actions, at your fingertips.[/color]
+[size=2]Version 0.7.1[/size][/center]
+
+Replace Skyrim's Favorites menu with a categorized wheel for your items and spells. Switch to a separate action wheel for combat and outfit presets and optional Face Lighting controls. Supports keyboard, mouse, and controller.
+
+[size=4][color=#C9AA72][b]Features[/b][/color][/size]
+[list]
+[*][b]Favorites or full inventory[/b] — Browse nine categories, including separate Potions and Poisons, with ten entries per page. Empty categories can be hidden; each wheel remembers its last category during the session.
+[*][b]Item details[/b] — Hover to check available damage, armor, weight, value, spell cost, and effects.
+[*][b]Pause or slow time[/b] — Choose paused gameplay, adjustable slow time, or normal speed.
+[*][b]Hand states[/b] — Equipped weapons and spells show L/R beside the inner shortcut number, or L+R/2H at the outer sector corners. Hover details show the full hand state.
+[*][b]Combat presets[/b] — Save and restore left/right weapons and spells together, including mixed pairs, shields, torches, two-handed equipment and empty hands. Assign shared 1–8 keyboard shortcuts. Icons use crossed swords.
+[*][b]Outfit presets[/b] — Save, apply, rename, import, and export armor, clothing, and jewelry sets.
+[*][b]Controller movement[/b] — Optionally move with the left stick while selecting with the right stick in Slow/Normal speed.
+[*][b]Make it yours[/b] — Built-in settings, configurable bindings, three redesigned themes, wheel size and position, background dimming, sounds, and fan-style animations.
+[/list]
+
+[size=4][color=#C9AA72][b]Install & get started[/b][/color][/size]
+[list]
+[*][url=https://skse.silverlock.org/][b]SKSE64[/b][/url] and [url=https://www.nexusmods.com/skyrimspecialedition/mods/32444][b]Address Library[/b][/url], both matching your game version.
+[*]Microsoft Visual C++ 2015–2022 x64 Redistributable.
+[*]Install the ZIP with your mod manager and launch through SKSE.
+[/list]
+
+Mark items or spells as favorites, return to gameplay, and press [b]Q[/b]. To show carried items instead, choose [b]F2 → Gameplay → Item source → All inventory → Apply[/b]. Spells, shouts, and powers remain favorites only.
+
+Torches equip to the left hand and can be toggled off. Poisons have their own category; selecting one closes the wheel and uses Skyrim's native weapon checks and confirmation.
+
+No ESP, Papyrus scripts, SkyUI, or SKSE Menu Framework required.
+
+[size=4][color=#C9AA72][b]Controls[/b][/color][/size]
+[b]Keyboard & mouse[/b]
+[list]
+[*][b]Q / Shift + Q[/b] — Open favorites / actions. [b]R[/b] switches between them.
+[*][b]A / D[/b] — Change category. [b]W / S[/b] or mouse wheel — Change page. Arrow keys also work.
+[*][b]Mouse[/b] — Select an entry; return to the center to clear selection.
+[*][b]Left click / Enter[/b] — Use or equip. [b]Right click[/b] — Equip to the left hand where supported, or manage a combat/outfit preset. The mouse hand preference can reverse item clicks.
+[*][b]Switch hands[/b] — A single weapon moves directly to the chosen hand. A spell in L+R keeps only the chosen hand when clicked again.
+[*][b]1–8 over a favorite or combat preset[/b] — Assign a shared native quick slot; press the same number again to clear it. Close the wheel to use the shortcut. Save the game after changing bindings.
+[*][b]F2[/b] — Settings. [b]Esc / Tab[/b] — Close or return.
+[/list]
+
+[b]Controller[/b] [size=2](Xbox button names)[/size]
+[list]
+[*][b]D-Pad Up / LB + D-Pad Up[/b] — Open favorites / actions. [b]Y[/b] switches wheels.
+[*][b]Left stick[/b] — Select. [b]A / X[/b] — Use or equip right / equip left or manage a preset.
+[*][b]LB / RB[/b] — Change category. [b]LT / RT[/b] — Equip left / right, or use consumables and other entries.
+[*][b]D-Pad Up / Down[/b] — Change page; release the opening button first.
+[*][b]Start[/b] — Settings. [b]B[/b] — Close or return.
+[/list]
+
+Opening shortcuts follow your game's [b]Favorites[/b] binding by default. Customize keys and modifiers in settings; controller category buttons can swap between LB/RB and LT/RT. Custom controller maps retain their Favorites modifier; identical Favorites/Actions controller chords prefer Favorites. Choose a different Actions modifier if needed.
+
+[size=4][color=#C9AA72][b]Gameplay & settings[/b][/color][/size]
+Open [b]F2[/b] or controller [b]Start[/b] for Appearance, Keyboard, Controller, and Gameplay settings. [b]Apply[/b] saves changes; Cancel discards unsaved edits.
+[list]
+[*][b]Time behavior[/b] — Pause is the default. Slow time defaults to 50%, adjustable from 50–100% to reduce low-speed physics problems. Existing lower values are normalized when loaded; existing slow-time effects are respected. Settings and outfit dialogs always pause; in live modes, you can still take damage.
+[*][b]Keep open after equip[/b] — On by default for equipment, magic, and other actions. Ordinary equipment can be changed while Pause mode stays paused. Potions, poisons, food, combat presets, and outfit presets always close the wheel.
+[*][b]Left stick movement[/b] — Off by default. Enable and Apply to move with the left stick and select with the right in Slow/Normal speed. Center the right stick after closing to restore camera control. Sprint buttons remain wheel controls.
+[*][b]Appearance[/b] — Adjust size, position, and effects. New installations place the wheel on the right; existing positions are preserved.
+[/list]
+
+[b]Upgrading:[/b] Configuration saving fixes are included. Disable any separate test patches when installing this release.
+
+Updates [b]do not include the main FavoriteWheel.ini[/b], preserving your saved settings. Without it, built-in defaults apply; the first successful Apply creates the file. MO2 users may find it in Overwrite or their configured output mod. Vortex uses the deployed game Data path; a newly generated INI need not appear automatically in staging.
+
+[size=4][color=#C9AA72][b]Combat presets (0.7.0)[/b][/color][/size]
+Equip your desired hands, then open [b]Actions → Combat → Save hands[/b]. Supports dual weapons/spells, mixed pairs, shields/torches, two-handed equipment and empty hands.
+[list]
+[*][b]Left-click[/b] to apply; [b]right-click[/b] to rename, overwrite or delete. Applying closes the wheel and equips spells without casting.
+[*][b]Hover + 1–8[/b] to bind a shortcut; press the same number again to unbind. Close the wheel to use it in gameplay.
+[*][b]Shared slots[/b] — Items and presets share slots 1–8. New assignments replace previous bindings; later SkyUI/vanilla item bindings take priority. Unbinding does not restore the displaced item shortcut.
+[*][b]Save your game[/b] after edits. Presets and shortcuts belong to each character’s [b].skse[/b] co-save. Missing or changed gear may make a preset unavailable.
+[/list]
+
+[b]Mouse hands:[/b] F2 → Keyboard → Swap mouse hands → On → Apply enables [b]LMB left / RMB right[/b]. Presets keep left-click apply / right-click manage.
+
+[b]Input & rendering:[/b] Improved controller modifier shortcuts and missing-font fallback. Category arrows now use vector shapes; valid custom fonts remain supported.
+
+[size=4][color=#C9AA72][b]Outfit presets[/b][/color][/size]
+Wear the outfit you want to save, open the action wheel, and choose [b]SAVE CURRENT[/b].
+[list]
+[*][b]Select a preset[/b] to change outfits. Shared pieces stay worn; new pieces equip before old leftovers are removed. Selecting an exact already worn outfit removes it.
+[*][b]Right-click / X[/b] to rename, overwrite, delete, or export a preset.
+[*][b]Weapons, shields, and ammunition are excluded.[/b] You must own the saved equipment. Applying or removing a preset closes the wheel.
+[*][b]Save the game after editing presets.[/b] They belong to your character's SKSE co-save; keep the matching [b].skse[/b] file when transferring saves.
+[/list]
+
+Import/export uses [b].fwo[/b] files in [b]Data/SKSE/Plugins/FavoriteWheel/Outfits/Imports/[/b] and [b]Exports/[/b]. Imports require matching inventory items. Dynamic equipment cannot be exported. Missing or modified equipment may require recapturing the preset; other equipment mods can affect the change. Presets capture apparel worn in the game's normal equipment slots; virtual finger slots managed by multi-ring mods such as My Preciouses are not currently captured.
+
+[size=4][color=#C9AA72][b]Compatibility & integrations[/b][/color][/size]
+[list]
+[*][b]Tested in-game:[/b] Skyrim 1.5.97 and 1.6.1170.
+[*][b]Supported, not yet tested in-game:[/b] 1.6.640, GOG 1.6.659 / 1.6.1179, and 1.7.99 / 1.7.104.
+[*][b]GOG:[/b] 1.6.659 requires GOG SKSE64 2.2.3 and versionlib-1-6-659-0.bin; 1.6.1179 requires GOG SKSE64 2.2.6 and its 1179 Address Library. Older GOG SKSE builds are available in the [url=https://skse.silverlock.org/download/archive/]official archive[/url]. For 1.7, use matching SKSE64 and version-5 Address Library files.
+[/list]
+
+Other runtimes and VR are unsupported. Disable competing Favorites-menu replacements.
+
+[b]Skyrim Souls RE / Double Favorite As Important[/b] — Opening is blocked in Tween, Skills, and Level Up menus even when unpaused. Important items are omitted from Favorites mode and protected against native quick-slot assignment; they remain visible in All inventory. These fixes have local regression coverage; combined in-game testing is still pending.
+
+[b]STB Hotkey System[/b] — Its bindings replace Skyrim's native quick-slot system. Assign STB hotkeys in Inventory/Magic or the original Favorites menu; avoid assigning native 1–8 slots through this wheel when STB is installed. This version does not read or write STB bindings.
+
+[b]Face Lighting SKSE[/b] — Optional player, targeted NPC, and follower controls through a compatible public API V1. The category is hidden without a compatible installation. Aim at an NPC before opening the wheel.
+
+[b]Skyrim Text Bridge[/b] — Optional IME support for preset names. Keyboard input and Unicode clipboard paste also work without it.
+
+[url=https://www.nexusmods.com/skyrimspecialedition/mods/97674][b]Ultimate Animated Potions NG[/b][/url] and [url=https://www.nexusmods.com/skyrimspecialedition/mods/42602][b]Eating Animations and Sounds SE[/b][/url] worked in user testing.
+
+[size=2]Item details may differ for conditional or scripted effects. Books, ingredients, and miscellaneous items can be listed but cannot be directly used. Selecting magic equips it for normal casting. Beast forms use the original Favorites menu.[/size]
+
+[size=4][color=#C9AA72][b]Themes & translations[/b][/color][/size]
+[b]Themes:[/b] Classic Gold, Skyrim, and Skyrim Polygon.
+[list]
+[*][b]Classic Gold[/b] — Rebuilt warm gold rims, dark surfaces, engraved seams, and matching panels.
+[*][b]Skyrim[/b] — A circular charcoal wheel with thin silver-gray Nordic framing.
+[*][b]Skyrim Polygon[/b] — The same Skyrim material with a ten-sided wheel and preferred right-side details.
+[/list]
+
+[b]Upgrading from 0.5.2:[/b] Back up local theme edits, then remove [b]frost.ini, engraved.ini, minimal.ini, and ellipse.ini[/b] from [b]SKSE/Plugins/FavoriteWheel/Themes/[/b] if present. Install the new [b]classic.ini[/b]. Copying the ZIP over an existing mod folder does not remove old files. Keep your main INI and any custom themes; a missing selected theme falls back to Classic Gold.
+
+[b]Languages:[/b] English, Simplified Chinese, French, Brazilian Portuguese, Russian, Japanese, Korean, and German.
+
+[b]System[/b] mode follows your Windows display language and falls back to English. Manual selection is also available. Japanese/Korean use installed system fonts automatically.
+
+Thanks to [url=https://next.nexusmods.com/profile/Ardios][b]Ardios[/b][/url] for the French base translation; current-version additions are maintained by the project.
+
+Want to translate? Copy [b]Languages/en.ini[/b], rename it to your locale, and translate the values while keeping the keys unchanged. Save as UTF-8 and restart. Missing text falls back to English.
+
+[url=https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/LOCALIZATION.md][b]Translation guide[/b][/url]
+
+[size=4][color=#C9AA72][b]Make a theme[/b][/color][/size]
+Copy one of the three theme INIs in [b]SKSE/Plugins/FavoriteWheel/Themes/[/b] to a new filename, such as [b]my-theme.ini[/b]. Change [b]Name[/b] to your display name, edit the values, save as UTF-8, and restart Skyrim. Select the new theme in [b]F2 → Appearance → Theme → Apply[/b]. Use a new filename so updates do not replace your theme.
+
+Themes have three independent layers:
+[list]
+[*][b]Colors and component style[/b] — Use [b]Style=classic[/b] for the new gold components, [b]Style=skyrim[/b] for the Skyrim skin, or [b]Style=etched[/b] for legacy components. Color values such as Accent, Sector, Hover, Panel, and Border use [b]RRGGBBAA[/b]; Ornament and Relief control decoration and shading.
+[*][b]Materials and frames[/b] — Set [b]SurfaceTexture=Textures/my-material.png[/b], relative to the Themes folder. [b]MaterialStrength[/b] is 0–1; [b]MaterialZoom[/b] is 1–4. With the Skyrim style, [b]FrameStyle=nordic[/b] adds Nordic framing; plain keeps simpler outlines. White material pixels preserve theme colors and darker pixels darken them. Missing images use solid fills.
+[*][b]Wheel shape and detail placement[/b] — [b]WheelShape=circle, ellipse, or polygon[/b] selects a shape. Ellipse stretch uses [b]WheelStretchX[/b] (0.9–1.25) and [b]WheelStretchY[/b] (0.9–1.2). [b]DetailPosition=auto, left, right, top, bottom, or center[/b] chooses a placement preference; [b]DetailGap[/b] is 16–80. Placement can fall back to fit the screen; center uses the compact central information display.
+[/list]
+
+For a quick example, copy [b]skyrim.ini[/b] to [b]my-theme.ini[/b], then add or change:
+[size=2]Name=My Nordic Polygon
+WheelShape=polygon
+DetailPosition=left
+DetailGap=24
+Accent=EFD69CFF[/size]
+
+The example keeps the copied Skyrim material and uses a gold accent, ten-sided wheel, and left-side detail preference. Shapes retain ten item slots and the existing controls. Custom navigation hierarchies, arbitrary meshes, slot counts, and icon replacement are not part of this release. Materials must be local PNG files; absolute paths and paths outside Themes are rejected. Materials and borders are created by the project; no Bethesda artwork or fonts are bundled.
+
+[url=https://github.com/BlackMesa79/Favorite-Wheel/blob/main/docs/THEME_AUTHORING_0.6.0.md][b]Full theme-making guide, sample INI, and parameter limits[/b][/url]
+
+[size=4][color=#C9AA72][b]Source & feedback[/b][/color][/size]
+[url=https://github.com/BlackMesa79/Favorite-Wheel][b]Source code on GitHub[/b][/url] — [url=https://www.gnu.org/licenses/gpl-3.0.html][b]GPL-3.0[/b][/url]. Modification and redistribution follow the license; third-party notices are included. Provided without warranty.
+
+For bug reports, include your game/SKSE/mod versions, reproduction steps, and [b]FavoriteWheel.log[/b] from [b]Documents/My Games/Skyrim Special Edition/SKSE/[/b]. Include a crash log for crashes.
+
+Thanks to the SKSE, CommonLibSSE-NG, Address Library, Dear ImGui, spdlog, DirectX contributors, and everyone helping test the mod.
+
+[size=2]Developed with AI assistance and hands-on testing. The cover is original vector artwork, not an in-game screenshot.[/size]
+

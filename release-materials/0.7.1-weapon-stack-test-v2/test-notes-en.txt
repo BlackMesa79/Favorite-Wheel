@@ -1,0 +1,9 @@
+Favorite Wheel 0.7.1 - weapon stack development test v2 (October 16, 2026)
+
+Retains the first weapon-stack test fixes, which the user confirmed worked locally.
+Fixes cursor recentering after first equipping a plain stack whose native favorite anchor changes.
+Refresh now compares the logical plain weapon pool for selection preservation. Changed exact variants and genuinely replaced or missing rows still clear selection.
+
+Reopen the wheel with two plain steel swords and equip for the first time: the cursor should stay in place. Repeat left/right equip, dual wield and separate hand toggles. Also verify a genuinely removed/replaced hovered item still clears selection.
+Automated checks pass; in-game verification of this cursor fix is pending.
+No main INI is included. The formal 0.7.1 archives and prior test packages remain unchanged.

@@ -1,0 +1,2 @@
+0.7.3
+- Fixed LB+Y opening vanilla Favorites instead of the wheel with custom controller maps, while preserving the unmodified button.

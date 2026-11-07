@@ -1,0 +1,6 @@
+DLL SHA256: 313D98802E81894B36B8B9D2BB56F3D5F2B2C20A81384D105CF362375D826C8F
+Runtime ZIP SHA256: 4CAE436F085DE7700B9C91727C968299F09631232137E2D421DA8674E91C9885
+Source ZIP SHA256: 7C09DF9FB5783D86713587F754A3C1BC4C1E54BC5FF44BE0C58A8BE6DC35B174
+Source files verified: 3390
+Original 0.7.0 runtime/source archives unchanged.
+17 local suites passed; Restored formal renderer; in-game visibility validation pending; frame-generator compatibility unverified.

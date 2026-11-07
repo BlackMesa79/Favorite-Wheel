@@ -1,0 +1,28 @@
+Combat cycles development test, based on 0.7.2
+Release x64 DLL built successfully.
+DLL SHA256: 0D5883EF2D4C59D0A6F6EC67F6255FD0BB37081A286C727AFB621788AE4B095F
+
+19 suites passed:
+HandEquipTests, GameSessionTests, SettingsTests, SettingsPersistenceTests,
+SettingsVfsTests (isolated usvfs), WheelLogicTests, TimeTests, RuntimeLayoutTests
+(real address libraries including GOG 1.6.659), InventoryTests, OutfitTests,
+NameEditorTests, ItemInfoTests, FaceLightClientTests, ActorRuntimeTests,
+SkinTextureTests, LayoutSkinTests, SectorMeshTests, CombatPresetTests,
+CombatCycleTests.
+
+WARP/native Draw visual checks passed for the cycle wheel, Chinese group
+management, German chord capture, English member management/list, Chinese
+clear confirmation and the existing combat quick-slot footer. No overlap or
+clipped panel instructions observed at the checked 720p/1080p layouts.
+Preview files: build/cycles-*.preview.jpg; generated images stay outside packages.
+
+Stable Renderer.cpp SHA256 remains:
+12CC5D767CB783E823412FC6950978668B10EC9F865752249F79794ABE0CC727
+
+Local MO2 test DLL installed after backing up the previous 0.7.2 DLL.
+248 new language keys appended across 8 files; all existing language bytes
+preserved. Other installed resources, main INI and 142 earlier dist files
+were verified unchanged. Automatic deployment configuration restored.
+
+In-game cycling, save/reload, real equipment jobs and external key conflicts
+remain manual test items. No Gamepad++ or frame-generation fix is claimed.

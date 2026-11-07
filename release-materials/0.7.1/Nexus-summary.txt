@@ -1,0 +1,1 @@
+A configurable favorites and action wheel with combat/outfit presets, visible hand states, controller support and three themes. Version 0.7.1 fixes title-screen console startup and custom controller Favorites chords.

@@ -5,12 +5,15 @@ namespace Wheel {
         bool enabled = true;
         bool allInventory = false;
         bool hideEmptyCategories = true;
+        bool rememberLastWheel = false; // Session-local wheel selection; explicit actions entrance remains direct.
         bool keepOpen = true; // Equipment/magic/actions stay open; consumables close.
+        bool keepOpenConsumables = false; // Potions and food only; poisons still close.
         int timeMode = 0; // 0 pause, 1 slow, 2 unchanged game speed.
         int slowPercent = 50; // Relative slowdown, with an absolute 50% physics floor.
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
         std::string theme = "classic";
         bool showHints = true;
+        bool showActionNotifications = true;
         float scale = 1.0f;
         float wheelScale = 1.0f;
         int positionX = 72, positionY = 46;
@@ -27,6 +30,7 @@ namespace Wheel {
         int gamepadActionModifier = 274; // LB, SKSE macro keycode.
         int gamepadCategoryButtons = 0; // 0 LB/RB categories, LT/RT use; 1 swaps the pairs.
         bool gamepadMoveWhileOpen = false; // Left stick moves in live modes; right stick selects.
+        bool swapMouseHands = false; // LMB left / RMB right when enabled; preset management is unchanged.
         std::string font = "C:/Windows/Fonts/msyh.ttc";
         bool operator==(const Settings&) const = default;
     };
@@ -37,6 +41,7 @@ namespace Wheel {
     void EditSettings(Settings values);
     void RevertSettings();
     bool SaveSettings();
+    bool SaveExternalSettings(const Settings& expected,Settings values);
     void DefaultSettings();
     void SetSettingsPath(const std::string& path);
     std::string SettingsDiagnostic(); // Last load/save path, stage and Win32 error.

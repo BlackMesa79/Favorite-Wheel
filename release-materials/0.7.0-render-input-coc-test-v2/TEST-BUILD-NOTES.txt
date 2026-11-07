@@ -1,0 +1,34 @@
+Favorite Wheel 0.7.0 - native UI / controller / COC TEST BUILD v2
+
+Install over 0.7.0 using your mod manager. Keep your INI and controlmap.
+Version metadata remains 0.7.0; identify this build by its route marker below.
+
+New in v2: fix selection of the UI render target
+The previous test assumed the target bound on entry to a custom menu callback
+was the UI layer. The paused path could instead inherit a scene/HDR target.
+This build explicitly requests the engine's UI framebuffer, then reads the
+actual resource/dimensions after any renderer redirection. The original render
+targets and depth binding are restored, including on exceptions.
+Log marker: route=menu-framebuffer-v2
+The target log includes actual format and entry_format for comparison.
+
+Includes the earlier title-screen COC startup fix and controller chord fixes.
+COC recovery marker: startup=implicit-v1
+Controller marker: binding=native-chord-v1
+
+Test both startup paths:
+1. From a fresh game title screen, run coc qasmoke, finish loading and close
+   the console. Press Q and check that the wheel is VISIBLE and interactive.
+2. Load a normal save and check the same behavior.
+3. Check Pause/Slow/Live, Keep Open, open/close animations and focus changes.
+4. Test with your usual rendering setup. For Kontrol/custom bindings, keep
+   GamepadHotkey=-1 and GamepadModifier=-1 to inherit the game's Favorites chord;
+   check plain Y and LB+Y separately without changing other game bindings.
+
+18 local suites passed, including WARP tests starting on the wrong HDR target,
+renderer redirection, full target/depth restoration, exception cleanup, session
+lifecycle cases and seven real Address Library databases. These tests do not
+replace in-game validation with Community Shaders, ENB or frame generation.
+
+No player INI or controlmap is included. Earlier test archives and the formal
+0.7.0 release remain separate. Reinstall original 0.7.0 to revert.

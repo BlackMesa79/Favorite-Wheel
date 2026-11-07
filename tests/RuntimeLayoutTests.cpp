@@ -21,6 +21,7 @@ static_assert(!Wheel::MagicCategory(false,RE::MagicSystem::SpellType::kDisease))
 
 namespace
 {
+    static_assert(offsetof(RE::ControlMap::UserEventMapping,modifier)==0xA);
     void Check(bool value, const char *what)
     {
         if (!value)
@@ -36,9 +37,13 @@ namespace
     }
     const std::array criticalIDs = {
         REL::RelocationID(67315, 68617),   // input dispatch enclosing function
+        REL::RelocationID(690315, 398170), // BSPCGamepadDeviceDelegate RTTI
+        REL::RelocationID(690317, 398172), // BSWin32GamepadDevice RTTI
+        REL::RelocationID(102238, 109689), // RTDynamicCast for checked native delegate access
         REL::RelocationID(524907, 411393), // renderer singleton
         REL::RelocationID(37938, 38894),   // EquipObject
         REL::RelocationID(37945, 38901),   // UnequipObject
+        REL::RelocationID(39406, 40481),   // UsePoisonFromInventory / native poison checks
         REL::RelocationID(15757, 15995),   // instance value
         REL::RelocationID(15788, 16026),   // instance enchantment
         REL::RelocationID(39175, 40249),   // player armor display value
@@ -113,7 +118,7 @@ namespace
         Check(dll != nullptr, "load plugin for metadata inspection");
         const auto info = reinterpret_cast<const SKSE::PluginVersionData *>(GetProcAddress(dll, "SKSEPlugin_Version"));
         Check(info && info->GetPluginName() == "FavoriteWheel", "exported plugin name");
-        Check(info->GetPluginVersion() == REL::Version{0, 5, 3, 0}, "exported plugin version");
+        Check(info->GetPluginVersion() == REL::Version{FAVORITEWHEEL_VERSION_MAJOR, FAVORITEWHEEL_VERSION_MINOR, FAVORITEWHEEL_VERSION_PATCH, 0}, "exported plugin version");
         Check(info->versionIndependenceEx & SKSE::PluginVersionData::kVersionIndependentEx_AddressLibraryV5,
               "exported Address Library v5 flag");
         Check(info->versionIndependence & SKSE::PluginVersionData::kVersionIndependent_AddressLibraryPostAE,
@@ -125,13 +130,13 @@ namespace
 int wmain(int argc, wchar_t **argv)
 {
     using namespace Wheel::RuntimeSupport;
-    Check(argc == 1 || argc == 3 || argc == 5 || argc == 6 || argc == 7,
-          "optional args: 1.5.97, 1.6.1170, then 1.7.99, 1.7.104, then 1.6.640, then GOG 1.6.1179 address libraries");
+    Check(argc == 1 || argc == 3 || argc == 5 || argc == 6 || argc == 7 || argc == 8,
+          "optional args: 1.5.97, 1.6.1170, then 1.7.99, 1.7.104, then 1.6.640, then GOG 1.6.1179, then GOG 1.6.659 address libraries");
     Check(Supported({1, 5, 97, 0}) && Supported({1, 6, 640, 0}) && Supported({1, 6, 1170, 0}) && Supported({1, 7, 99, 0}) &&
-              Supported({1, 7, 104, 0}) && Supported({1, 6, 1179, 0}),
+              Supported({1, 7, 104, 0}) && Supported({1, 6, 1179, 0}) && Supported({1, 6, 659, 0}),
           "target runtimes accepted");
     for (const auto version :
-         {REL::Version{1, 5, 80, 0}, REL::Version{1, 6, 659, 0}, REL::Version{1, 6, 1130, 0}, REL::Version{1, 4, 15, 0},
+         {REL::Version{1, 5, 80, 0}, REL::Version{1, 6, 1130, 0}, REL::Version{1, 4, 15, 0},
           REL::Version{1, 7, 98, 0}, REL::Version{1, 7, 105, 0}, REL::Version{1, 7, 104, 1},
           REL::Version{1, 6, 1178, 0}, REL::Version{1, 6, 1180, 0}, REL::Version{1, 6, 1179, 1}})
         Check(!Supported(version), "unaudited releases and VR stay rejected");
@@ -146,13 +151,27 @@ int wmain(int argc, wchar_t **argv)
         Layout{{1, 7, 99, 0}, 0xF0, 0x3E8, 0xC0, 68617}, Layout{{1, 7, 104, 0}, 0xF0, 0x3E8, 0xC0, 68617},
         // Preserve the existing optional-library argument order; append 1.6.640.
         Layout{{1, 6, 640, 0}, 0xE8, 0x3E0, 0xC0, 68617},
-        Layout{{1, 6, 1179, 0}, 0xF0, 0x3E0, 0xC0, 68617}};
+        Layout{{1, 6, 1179, 0}, 0xF0, 0x3E0, 0xC0, 68617},
+        Layout{{1, 6, 659, 0}, 0xE8, 0x3E0, 0xC0, 68617}};
     unsigned index = 0;
     for (const auto &layout : layouts)
     {
         Check(REL::Module::mock(layout.version), "mock runtime initialization");
         Check(REL::Module::IsAE() == (layout.version.minor() >= 6), "Steam and GOG 1.6/1.7 select AE family");
         Check(REL::RelocationID(inputDispatchSE, inputDispatchAE).id() == layout.input, "SE/AE input ID selection");
+        alignas(RE::MenuControls) std::array<std::byte, 0x100> menuBytes{};
+        auto menus = reinterpret_cast<RE::MenuControls*>(menuBytes.data());
+        Write(menuBytes, 0x80, true); // Processing is not the transformation flag.
+        Write(menuBytes, 0x82, true); // Remapping must not block humanoid players either.
+        Check(!menus->InBeastForm(), "Adjacent menu flags do not imply beast form");
+        Write(menuBytes, 0x81, true);
+        Check(menus->InBeastForm(), "Beast form flag uses the flat-runtime offset, including GOG 1179");
+        Write(menuBytes, 0x81, false);
+        Check(!menus->InBeastForm(), "Returning to humanoid clears the beast form gate");
+        alignas(RE::UI) std::array<std::byte,0x200> uiBytes{};
+        Write(uiBytes,0x160,std::uint32_t{2});
+        auto ui=reinterpret_cast<RE::UI*>(uiBytes.data());
+        Check(ui->numPausesGame==2 && ui->GameIsPaused(),"native UI pause count for retained equipment gate");
         // Native byte offsets are independent of the accessors under test.
         // Poison the alternate version so a fixed layout cannot pass both.
         alignas(RE::ControlMap) std::array<std::byte, 0x150> controls{};
@@ -162,8 +181,22 @@ int wmain(int argc, wchar_t **argv)
         Check(reinterpret_cast<std::byte *>(&map->GetRuntimeData()) == controls.data() + layout.controls,
               "versioned ControlMap base");
         Check(map->GetRuntimeData().textEntryCount == 3, "versioned text entry count");
+        alignas(RE::BSWin32GamepadDevice) std::array<std::byte,0x140> padBytes{};
+        Write(padBytes,0xD8+4,std::uint16_t{0}); // previous packet must not satisfy the chord
+        Write(padBytes,0x100+4,std::uint16_t{0x8100});
+        Write(padBytes,0x100+6,std::uint8_t{31});
+        auto nativePad=reinterpret_cast<RE::BSWin32GamepadDevice*>(padBytes.data());
+        Check(nativePad->GetRuntimeData().currentState.gamepad.buttons==0x8100 &&
+            nativePad->GetRuntimeData().currentState.gamepad.leftTrigger==31 &&
+            nativePad->GetRuntimeData().previousState.gamepad.buttons==0,
+            "Current native gamepad packet layout keeps LB+Y separate from the previous poll on every supported runtime");
         alignas(RE::PlayerCharacter) std::array<std::byte, 0x2000> player{};
         auto character = reinterpret_cast<RE::PlayerCharacter *>(player.data());
+        const auto flagsOffset=layout.version.minor()==5?0xBD8u:layout.version.minor()==7?0xBE8u:0xBE0u;
+        Write(player,flagsOffset+4,std::uint8_t{1});
+        Check(character->GetPlayerFlags().isLoading,"versioned player loading flag for initial-session detection");
+        Write(player,flagsOffset+4,std::uint8_t{0});
+        Check(!character->GetPlayerFlags().isLoading,"cleared player loading flag");
         Check(reinterpret_cast<std::byte *>(&character->GetPlayerRuntimeData()) == player.data() + layout.player,
               "versioned player data");
         Check(reinterpret_cast<std::byte *>(character->AsActorState()) == player.data() + layout.state,
@@ -171,6 +204,10 @@ int wmain(int argc, wchar_t **argv)
         const auto actorOffset = layout.state == 0xB8 ? 0xE0 : 0xE8;
         Check(reinterpret_cast<std::byte *>(&character->GetActorRuntimeData()) == player.data() + actorOffset,
               "versioned actor runtime block");
+        auto voice=reinterpret_cast<RE::TESForm*>(std::uintptr_t{0x12345678});
+        Write(player,actorOffset+0x100,voice);
+        Check(character->GetActorRuntimeData().selectedPower==voice,
+              "versioned actor Voice selection stays independent of equippedForms and hand spells");
         alignas(RE::BSTimer) std::array<std::byte,0x40> timerBytes{};
         Write(timerBytes,0x34,static_cast<std::uint32_t>(2));Write(timerBytes,0x3A,true);
         auto timer=reinterpret_cast<RE::BSTimer*>(timerBytes.data());

@@ -1,0 +1,7 @@
+0.6.1 — Configuration saving fix
+- Fixed settings failing to save and empty/BOM-only INIs incorrectly reported as saved.
+- Replaced Windows INI profile-cache reads/writes with direct file serialization and explicit verification of every saved key.
+- Preserved comments, custom keys, Unicode values and mod-manager file mappings; verified MO2 usvfs and Vortex-style hardlinks locally.
+- Improved diagnostics for empty files, invalid documents and save failures. The original reporter confirmed successful saving with the test patch.
+
+Upgrade from 0.6.0 normally and disable the separate configuration-save test patch. Keep your main INI and custom themes. An empty main INI is repaired when you select Apply.

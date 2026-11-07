@@ -1,0 +1,28 @@
+Favorite Wheel - outfit saving DIAGNOSTIC PATCH (based on 0.7.3)
+
+This patch corrects the misleading "100 presets" message for equipment-data
+validation failures and adds detailed logging. It does not yet claim to fix
+the underlying problem with your particular outfit.
+
+Exit Skyrim, keep Favorite Wheel installed, then install this as a separate
+mod and let its DLL override the regular 0.7.2/0.7.3 DLL. Launch through SKSE.
+The archive contains no INI, language files or themes. It includes the accepted
+0.7.3 controller fix, and does not include the experimental combat-cycle feature.
+
+Please try saving the outfit that previously failed, then send the complete
+FavoriteWheel.log from this session. New messages include:
+  Outfit capture item rejected / Outfit capture rejected
+  diagnostic=outfit-capture-v1
+  Outfit co-save written
+
+Please also tell me:
+- Which armor or clothing items were you wearing when saving failed?
+- Are you using mods that change durability, tempering values, stats or names?
+- Can you save while wearing just one ordinary, unenchanted and untempered
+  piece of vanilla armor?
+
+If a preset saves successfully, save your game and reload that new save to
+check persistence. Creating a preset and writing the game save are separate
+steps. The new log records the number of outfits written to the SKSE cosave.
+
+To roll back, exit Skyrim and disable this patch. No settings reset is needed.

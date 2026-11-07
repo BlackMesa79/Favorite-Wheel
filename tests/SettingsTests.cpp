@@ -9,12 +9,16 @@
 #include <cstdlib>
 #include <cmath>
 void Check(bool condition,const char* message) { if(!condition){std::cerr<<message<<'\n';std::exit(1);} }
+void Ac1_Utf8ThemeId();
+void Ac2_UnreadableThemeEntry();
+void Ac5_BuiltinEnglishCoverage();
+void Ac8_TranslationCacheConsistency();
 int wmain(int argc,wchar_t** argv) {
     using namespace Wheel;
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
     if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
         SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
-        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && v.swapMouseHands && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
             v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
             v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
             "A fresh process reads all applied settings from disk");
@@ -43,6 +47,14 @@ int wmain(int argc,wchar_t** argv) {
     {std::ofstream file(empty,std::ios::binary);}
     SetSettingsPath(empty.string());LoadSettings();
     Check(Config()==Settings{} && std::filesystem::file_size(empty)==0,"Existing empty INI uses defaults and is never rewritten at startup");
+    Check(SettingsDiagnostic().find("loaded-empty")!=std::string::npos && SettingsDiagnostic().find("bytes=0")!=std::string::npos,
+        "Empty configuration is distinguished from a successful nonempty load");
+    BeginSettings();auto recovered=Config();recovered.font=utf8(L"D:/字体/𠀀.ttf");recovered.positionX=64;EditSettings(recovered);
+    Check(SaveSettings(),"Apply repairs an empty INI even with characters outside ANSI code pages");
+    const auto repairedBytes=bytes(empty);
+    Check(repairedBytes.size()>2 && static_cast<unsigned char>(repairedBytes[0])==0xFF && static_cast<unsigned char>(repairedBytes[1])==0xFE,
+        "Repaired empty INI uses Unicode encoding");
+    LoadSettings();Check(Config()==recovered,"Repaired empty INI round trips Unicode settings");
     const auto blockedParent=root/"NotADirectory";
     {std::ofstream file(blockedParent);file<<"preserve";}
     SetSettingsPath(utf8(blockedParent/"FavoriteWheel.ini"));LoadSettings();BeginSettings();
@@ -71,15 +83,25 @@ int wmain(int argc,wchar_t** argv) {
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==50,"Fresh installs retain pause and a 50% optional slowdown");
     Check(!Config().gamepadMoveWhileOpen,"Split sticks remain opt-in on fresh installs");
+    Check(!Config().rememberLastWheel,"Wheel memory remains opt-in for existing and fresh configurations");
+    BeginSettings();auto remembered=Config();remembered.rememberLastWheel=true;EditSettings(remembered);RevertSettings();
+    Check(!Config().rememberLastWheel,"Cancel does not enable wheel memory");
+    BeginSettings();EditSettings(remembered);Check(SaveSettings(),"Save wheel memory option");LoadSettings();
+    Check(Config().rememberLastWheel,"Wheel memory option persists across configuration reloads");
     Check(Config().positionX==72 && Config().hideEmptyCategories,"Fresh installs use right-side placement and hide empty categories");
     BeginSettings();Check(SaveSettings(),"Save auto language");LoadSettings();
     Check(Config().language=="auto","Saving preserves automatic mode, not the resolved language");
     Check(Config().keepOpen,"Saving fresh defaults persists keep-open on");
+    Check(!Config().keepOpenConsumables,"Consumable retention is opt-in");
+    BeginSettings();auto consumables=Config();consumables.keepOpenConsumables=true;EditSettings(consumables);
+    Check(SaveSettings(),"Save consumable retention");LoadSettings();
+    Check(Config().keepOpenConsumables,"Consumable retention survives reload");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     const auto initialBytes=bytes(path);
     SetSettingsPath(path.string()); LoadSettings();
     Check(bytes(path)==initialBytes,"Startup leaves partial legacy settings and comments byte-for-byte intact");
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
+    Check(!Config().swapMouseHands,"Old INIs retain LMB right hand without rewriting them");
     Check(!Config().gamepadMoveWhileOpen,"Old INIs keep left-stick wheel selection when the option is missing");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Missing KeepOpen now defaults on without changing controller scheme");
     BeginSettings();auto continuous=Config();continuous.keepOpen=false;continuous.gamepadCategoryButtons=1;
@@ -147,7 +169,7 @@ int wmain(int argc,wchar_t** argv) {
         }
     }
     const auto original=Config();
-    BeginSettings(); auto edited=Config(); edited.gamepadMoveWhileOpen=true;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
+    BeginSettings(); auto edited=Config(); edited.swapMouseHands=true; edited.gamepadMoveWhileOpen=true;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
     Check(Config()==edited,"Live preview");
     Check(!AppliedGamepadMoveWhileOpen(),"Pending toggle does not change the active selection stick");
     RevertSettings(); Check(Config()==original,"Cancel restores every setting");
@@ -213,12 +235,22 @@ int wmain(int argc,wchar_t** argv) {
     LoadResources("assets");
     Check(Languages().size()==8 && Themes().size()>=2,"All eight bundled languages load");
     auto skin=Config();skin.theme="skyrim";
-    Check(Themes().size()==5 && Style(skin).style==ThemeStyle::Skyrim,"Bundled Skyrim skin selects its component renderer");
+    Check(Themes().size()>=3 && std::all_of(Themes().begin(),Themes().end(),[](const Theme& theme){
+        return theme.id=="classic" || theme.id=="skyrim" || theme.id=="polygon" || theme.id=="icon-pack-test";
+    }) && Style(skin).style==ThemeStyle::Skyrim,"Core themes and the custom icon-pack test theme load");
     Check(Style(skin).frameStyle==FrameStyle::Nordic && Style(skin).surfaceTexture.ends_with("Textures/skyrim-charcoal.png") &&
         Style(skin).materialStrength==.9f,"Skyrim skin enables its external material and Nordic framing");
-    for(const auto& id:{"classic","frost","engraved","minimal"}) {
-        skin.theme=id;Check(Style(skin).style==ThemeStyle::Etched && Style(skin).surfaceTexture.empty() && Style(skin).frameStyle==FrameStyle::Plain,
-            "Existing themes retain the original untextured component renderer");
+    skin.theme="classic";
+    Check(Style(skin).style==ThemeStyle::ClassicGold && Style(skin).name=="Classic Gold" &&
+        Style(skin).accent==Theme{}.accent && Style(skin).panel==Theme{}.panel && Style(skin).surfaceTexture.empty(),
+        "Classic Gold uses the redesigned components and the built-in fallback palette");
+    for(const auto& id:{"frost","engraved","minimal","ellipse"})
+        Check(std::none_of(Themes().begin(),Themes().end(),[&](const Theme& theme){return theme.id==id;}),"Retired themes are absent from the selector");
+    skin.theme="polygon";Check(Style(skin).style==ThemeStyle::Skyrim && Style(skin).layout.shape==WheelShape::Polygon,
+        "Skyrim Polygon retains the Nordic renderer and ten-sided shape");
+    for(const auto& id:{"frost","engraved","minimal","ellipse","missing-theme"}) {
+        skin.theme=id;Check(Style(skin).id=="classic" && Style(skin).style==ThemeStyle::ClassicGold,
+            "Unavailable retired theme settings display the new Classic Gold fallback");
     }
     for(const auto& language:Languages())for(const auto& [key,value]:Languages().front().text) {
         Check(language.text.contains(key),"Every bundled catalog contains the current English keys");
@@ -258,6 +290,9 @@ int wmain(int argc,wchar_t** argv) {
     for(const auto& [id,texture]:{std::pair{"escape","../outside.png"},std::pair{"absolute","C:/outside.png"},
         std::pair{"rooted","/outside.png"},std::pair{"wrong-format","Textures/file.dds"}})
         {std::ofstream file(themeDir/(std::string(id)+".ini"));file<<"SurfaceTexture="<<texture<<"\nFrameStyle=unknown\nMaterialStrength=nan\nMaterialZoom=inf\n";}
+    std::ofstream(root/"Resources/Themes/layout-ellipse.ini")<<"WheelShape=  ELLIPSE  \nWheelStretchX=99\nWheelStretchY=0.1\nDetailPosition= LeFt \nDetailGap=-1\n";
+    std::ofstream(root/"Resources/Themes/layout-polygon.ini")<<"WheelShape=polygon\nDetailPosition=center\nWheelStretchX=nan\nDetailGap=inf\n";
+    std::ofstream(root/"Resources/Themes/layout-unknown.ini")<<"WheelShape=unknown\nDetailPosition=invalid\nWheelStretchX=invalid\nWheelStretchY=1.1junk\n";
     LoadResources((root/"Resources").string());
     Check(ResolveLanguage("auto","fr-CA")=="fr-CA" && ResolveLanguage("auto","fr-FR")=="fr","Exact locale takes priority over generic-language fallback");
     Check(CycleLanguage("fr-FR",-1)=="fr-CA","Language cycling starts from the displayed resolved choice");
@@ -270,6 +305,16 @@ int wmain(int argc,wchar_t** argv) {
     Check(Style(edited).style==ThemeStyle::Etched,"Unknown drawing styles fall back without disabling custom theme colors");
     const auto& visual=Style(edited);
     Check(visual.borderWidth==2 && visual.ornament==0 && visual.iconScale==1 && visual.titleScale==1.1f && visual.labelScale==1 && visual.hoverDuration==.1f && visual.pageDuration==0,"Visual theme bounds, invalid/nonfinite fallback and zero-duration transitions");
+    Check(visual.layout.shape==WheelShape::Circle && visual.layout.detailPosition==DetailPosition::Auto,"Legacy themes keep their circular layout and automatic card placement");
+    edited.theme="layout-ellipse";
+    Check(Style(edited).layout.shape==WheelShape::Ellipse && Style(edited).layout.stretchX==1.25f && Style(edited).layout.stretchY==.9f &&
+        Style(edited).layout.detailPosition==DetailPosition::Left && Style(edited).layout.detailGap==16,"Layout tokens accept case/whitespace and numeric bounds");
+    edited.theme="layout-polygon";
+    Check(Style(edited).layout.shape==WheelShape::Polygon && Style(edited).layout.detailPosition==DetailPosition::Center &&
+        Style(edited).layout.stretchX==1.2f && Style(edited).layout.detailGap==20,"Polygon/centre tokens load and nonfinite layout values fall back");
+    edited.theme="layout-unknown";
+    Check(Style(edited).layout.shape==WheelShape::Circle && Style(edited).layout.detailPosition==DetailPosition::Auto &&
+        Style(edited).layout.stretchX==1.2f && Style(edited).layout.stretchY==.94f,"Unknown layout tokens and malformed numbers keep safe defaults");
     edited.theme="skin";Check(Style(edited).style==ThemeStyle::Skyrim && Style(edited).accent==0xFFCCBBAA && Style(edited).name=="Custom Nordic",
         "Custom skin Style accepts whitespace/case and keeps independent color/name customization");
     Check(Style(edited).frameStyle==FrameStyle::Nordic && Style(edited).surfaceTexture.ends_with("Textures/custom.png") &&
@@ -281,6 +326,7 @@ int wmain(int argc,wchar_t** argv) {
     }
     LoadResources((root/"missing").string());
     Check(Languages().size()==1 && Themes().size()==1 && Tr(edited,"apply")=="APPLY","Missing resource folder remains usable");
+    Check(Style(edited).style==ThemeStyle::ClassicGold && Style(edited).name=="Classic Gold","Missing theme files keep the redesigned default usable");
     edited.language="auto";
     Check(ActiveLanguage(edited)=="en" && LanguageLabel(edited)=="System (English)","Missing translations still show a usable automatic-language option");
     const auto automaticRoot=root/"Automatic";
@@ -297,12 +343,175 @@ int wmain(int argc,wchar_t** argv) {
     for(int tab:{0,1,2,3})for(int slot=0;slot<SettingCount(tab);++slot) {
         const auto valueRect=ValueButton(slot);
         Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
-        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && valueRect.y+valueRect.h<145,"Settings rows stay below tabs and above help text");
+        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && (tab==0 || valueRect.y+valueRect.h<145),"Settings rows stay below tabs and clear contextual help text");
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
-    Check(SettingCount(2)==5 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24,"Gameplay tab includes continuous use and empty category visibility");
-    Check(SettingCount(1)==5 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Controller tab includes separate category and split-stick settings");
+    Check(SettingCount(2)==7 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27,"Gameplay tab includes continuous use, empty categories and wheel memory");
+    Check(SettingCount(0)==11 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
+    Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
+}
+// ---------------------------------------------------------------------------
+// Acceptance tests for task 20261028-takeover-review (AC-1, AC-2, AC-5, AC-8).
+// Each function is self-contained so T-1, T-4 and T-6 can be merged separately.
+// ---------------------------------------------------------------------------
+namespace {
+    std::string Utf8(const std::filesystem::path& path) {
+        const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());
+    }
+    std::filesystem::path Scratch(const char* name) {
+        const auto root=std::filesystem::path("build")/("acceptance-"+std::string(name)+"-"+std::to_string(GetCurrentProcessId()));
+        std::error_code error;std::filesystem::remove_all(root,error);
+        std::filesystem::create_directories(root);return root;
+    }
+    void RemoveScratch(const std::filesystem::path& root) {
+        std::error_code error;(void)std::filesystem::remove_all(root,error);
+    }
+    bool TryLoad(const std::string& root,const char* message) {
+        try {Wheel::LoadResources(root);return true;}
+        catch(const std::exception& error) {std::cerr<<message<<": "<<error.what()<<'\n';return false;}
+        catch(...) {std::cerr<<message<<": unknown exception\n";return false;}
+    }
+    std::vector<std::string> CatalogKeys() {
+        std::vector<std::string> keys;
+        std::ifstream catalog("assets/Languages/en.ini",std::ios::binary);std::string line;
+        while(std::getline(catalog,line)) {
+            if(!line.empty() && line.back()=='\r')line.pop_back();
+            const auto equal=line.find('=');
+            if(equal!=std::string::npos && equal)keys.push_back(line.substr(0,equal));
+        }
+        return keys;
+    }
+}
+// AC-1: a theme file named in UTF-8 must produce a UTF-8 theme ID that survives
+// Apply and the next LoadSettings.
+void Ac1_Utf8ThemeId() {
+    using namespace Wheel;
+    const auto root=Scratch("ac1"),resources=root/"Resources",themes=resources/"Themes";
+    std::filesystem::create_directories(themes);
+    const std::u8string name=u8"测试主题";
+    {std::ofstream file(themes/std::filesystem::path(name+u8".ini"),std::ios::binary);
+     file<<"Name=测\nAccent=12AB34FF\nPanel=010203FF\nBorder=44556677\n";}
+    Check(TryLoad(resources.string(),"AC-1: LoadResources must accept a UTF-8 theme file name"),
+        "AC-1: a UTF-8 theme file loads");
+    const std::string wanted(name.begin(),name.end());
+    const Theme* selected=nullptr;
+    for(const auto& theme:Themes())if(theme.id==wanted)selected=&theme;
+    Check(selected!=nullptr,"AC-1: Themes() exposes the UTF-8 theme ID taken from the file name");
+    Check(selected->name=="测","AC-1: the UTF-8 theme Name is read");
+    Check(selected->accent==0xFF34AB12 && selected->panel==0xFF030201 && selected->border==0x77665544,
+        "AC-1: the custom theme color keys still parse for a UTF-8 theme");
+    SetSettingsPath(Utf8(root/"Settings.ini"));LoadSettings();
+    BeginSettings();auto edited=Config();edited.theme=wanted;EditSettings(edited);
+    Check(SaveSettings(),"AC-1: a UTF-8 theme ID can be applied and saved");
+    LoadSettings();
+    Check(Config().theme==wanted,"AC-1: the saved UTF-8 theme ID survives a reload");
+    Check(Style(Config()).id==wanted,"AC-1: the reloaded UTF-8 theme is the active style");
+    RemoveScratch(root);
+}
+// AC-2: damaged or unreadable entries in the resource folders must not abort
+// resource loading; the built-in English catalog and the classic theme stay.
+void Ac2_UnreadableThemeEntry() {
+    using namespace Wheel;
+    const auto root=Scratch("ac2"),resources=root/"Resources",themes=resources/"Themes",languages=resources/"Languages";
+    std::filesystem::create_directories(themes);std::filesystem::create_directories(languages);
+    {std::ofstream file(themes/"plain.ini",std::ios::binary);file<<"Name=Plain\nAccent=FFFFFFFF\n";}
+    std::filesystem::create_directories(themes/"folder.ini"); // A directory cannot be a theme.
+    {std::ofstream file(themes/"empty.ini",std::ios::binary);}
+    {std::ofstream file(themes/"broken.ini",std::ios::binary);file.put(static_cast<char>(0xFF));}
+    {std::ofstream file(languages/"broken.ini",std::ios::binary);file.put(static_cast<char>(0xFF));}
+    const auto busy=themes/"busy.ini";
+    {std::ofstream file(busy,std::ios::binary);file<<"Name=Busy\nAccent=11223344\n";}
+    const HANDLE guard=CreateFileW(busy.c_str(),GENERIC_READ,0,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    Check(guard!=INVALID_HANDLE_VALUE,"AC-2: the fixture locks one theme entry against every reader");
+    const bool loaded=TryLoad(resources.string(),"AC-2: LoadResources must not throw on an unreadable theme entry");
+    CloseHandle(guard);
+    bool classic=false;for(const auto& theme:Themes())if(theme.id=="classic")classic=true;
+    bool english=false;for(const auto& language:Languages())if(language.id=="en")english=true;
+    Settings config;config.language="en";config.theme="classic";
+    Check(loaded,"AC-2: unreadable, empty and unparsable entries are skipped instead of aborting loading");
+    Check(classic && Style(config).style==ThemeStyle::ClassicGold,"AC-2: the built-in classic theme stays usable");
+    Check(english && Tr(config,"apply")=="APPLY","AC-2: the built-in English catalog stays usable");
+    const auto fileRoot=root/"not-a-directory";
+    {std::ofstream file(fileRoot,std::ios::binary);file<<"plain file";}
+    Check(TryLoad(Utf8(fileRoot),"AC-2: a file at the resource root must not throw"),
+        "AC-2: a resource root that is a file still leaves the built-in catalogs");
+    RemoveScratch(root);
+}
+// AC-5: every key of the bundled English catalog except Name/Font needs a built-in
+// English value, and the UI glyph string must preheat the swap-mouse-hands text.
+void Ac5_BuiltinEnglishCoverage() {
+    using namespace Wheel;
+    const auto keys=CatalogKeys();
+    Check(keys.size()>300,"AC-5: the bundled English catalog lists the user-visible keys");
+    const auto root=Scratch("ac5");
+    Settings config;config.language="en";
+    Check(TryLoad(root.string(),"AC-5: an empty resource root falls back to the built-in catalogs"),
+        "AC-5: the built-in catalog loads without any language files");
+    std::size_t checked=0;
+    for(const auto& key:keys) {
+        if(key=="Name" || key=="Font")continue;
+        const auto message=std::string("AC-5: the built-in English table has no value for ")+key;
+        Check(Tr(config,key)!=key,message.c_str());++checked;
+    }
+    Check(checked>=320,"AC-5: every catalog key except Name/Font was checked");
+    const auto swapped=Tr(config,"swapMouseHands");
+    Check(swapped!="swapMouseHands" && UIGlyphs(config).find(swapped)!=std::string::npos,
+        "AC-5: the UI glyph string preheats the swapMouseHands translation");
+    RemoveScratch(root);
+}
+// AC-8: the translation and glyph caches must answer exactly like a fresh
+// LoadResources, for all eight bundled languages, and must follow language and
+// hotkey changes (plan §8).
+void Ac8_TranslationCacheConsistency() {
+    using namespace Wheel;
+    const auto keys=CatalogKeys();
+    const auto root=Scratch("ac8-reload");
+    Settings reloadConfig;reloadConfig.language="en";
+    LoadResources(root.string());
+    const auto beforeReload=UIGlyphSnapshot(reloadConfig);
+    Check(UIGlyphSnapshot(reloadConfig)==beforeReload,"AC-8: unchanged keys reuse the snapshot");
+    LoadResources("assets");
+    const auto afterReload=UIGlyphSnapshot(reloadConfig);
+    Check(afterReload!=beforeReload && *afterReload!=*beforeReload,
+        "AC-8: resource reload replaces the cached glyph content and snapshot");
+    Check(UIGlyphSnapshot(reloadConfig)==afterReload,"AC-8: reloaded snapshot remains stable");
+    RemoveScratch(root);
+    Check(keys.size()>300,"AC-8: the bundled English catalog lists the translation keys");
+    Check(TryLoad("assets","AC-8: the bundled resources load"),"AC-8: the bundled resources load");
+    Check(Languages().size()==8,"AC-8: all eight bundled languages are loaded");
+    std::vector<std::string> ids;
+    for(const auto& language:Languages())ids.push_back(language.id);
+    std::vector<std::vector<std::string>> reference(ids.size(),std::vector<std::string>(keys.size()));
+    for(std::size_t language=0;language<ids.size();++language) {
+        Check(TryLoad("assets","AC-8: the bundled resources reload"),"AC-8: the bundled resources reload");
+        Settings config;config.language=ids[language];
+        for(std::size_t key=0;key<keys.size();++key)reference[language][key]=Tr(config,keys[key]);
+    }
+    Check(TryLoad("assets","AC-8: the bundled resources reload"),"AC-8: the bundled resources reload");
+    for(std::size_t key=0;key<keys.size();++key)for(std::size_t language=0;language<ids.size();++language) {
+        Settings config;config.language=ids[language];
+        const auto cached=Tr(config,keys[key]);
+        const auto message=std::string("AC-8: cached Tr differs from a fresh load for ")+ids[language]+"/"+keys[key];
+        Check(cached==reference[language][key],message.c_str());
+    }
+    Settings english;english.language="en";
+    Settings chinese;chinese.language="zh_CN";
+    const auto englishGlyphs=UIGlyphs(english),chineseGlyphs=UIGlyphs(chinese);
+    Check(englishGlyphs!=chineseGlyphs,"AC-8: switching the language changes the UI glyph string");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: switching back restores the original UI glyph string");
+    Settings rebound=english;rebound.switchKey=20;
+    Check(UIGlyphs(rebound)!=englishGlyphs,"AC-8: rebinding the switch key refreshes the UI glyph string");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the switch key restores the UI glyph string");
+    Settings favorites=english;favorites.hotkey=20;
+    Check(UIGlyphs(favorites)!=englishGlyphs,"AC-8: rebinding the favorites hotkey refreshes the UI glyph string");
+    Check(UIGlyphs(favorites).find(KeyLabel(favorites))!=std::string::npos,
+        "AC-8: the refreshed UI glyph string preheats the new favorites hotkey label");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the favorites hotkey restores the UI glyph string");
+    Settings actions=english;actions.actionHotkey=21;
+    Check(UIGlyphs(actions)!=englishGlyphs,"AC-8: rebinding the action hotkey refreshes the UI glyph string");
+    Check(UIGlyphs(actions)!=UIGlyphs(favorites),"AC-8: the favorites and action hotkeys occupy separate glyph slots");
+    Check(UIGlyphs(english)==englishGlyphs,"AC-8: restoring the action hotkey restores the UI glyph string");
 }

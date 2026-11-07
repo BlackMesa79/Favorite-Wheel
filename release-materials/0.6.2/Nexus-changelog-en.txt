@@ -1,0 +1,9 @@
+0.6.2 — Combat presets and input improvements
+- Added per-character combat presets for left/right weapons and spells, mixed pairs, shields/torches, two-handed equipment and empty hands. Save, apply, rename, overwrite and delete; save the game to retain presets.
+- Added crossed-sword preset icons and visible L/R/L+R/2H equipment states, spaced around shortcut numbers and outer sector corners.
+- Fixed controller modifier + main-key chords losing held state between separate input packets; improved diagnostics and lifecycle resets.
+- Added GOG 1.6.659 compatibility. Requires GOG SKSE64 2.2.3 and the matching 659 Address Library; local layout/address tests passed, gameplay verification pending.
+- Added F2 -> Keyboard -> Swap mouse hands: LMB left / RMB right, with matching footer hints. Off retains original hand assignment; preset apply/manage stays unchanged.
+- Includes the 0.6.1 empty-INI/configuration saving fix.
+
+Upgrade normally and disable separate configuration/controller test patches. Preserve your main INI, custom themes and matching .skse co-saves. The new mouse option defaults off when absent from an existing INI.

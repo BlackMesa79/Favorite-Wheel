@@ -3,6 +3,20 @@
 #include "CategoryNavigation.h"
 #include <array>
 namespace Wheel {
+    struct InventorySelectionKey {
+        ItemKey instance;
+        bool weaponStack=false,favorited=false;
+        int stackHotkey=-1;
+        bool operator==(const InventorySelectionKey& other)const {
+            if(weaponStack || other.weaponStack)
+                return weaponStack && other.weaponStack && instance.form==other.instance.form &&
+                    stackHotkey==other.stackHotkey && favorited==other.favorited;
+            return instance==other.instance;
+        }
+    };
+    inline InventorySelectionKey SelectionKey(const Item& item) {
+        return {item.key,item.weaponStack,item.favorited,item.weaponStackHotkey};
+    }
     struct ItemPage {
         std::vector<Item> items;
         int offset=0,total=0;

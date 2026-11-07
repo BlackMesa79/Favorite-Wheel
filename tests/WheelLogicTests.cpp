@@ -1,4 +1,5 @@
 #include "WheelLogic.h"
+#include "QueuedTask.h"
 #include "FunctionNavigation.h"
 #include "InputGate.h"
 #include "ControllerSticks.h"
@@ -10,6 +11,7 @@
 #include "EquipPolicy.h"
 #include "NavigationPresentation.h"
 #include "MagicCategories.h"
+#include "AlchemyCategories.h"
 #include <cstdlib>
 #include <iostream>
 #include <array>
@@ -96,6 +98,18 @@ void CheckInputDispatch() {
     InputDispatchChain<Event> empty(nullptr);empty.Finish();Check(!*empty.Events(),"Empty input polls remain valid");
 }
 int main() {
+    {
+        bool loaded=true,loading=true;std::atomic<bool> queued{true};
+        Check(!Wheel::DirectoryRequestNeeded(loaded,loading,queued),"An outstanding directory task is not duplicated");
+        Wheel::RunQueuedTask(queued,[]{ /* Old revision deliberately publishes nothing. */ },[](const char*){});
+        Check(Wheel::DirectoryRequestNeeded(loaded,loading,queued),"A discarded stale refresh must retry even with an old directory loaded");
+        queued=true;
+        Wheel::RunQueuedTask(queued,[&]{loading=false;},[](const char*){});
+        Check(!Wheel::DirectoryRequestNeeded(loaded,loading,queued),"A published replacement ends directory retries");
+        Check(Wheel::DirectoryRequestNeeded(false,false,false) && !Wheel::DirectoryRequestNeeded(false,true,true),
+            "First load requests once and waits for its queued task");
+    }
+
     CheckInputDispatch();
     using namespace Wheel;
     Check(PageCount(0) == 1 && PageCount(10) == 1 && PageCount(11) == 2 && PageCount(23) == 3, "page boundaries");
@@ -118,7 +132,7 @@ int main() {
     Check(Wrap(-1, 6) == 5 && Wrap(6, 6) == 0 && Wrap(1, 0) == 0, "wrap");
     {
         enum class Type {kSpell,kPower,kLesserPower,kVoicePower,kAbility,kDisease,kEnchantment,kScroll};
-        Check(categoryCount==8,"Spells, shouts and powers are independent top-level categories");
+        Check(categoryCount==10,"Poison, spells, shouts and powers have independent top-level categories");
         Check(MagicCategory(false,Type::kSpell)==Category::Spells,"Ordinary spells are separated from voice-slot actions");
         for(auto type:{Type::kPower,Type::kLesserPower,Type::kVoicePower})
             Check(MagicCategory(false,type)==Category::Powers,"Active greater, lesser and voice powers share the powers category");
@@ -290,6 +304,103 @@ int main() {
     Check(GamepadOpening(266,266,true,false)==Opening::Favorites && GamepadOpening(266,266,true,true)==Opening::Actions && GamepadOpening(267,266,true,true)==Opening::None,"controller opening key and modifier priority");
     Check(GamepadOpening(266,-1,true,true)==Opening::None && GamepadOpening(282,282,true,true)==Opening::None,"unmapped controller does not open");
     {
+        const auto lb=ControllerKeyBit(274),rb=ControllerKeyBit(275),y=ControllerKeyBit(279);
+        Check(ControllerModifierMask(0x100)==lb && ControllerModifierMask(0x200)==rb &&
+            ControllerModifierMask(0x8000)==y && ControllerModifierMask(0x300)==(lb|rb),"ControlMap XInput modifiers become physical held bits");
+        Check(ControllerModifierMask(0)==0 && ControllerModifierMask(0xFFFF)==0 &&
+            ControllerModifierMask(9)==ControllerKeyBit(280),"Unmodified and trigger ControlMap bindings");
+        Check(ResolvedGamepadOpening(279,279,y,lb,true,-1,274)==Opening::None,
+            "Kontrol auto binding preserves plain Y for Jump");
+        Check(ResolvedGamepadOpening(279,279,lb|y,lb,true,-1,274)==Opening::Favorites,
+            "Inherited LB+Y Favorites takes priority over the overlapping default Actions modifier");
+        Check(ResolvedGamepadOpening(279,279,lb|rb|y,lb,true,-1,275)==Opening::Actions,
+            "An additional distinct Actions modifier remains usable with a native chord");
+        Check(ResolvedGamepadOpening(279,279,y,lb,false,-1,274)==Opening::Favorites,
+            "An explicit wheel-only Y binding does not inherit the game's LB modifier");
+        Check(ResolvedGamepadOpening(279,279,lb|y,0,false,274,274)==Opening::Favorites,
+            "Identical explicit controller chords prefer Favorites");
+        Check(ResolvedGamepadOpening(266,266,lb,0,true,-1,274)==Opening::Actions &&
+            ResolvedGamepadOpening(266,266,0,0,true,-1,274)==Opening::Favorites,
+            "Vanilla Up and LB+Up keep their existing Favorites/Actions behavior");
+        Check(ResolvedGamepadOpening(279,279,y,ControllerModifierMask(0x400),true,-1,274)==Opening::None,
+            "Unknown native modifier encoding cannot steal plain Y");
+        ControllerChordState sparse;sparse.Observe(274,true);sparse.Observe(279,true);
+        Check(ResolvedGamepadOpening(279,279,sparse.Mask(),lb,true,-1,274)==Opening::Favorites,
+            "LB from an earlier event packet satisfies the native Kontrol chord");
+        sparse.Observe(274,false);
+        Check(ResolvedGamepadOpening(279,279,sparse.Mask(),lb,true,-1,274)==Opening::None,
+            "Releasing native LB restores plain Y to gameplay");
+    }
+    {
+        const auto lb=ControllerKeyBit(274),rb=ControllerKeyBit(275),y=ControllerKeyBit(279);
+        Check(ControllerPacketButtons(0x8100,0,0)==(lb|y),"Native XInput packet uses the same canonical LB/Y bits as events");
+        Check(ControllerPacketButtons(0x0C00,30,30)==0 &&
+            ControllerPacketButtons(0,31,255)==(ControllerKeyBit(280)|ControllerKeyBit(281)),"Reserved bits and trigger noise do not become held modifiers");
+        ControllerChordState events;events.Observe(274,true);
+        events.Observe(274,false);events.Observe(279,true); // reporter 21:00:35.252
+        Check(ResolvedGamepadOpening(279,279,events.Mask(),lb,true,274,275)==Opening::None,"Reporter packet reproduces the 0.7.2 rejection");
+        const auto repaired=ControllerOpeningHeld(events.Mask(),{true,ControllerPacketButtons(0x8100,0,0)},279,lb|rb);
+        Check(ResolvedGamepadOpening(279,279,repaired,lb,true,274,275)==Opening::Favorites && !events.Held(274),
+            "Current LB+Y repairs only opening resolution, without inventing a persistent LB event");
+        Check(ResolvedGamepadOpening(279,279,repaired,lb,true,-1,275)==Opening::Favorites,
+            "Inherited native LB still works when the wheel-specific modifier is disabled");
+        const auto plain=ControllerOpeningHeld(y,{true,y},279,lb|rb);
+        Check(ResolvedGamepadOpening(279,279,plain,lb,true,-1,275)==Opening::None,"Actual LB release leaves plain Y available for Jump");
+        Check(ControllerOpeningHeld(y,{false,static_cast<std::uint16_t>(lb|y)},279,lb)==y &&
+            ControllerOpeningHeld(y,{true,lb},279,lb)==y,"Unavailable samples and a main key absent from the packet never manufacture a chord");
+        Check(ControllerOpeningHeld(y,{true,static_cast<std::uint16_t>(lb|rb|y)},279,lb)==(lb|y),
+            "Only configured modifiers can be repaired; unrelated buttons are not imported");
+        Check(ResolvedGamepadOpening(279,279,ControllerOpeningHeld(y,{true,static_cast<std::uint16_t>(lb|rb|y)},279,lb|rb),lb,true,-1,275)==Opening::Actions,
+            "A genuinely held distinct action modifier retains its priority");
+        Check(ControllerOpeningHeld(lb|y,{},279,lb)==(lb|y),"Event-only synthetic controllers keep existing sparse-event behavior");
+        events.Observe(274,true);events.Observe(279,false);events.Observe(274,false);
+        Check(ControllerOpeningHeld(events.Mask(),{true,0},279,lb|rb)==0,"Release and next fresh packet retain no grace-period modifier");
+        InputGate gate;
+        Check(gate.Filter(279,true,false,true)==InputGate::Result::Suppress &&
+            gate.Filter(279,true,false,false)==InputGate::Result::Suppress &&
+            gate.Filter(279,false,true,false)==InputGate::Result::Suppress &&
+            gate.Filter(279,true,false,false)==InputGate::Result::Pass,"Repaired entrance owns hold/release, then yields the next unmodified Y to gameplay");
+    }
+    {
+        ControllerChordState chords;int firstDevice=0,secondDevice=0;
+        chords.Attach(&firstDevice);
+        auto opening=[&](int modifier=278,int action=274) {
+            return GamepadOpening(266,266,modifier<0 || (modifier!=266 && chords.Held(modifier)),
+                action<0 || (action!=266 && chords.Held(action)));
+        };
+        // X down is in an earlier poll than Up. Simulate an unavailable/all-zero
+        // duration table: the old reset-and-rebuild approach loses X here.
+        std::array<bool,16> legacy{};
+        legacy[278-266]=true;chords.Observe(278,true);
+        legacy.fill(false);legacy[266-266]=true;
+        chords.Attach(&firstDevice);chords.Observe(266,true);
+        Check(GamepadOpening(266,266,legacy[278-266],legacy[274-266])==Opening::None,
+            "The legacy all-zero duration snapshot reproduces rejected X+Up");
+        Check(opening()==Opening::Favorites,"X held in an earlier packet survives to Up without any duration-table support");
+        chords.Attach(&firstDevice);chords.Attach(&firstDevice);
+        Check(opening()==Opening::Favorites,"Quiet input polls and unchanged device identity do not release a modifier");
+        chords.Observe(278,false);
+        Check(opening()==Opening::None,"A real X release clears the chord, including zero-duration releases");
+        chords.Reset();chords.Observe(266,true);chords.Observe(278,true);
+        Check(opening()==Opening::Favorites,"Whole-batch preprocessing sees X even when the Up event precedes it");
+        chords.Observe(274,true);
+        Check(opening()==Opening::Actions,"The action-wheel modifier keeps its original priority");
+        chords.Observe(274,false);chords.Observe(278,false);
+        Check(opening(-1)==Opening::Favorites,"Single Up still opens when no favorite modifier is configured");
+        Check(opening(266)==Opening::None,"A main key cannot satisfy its own modifier");
+        chords.Observe(280,true);chords.Observe(281,true);
+        Check(chords.Held(280) && chords.Held(281),"Trigger modifier state follows positive-value events, without held duration");
+        const auto mask=chords.Mask();chords.Observe(265,true);chords.Observe(282,true);
+        Check(chords.Mask()==mask && !chords.Held(-1) && !chords.Held(282),"Unsupported codes cannot alias a physical controller key");
+        chords.Reset();Check(chords.Mask()==0 && opening()==Opening::None,"Focus/load resets discard remembered chord state");
+        chords.Observe(278,true);chords.Attach(nullptr);
+        Check(chords.Mask()==0,"Disconnect clears held buttons");
+        chords.Attach(&firstDevice);chords.Observe(278,true);chords.Attach(&secondDevice);
+        Check(chords.Mask()==0,"Changing controller delegates cannot transfer held modifiers");
+        chords.Observe(278,true);chords.Attach(&secondDevice);
+        Check(chords.Held(278),"A newly observed modifier remains held after reconnect/change");
+    }
+    {
         ControllerPageButtons buttons;
         InputGate capture;
         int page=0;
@@ -325,6 +436,19 @@ int main() {
     Check(sx==0 && sy==-1,"controller Y axis points up on screen");
     AimStick(sx,sy,.1f,.1f);Check(sx==0 && sy==-1,"releasing stick preserves selection for confirmation");
     Check(StickAxis(.19f)==0 && StickAxis(1)==1 && StickAxis(-1)==-1,"settings pointer deadzone and full range");
+    {
+        const auto main=ControllerKeyBit(266),lb=ControllerKeyBit(274),rb=ControllerKeyBit(275);
+        Check(ResolvedGamepadOpening(266,266,main|rb,0,true,-1,274)==Opening::None,
+            "An unassigned shoulder chord yields instead of opening favorites");
+        Check(ForeignGamepadChord(main|rb,266,0,true,-1,274),
+            "Foreign chords also bypass replacement entrance consumption");
+        Check(ResolvedGamepadOpening(266,266,main|lb|rb,0,true,-1,274)==Opening::None,
+            "An additional foreign key also yields the Actions chord");
+        Check(ResolvedGamepadOpening(266,266,main|lb,0,true,-1,274)==Opening::Actions,
+            "The configured Actions chord remains available");
+        Check(ResolvedGamepadOpening(266,266,main|rb,rb,true,-1,274)==Opening::Favorites,
+            "The native inherited chord remains available");
+    }
     for(unsigned key=2;key<=9;++key)Check(QuickSlotFromKey(key,"")==static_cast<int>(key)-2,"1..8 map to native quick slots, not radial sectors");
     Check(QuickSlotFromKey(10,"")==-1 && QuickSlotFromKey(11,"")==-1 && QuickSlotFromKey(82,"")==-1,"9/0 and unmapped Numpad are not invented native slots");
     Check(QuickSlotFromKey(79,"Hotkey1")==0 && QuickSlotFromKey(80,"Hotkey8")==7 && QuickSlotFromKey(2,"Hotkey3")==2,"explicit game slot remaps take priority");
@@ -352,7 +476,13 @@ int main() {
     Check(DecideAction(1,1,false,false,false,false,false)==A::Discard, "focus loss, blocking menu or invalid player cancels use");
     Check(DecideAction(1,1,true,false,false,true,true)==A::Discard, "timeout cannot consume later");
     using E=ActionExecutor;
+    Check(!KeepWheelAfterUse(true,false,false,true) && !KeepWheelAfterUse(true,true,true,true),"Reading closes the wheel regardless of retention settings");
+    Check(KeepWheelAfterUse(false,true,true) && KeepWheelAfterUse(true,true,true),"Consumable retention is independent of equipment retention");
+    Check(!KeepPausedForUse(true,true,true,0),"Retained consumables release pause for engine and animation updates");
     Check(KeepWheelAfterUse(true,false) && !KeepWheelAfterUse(true,true) && !KeepWheelAfterUse(false,false) && !KeepWheelAfterUse(false,true),"Equipment can stay open; consumables and default mode always close");
+    for(const auto category:{Category::Potions,Category::Poisons,Category::Food})
+        Check(!KeepWheelAfterUse(true,ConsumableCategory(category)) &&
+            !KeepPausedForUse(true,true,ConsumableCategory(category),0),"Separate poison category still closes before use and never enters paused equipment path");
     Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,false,false,true,true,true)==A::Submit,"Retained action executes without removing its own overlay");
     Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,true,true)==A::Wait,"Retained action waits for actual unpause");
     Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,false,false,false,true,true)==A::Wait,"Default action still waits for menu removal");
@@ -360,6 +490,25 @@ int main() {
     Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,false,false,false,true,false,false)==A::Submit,"Manual close still allows the already accepted action");
     Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,2,true,false,true,false,false,true,true,true)==A::Discard,"Load cancels retained action");
     Check(DecideRetainedActionOn(E::TaskQueue,E::PlayerUpdate,1,1,true,false,true,false,false,true,true,true)==A::Wait,"Retained face command keeps its player-update owner");
+    for(int mode:{0,1,2}) {
+        Check(KeepPausedForUse(true,true,false,mode)==(mode==0),"Only retained ordinary equipment in Pause mode keeps the guard");
+        Check(!KeepPausedForUse(false,true,false,mode) && !KeepPausedForUse(true,false,false,mode) &&
+            !KeepPausedForUse(true,true,true,mode),"Closed actions, function commands and consumables never bypass pause");
+    }
+    Check(OnlyWheelPause(true,true,1) && !OnlyWheelPause(true,true,2) && !OnlyWheelPause(true,true,0) &&
+        !OnlyWheelPause(false,true,1) && !OnlyWheelPause(true,false,1),"Pause ownership requires an open, actually pausing guard and exactly one pause");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,true,true,true,true)==A::Submit,"Immediate equipment executes under its own single pause");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,true,true,true,false)==A::Wait,"Equipment never bypasses a foreign or nested pause");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,true,true,false,true)==A::Wait,"Resume-required action still waits even when only our guard pauses");
+    Check(DecideRetainedActionOn(E::PlayerUpdate,E::PlayerUpdate,1,1,true,false,true,true,false,true,true,true,true,true)==A::Wait,"Player-update commands cannot inherit the task pause exemption");
+    Check(DecideRetainedActionOn(E::PlayerUpdate,E::TaskQueue,1,1,true,false,true,true,false,true,true,true,true,true)==A::Wait,"Paused action cannot be consumed by the wrong executor");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,2,true,false,true,true,false,true,true,true,true,true)==A::Discard,"Pause exemption still respects load generation");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,false,false,true,true,false,true,true,true,true,true)==A::Discard,"Paused action still rejects lost focus, invalid player and blocking menu");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,true,true,true,true,true,true)==A::Discard,"Paused action cannot execute after expiry");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,false,true,true,true)==A::Discard,"Paused action cannot execute in a replacement session");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,true,true,true,false,true,true,true,true,true)==A::Wait,"Pause exemption does not bypass pending close");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,false,true,true,true,true)==A::Wait,"Non-retained action cannot bypass pause");
+    Check(DecideRetainedActionOn(E::TaskQueue,E::TaskQueue,1,1,true,false,true,true,false,true,true,false,true,true)==A::Wait,"Hidden view cannot use an old guard to execute equipment");
     Check(!RetainedActionSettled(true,false,1,10) && !RetainedActionSettled(false,true,1,10),"Pending commands and outfit jobs keep game-thread window open");
     Check(!RetainedActionSettled(false,false,.1,10) && !RetainedActionSettled(false,false,1,1) && RetainedActionSettled(false,false,.15,2),"Retained window needs wall time and two native updates");
     using P=PadWheelCommand;
@@ -390,15 +539,22 @@ int main() {
     Check(DecideActionOn(E::PlayerUpdate,E::PlayerUpdate,1,1,true,false,false,false,true)==A::Discard,"face command timeout cannot replay later");
     Check(DecideActionOn(E::PlayerUpdate,E::TaskQueue,1,1,true,false,false,false,false)==A::Wait,"player update leaves favorite/outfit commands to existing queue");
     using F=FaceLight::Section;
-    Check(FaceLight::TypeCount(false)==1 && FaceLight::TypeCount(true)==2,"Optional face provider controls visible type count");
-    for(const auto section:{F::Outfits,F::Lighting,F::Followers}) {
-        Check(FaceLight::VisibleSection(section,false)==F::Outfits,"Missing provider restores outfit category");
+    Check(FaceLight::TypeCount(false)==3 && FaceLight::TypeCount(true)==4,"Combat and cycles remain available without the optional face provider");
+    for(const auto section:{F::Outfits,F::Combat,F::Cycles,F::CycleMembers,F::Lighting,F::Followers}) {
+        Check(FaceLight::VisibleSection(section,false)==(section==F::Combat || section==F::Cycles || section==F::CycleMembers?section:F::Outfits),"Missing provider keeps built-in sections and restores hidden face sections");
         Check(FaceLight::VisibleSection(section,true)==section,"Installed provider preserves category and child navigation");
-        for(int direction:{-1,0,1})Check(FaceLight::ChangeType(section,direction,false)==F::Outfits,"A/D cannot enter missing provider category");
+        for(int direction:{-1,0,1}) {
+            const auto moved=FaceLight::ChangeType(section,direction,false);
+            Check(moved==F::Outfits || moved==F::Combat || moved==F::Cycles || (direction==0 && moved==F::CycleMembers),"A/D cannot enter missing provider category");
+        }
     }
-    Check(FaceLight::ChangeType(F::Outfits,1)==F::Lighting && FaceLight::ChangeType(F::Outfits,-1)==F::Lighting,"A/D wraps from outfits to lighting");
-    Check(FaceLight::ChangeType(F::Lighting,1)==F::Outfits && FaceLight::ChangeType(F::Lighting,-1)==F::Outfits,"A/D wraps from lighting to outfits");
-    Check(FaceLight::ChangeType(F::Followers,1)==F::Outfits && FaceLight::ChangeType(F::Followers,-1)==F::Outfits,"A/D exits child list to other type");
+    Check(FaceLight::ChangeType(F::Outfits,1)==F::Combat && FaceLight::ChangeType(F::Outfits,-1)==F::Lighting,"A/D wraps from outfits to combat/lighting");
+    Check(FaceLight::ChangeType(F::Combat,1)==F::Cycles && FaceLight::ChangeType(F::Combat,-1)==F::Outfits,"A/D enters and leaves combat presets");
+    Check(FaceLight::ChangeType(F::Cycles,1)==F::Lighting && FaceLight::ChangeType(F::Cycles,-1)==F::Combat,"Cycles sits between combat and optional lighting");
+    Check(FaceLight::ChangeType(F::Lighting,1)==F::Outfits && FaceLight::ChangeType(F::Lighting,-1)==F::Cycles,"A/D wraps from lighting to outfits/cycles");
+    Check(FaceLight::ChangeType(F::Followers,1)==F::Outfits && FaceLight::ChangeType(F::Followers,-1)==F::Cycles,"A/D exits child list to adjacent top-level type");
+    Check(FaceLight::ChangeType(F::CycleMembers,1,false)==F::Outfits && FaceLight::ChangeType(F::CycleMembers,-1,false)==F::Combat,"A/D exits cycle children to adjacent built-in types");
+    Check(FaceLight::ChangeType(F::Outfits,1,false)==F::Combat && FaceLight::ChangeType(F::Combat,1,false)==F::Cycles && FaceLight::ChangeType(F::Cycles,1,false)==F::Outfits,"All built-in types cycle without lighting");
     Check(FaceLight::ChangeType(F::Lighting,0)==F::Lighting,"zero direction does not navigate");
     std::cout << "Deferred action executor and function category tests passed\n";
     Check(UnequipWeapon(false,false,true,false),"Right-hand reselect unequips right instance");
@@ -409,4 +565,41 @@ int main() {
     Check(UnequipWeapon(true,true,true,false) && UnequipWeapon(true,false,true,false),"Two-hand weapon toggles from either click");
     Check(!UnequipWeapon(true,false,false,false) && !UnequipWeapon(false,false,false,false),"Unequipped instance never toggles off same-form other instance");
     std::cout<<"Weapon toggle policy passed\n";
+    Check(EquippedHand(true,false)==HandEquip::Right && EquippedHand(false,true)==HandEquip::Left,
+        "Same-form physical weapon instances preserve their own opposite-hand worn flags");
+    Check(EquippedHand(true,true)==HandEquip::Dual,"A spell equipped in both slots displays both hands");
+    Check(EquippedHand(true,false,true)==HandEquip::TwoHanded && EquippedHand(false,true,true)==HandEquip::TwoHanded,
+        "Two-handed weapons/spells occupy both hands even if the engine reports a single worn slot");
+    Check(EquippedHand(true,false,false,true)==HandEquip::Left && EquippedHand(false,true,false,true)==HandEquip::Left,
+        "Shields and torches always display left hand, including ordinary ExtraWorn");
+    Check(EquippedHand(false,false,true)==HandEquip::None && EquippedHand(false,false,false,true)==HandEquip::None,
+        "An unequipped two-handed or left-only object never receives a hand marker");
+    Check(std::string_view(HandEquipLabel(HandEquip::Dual))=="L+R" &&
+        std::string_view(HandEquipLabel(HandEquip::TwoHanded))=="2H" &&
+        std::string_view(HandEquipKey(HandEquip::None))=="equipped",
+        "Dual wield and two-handed markers stay distinct; non-hand equipment keeps the generic label");
+    for(bool swapped:{false,true}) {
+        Check(MouseUsesLeftHand(0,swapped,false)==swapped && MouseUsesLeftHand(1,swapped,false)!=swapped,
+            "Mouse hand preference maps LMB/RMB to opposite hands");
+        Check(!MouseUsesLeftHand(0,swapped,true) && MouseUsesLeftHand(1,swapped,true),
+            "Preset apply/manage mouse clicks retain their semantics");
+    }
+    // Exercise the real gate and event-chain filtering for shared native slots.
+    for(bool combatBound:{false,true})for(bool nativeBound:{false,true}) {
+        struct ShortcutEvent {bool down=true;ShortcutEvent* next=nullptr;};
+        ShortcutEvent press;
+        InputGate gate;
+        const bool own=RouteQuickSlot(combatBound?10:0,nativeBound)==QuickSlotRoute::Combat;
+        const auto decision=gate.Filter(2,true,false,own);
+        InputDispatchChain<ShortcutEvent> chain(&press);
+        chain.Append(&press,decision!=InputGate::Result::Suppress);chain.Finish();
+        Check((*chain.Events()!=nullptr)==!own,"Native events pass intact for empty or newly occupied slots; combat consumes only its own slot");
+        chain.Restore();
+        Check(gate.Filter(2,true,false,false)==(own?InputGate::Result::Suppress:InputGate::Result::Pass),
+            "A captured combat number remains suppressed through its held phase");
+        Check(gate.Filter(2,false,true,false)==(own?InputGate::Result::Suppress:InputGate::Result::Pass),
+            "Combat release is swallowed; native item release is preserved");
+        Check(gate.Filter(2,true,false,false)==InputGate::Result::Pass,"Releasing a combat key does not capture a future native press");
+    }
+    std::cout<<"Hand equipment and shared combat shortcut input policy passed\n";
 }

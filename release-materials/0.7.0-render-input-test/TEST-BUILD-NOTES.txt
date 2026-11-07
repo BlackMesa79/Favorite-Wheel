@@ -1,0 +1,39 @@
+Favorite Wheel 0.7.0 - native UI / controller chord TEST BUILD
+
+Install over 0.7.0 in your mod manager. Keep your existing INI and controlmap.
+This archive includes the usual resources, but no player INI or controller map.
+Plugin version remains 0.7.0. This is a separate test archive, not a new release.
+
+Changes:
+- Draw in a native menu UI callback before UI composition, using the currently
+  bound D3D11 target and its actual dimensions. Present no longer draws the wheel.
+- Follow the game's controller Favorites modifier as well as its main button.
+- Prefer Favorites when its controller chord overlaps the Actions modifier.
+  Default vanilla Up / LB+Up behavior is unchanged.
+
+Controller test:
+For a Kontrol/custom map with Favorites on LB+Y, keep the wheel controller key
+on "follow game" (GamepadHotkey=-1). Keep your original Jump/controlmap mappings.
+With GamepadModifier=-1, the game's modifier is inherited. Check plain Y jumps,
+LB+Y opens Favorites, and the original LB shortcuts still work while closed.
+If LB is already required by Favorites, choose a different Actions modifier to
+use the Actions wheel; this build does not automatically reassign other buttons.
+
+Rendering test:
+Check all three themes, mouse/controller selection, Pause/Slow/Live modes,
+Keep Open after equipment, close animation, loading a save and switching focus.
+TRP / Community Shaders users should test with their normal renderer enabled.
+
+New diagnostic markers:
+route=menu-postdisplay-v1
+binding=native-chord-v1
+nativeRequired / followNative in Controller entrance records
+
+If the wheel remains invisible or a chord fails, provide FavoriteWheel.log,
+renderer version/log and the relevant controller INI/controlmap bindings.
+
+Local verification: 17 test suites passed, including WARP UI target/composition
+tests, controller chord regressions, and seven real Address Library databases.
+These do not substitute for in-game testing with TRP or a custom controller map.
+
+To revert, reinstall the original 0.7.0 archive. Player settings are preserved.
