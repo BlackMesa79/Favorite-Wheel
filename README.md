@@ -15,7 +15,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. Action modules include outfit presets, combat presets, combat cycles and optional Face Lighting controls.
 
-Current build: **0.9.0** (previous published release: 0.8.0). The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current build: **0.10.0** (not yet packaged or released; latest published release: 0.9.0). The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
 
 Version 0.9.0 adds category/stat sorting, animated drag arrangement and session wheel memory; improves first opening; fixes zero-health outfit capture and spell reselect toggling. See the [0.9.0 changelog](release-materials/0.9.0/Nexus-changelog-en.txt), [Nexus description](release-materials/0.9.0/Nexus-description-en.bbcode.txt) and [release record](docs/RELEASE_0.9.0.md).
 
