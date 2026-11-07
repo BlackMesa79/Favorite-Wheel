@@ -70,9 +70,11 @@ namespace Wheel::FrameworkSettings {
         }
         void Keyboard(const char* key,int& value,bool follow=true) {
             auto name=[](int code){auto config=draft;config.hotkey=code;return KeyLabel(config);};
-            const auto preview=value<0 && std::string_view(key)=="actionHotkey"?Tr(draft,"followFavorite"):name(value);
+            const bool category=std::string_view(key)=="kbCategoryPrevKey" || std::string_view(key)=="kbCategoryNextKey";
+            const char* empty=category?"off":std::string_view(key)=="actionHotkey"?"followFavorite":"follow";
+            const auto preview=value<0 && (std::string_view(key)=="actionHotkey" || category)?Tr(draft,empty):name(value);
             if(api.beginCombo(Row(key).c_str(),preview.c_str(),0)) {
-                if(follow && api.select(Tr(draft,std::string_view(key)=="actionHotkey"?"followFavorite":"follow").c_str(),value<0,0,{}))value=-1;
+                if(follow && api.select(Tr(draft,empty).c_str(),value<0,0,{}))value=-1;
                 for(int code=2;code<=255;++code) {
                     if(code==60)continue; // F2 stays reserved for wheel settings.
                     auto text=name(code);if(text.starts_with("Key "))continue;
@@ -112,7 +114,8 @@ namespace Wheel::FrameworkSettings {
                 draft.allInventory=defaults.allInventory;draft.hideEmptyCategories=defaults.hideEmptyCategories;
                 draft.rememberLastWheel=defaults.rememberLastWheel;draft.keepOpen=defaults.keepOpen;
                 draft.keepOpenConsumables=defaults.keepOpenConsumables;draft.timeMode=defaults.timeMode;
-                draft.slowPercent=defaults.slowPercent;break;
+                draft.slowPercent=defaults.slowPercent;
+                draft.kbMoveWhileOpen=defaults.kbMoveWhileOpen;draft.kbCategoryPrevKey=defaults.kbCategoryPrevKey;draft.kbCategoryNextKey=defaults.kbCategoryNextKey;break;
             case Page::Keyboard:
                 draft.hotkey=defaults.hotkey;draft.actionHotkey=defaults.actionHotkey;draft.switchKey=defaults.switchKey;
                 draft.hotkeyModifier=defaults.hotkeyModifier;draft.actionModifier=defaults.actionModifier;
@@ -180,6 +183,7 @@ namespace Wheel::FrameworkSettings {
                 api.beginDisabled(draft.timeMode!=1);
                 Slider("slowTimePercent",draft.slowPercent,50,100);
                 api.endDisabled();
+                Check("kbMoveWhileOpen",draft.kbMoveWhileOpen);Keyboard("kbCategoryPrevKey",draft.kbCategoryPrevKey);Keyboard("kbCategoryNextKey",draft.kbCategoryNextKey);
                 break;
             }
             case Page::Keyboard: {

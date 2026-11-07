@@ -30,12 +30,18 @@ namespace Wheel {
         int gamepadActionModifier = 274; // LB, SKSE macro keycode.
         int gamepadCategoryButtons = 0; // 0 LB/RB categories, LT/RT use; 1 swaps the pairs.
         bool gamepadMoveWhileOpen = false; // Left stick moves in live modes; right stick selects.
+        bool kbMoveWhileOpen = false; // Keyboard directions move; mouse navigates the wheel.
+        int kbCategoryPrevKey = 44; // Z — previous category in KB move mode
+        int kbCategoryNextKey = 46; // C — next category in KB move mode
         bool swapMouseHands = false; // LMB left / RMB right when enabled; preset management is unchanged.
         std::string font = "C:/Windows/Fonts/msyh.ttc";
         bool operator==(const Settings&) const = default;
     };
     Settings Config();
     bool AppliedGamepadMoveWhileOpen(); // Input scheme changes only after successful Apply.
+    bool AppliedKbMoveWhileOpen();
+    int AppliedKbCategoryPrevKey();
+    int AppliedKbCategoryNextKey();
     void LoadSettings();
     void BeginSettings();
     void EditSettings(Settings values);

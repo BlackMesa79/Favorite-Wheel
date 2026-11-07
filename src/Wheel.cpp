@@ -990,8 +990,8 @@ namespace Wheel {
             }
             if (save) {
                 const auto config=Config();
-                SKSE::log::info("Settings saved: {}; language={} theme={} scale={} hotkey={} keepOpen={} padCategory={} padMove={}",
-                    SettingsDiagnostic(),config.language,config.theme,config.scale,config.hotkey,config.keepOpen,config.gamepadCategoryButtons,config.gamepadMoveWhileOpen);
+                SKSE::log::info("Settings saved: {}; language={} theme={} scale={} hotkey={} keepOpen={} padCategory={} padMove={} kbMove={} kbCategoryPrevKey={} kbCategoryNextKey={}",
+                    SettingsDiagnostic(),config.language,config.theme,config.scale,config.hotkey,config.keepOpen,config.gamepadCategoryButtons,config.gamepadMoveWhileOpen,config.kbMoveWhileOpen,config.kbCategoryPrevKey,config.kbCategoryNextKey);
             }
             if (!save) RevertSettings();
             bool reload=false;
@@ -1038,6 +1038,9 @@ namespace Wheel {
             case 26: config.rememberLastWheel=!config.rememberLastWheel; break;
             case 27: config.keepOpenConsumables=!config.keepOpenConsumables; break;
             case 28: config.showActionNotifications=!config.showActionNotifications; break;
+            case 29: config.kbMoveWhileOpen=!config.kbMoveWhileOpen; break;
+            case 30: config.kbCategoryPrevKey=-1; break;
+            case 31: config.kbCategoryNextKey=-1; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;
@@ -1054,9 +1057,9 @@ namespace Wheel {
             if (defaultsButton.Contains(x,y) && !right) { DefaultSettings(); return; }
             for (int slot=0;slot<SettingCount(current.settingsTab);++slot) {
                 const int row=SettingRow(current.settingsTab,slot);
-                if(!BindingRow(row) && MinusButton(slot).Contains(x,y)) { AdjustSetting(row,-1); return; }
-                if(!BindingRow(row) && PlusButton(slot).Contains(x,y)) { AdjustSetting(row,1); return; }
-                if(ValueButton(slot).Contains(x,y)) {
+                if(!BindingRow(row) && MinusButton(slot,current.settingsTab).Contains(x,y)) { AdjustSetting(row,-1); return; }
+                if(!BindingRow(row) && PlusButton(slot,current.settingsTab).Contains(x,y)) { AdjustSetting(row,1); return; }
+                if(ValueButton(slot,current.settingsTab).Contains(x,y)) {
                     if(BindingRow(row) && !right) { std::lock_guard lock(viewMutex); view.capturingKey=true;view.captureBinding=row; }
                     else AdjustSetting(row,right?-1:1);
                     return;
@@ -1117,12 +1120,7 @@ namespace Wheel {
             else if(current.combatDialog && combatRightButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Right))RefreshFunctions();}
             else if(current.combatDialog && combatVoiceButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Voice))RefreshFunctions();}
             else if(!current.combatDialog && outfitExportButton.Contains(x,y))Outfits::Export(current.outfitId);
-            else if(!current.combatDialog && outfitModeButton.Contains(x,y)){Outfits::ToggleMode(current.outfitId);RefreshFunctions();}
-            else if(!current.combatDialog && outfitLooseButton.Contains(x,y)){Outfits::ToggleLoose(current.outfitId);RefreshFunctions();}
-            else if(!current.combatDialog && outfitEditPiecesButton.Contains(x,y)){EndOutfitDialog();FunctionNavigate(FaceLight::Section::OutfitPieces);}
-            else if(!current.combatDialog) {
-                for(int i=0;i<7;++i)if(outfitPartButton(i).Contains(x,y)){if(Outfits::CyclePart(current.outfitId,static_cast<Outfits::Part>(i)))RefreshFunctions();}
-            }
+
         }
         void NameKey(std::uint32_t code,bool fallback) {
             std::lock_guard lock(viewMutex);
@@ -1284,6 +1282,10 @@ namespace Wheel {
                     const auto current=Snapshot();
                     if(pageDown && current.open)SKSE::log::info("Controller page input: raw={} key={} nativeDown={} swallowed={} settings={} dialog={}",
                         code,pad,button->IsDown(),inputGate.Swallowed(identity),current.settingsOpen,current.outfitDialog);
+                    const bool kbMove=AppliedKbMoveWhileOpen();
+                    const bool kbMovement=current.open && !current.settingsOpen && !current.outfitDialog && kbMove &&
+                        button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && KbMovementKey(code) &&
+                        !toggle && !ReplacedEntrance(button,controllerSample);
                     const bool naming=current.open && (current.outfitDialog==1 || current.outfitDialog==2);
                     if(naming && nameRepeat && (code==14 || code==211 || code==203 || code==205) && !bridge.composing)NameKey(code,false);
                     const bool bridgeKey=naming && ((bridge.available && bridge.enabled) || simpleIME) && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
@@ -1300,6 +1302,9 @@ namespace Wheel {
                         Cancel();
                     } else if(bridgeKey) {
                         // Keep toggle/modifier values intact for Text Bridge regardless of hook order.
+                        consume=false;
+                    } else if(kbMovement) {
+                        // Directional presses, holds and releases belong to gameplay in keyboard movement mode.
                         consume=false;
                     } else if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && EntryControlsEnabled(button->GetDevice(),code) &&
                         !current.sortingEdit && !(current.open && !current.functions && !current.vampireRestricted &&
@@ -1335,11 +1340,14 @@ namespace Wheel {
                         if(current.capturingKey) {
                             const bool cancel=(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code==1) || pad==277;
                             const bool capture=current.captureBinding==15?(pad>=266 && pad<=281):
-                                (button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code<255 && !ModifierBit(code));
+                                (button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
+                                    ((current.captureBinding==30 || current.captureBinding==31)?(code>0 && code<=255):code<255) && !ModifierBit(code));
                             if(cancel || capture) {
                                 if(!cancel) {
                                     auto config=Config();
                                     if(current.captureBinding==15)config.gamepadHotkey=static_cast<int>(pad);
+                                    else if(current.captureBinding==30)config.kbCategoryPrevKey=static_cast<int>(code);
+                                    else if(current.captureBinding==31)config.kbCategoryNextKey=static_cast<int>(code);
                                     else if(current.captureBinding==11)config.switchKey=static_cast<int>(code);
                                     else if(current.captureBinding==13){config.actionHotkey=static_cast<int>(code);config.actionModifier=HeldModifiers();}
                                     else {config.hotkey=static_cast<int>(code);config.hotkeyModifier=HeldModifiers();}
@@ -1371,13 +1379,19 @@ namespace Wheel {
                     } else if (down && IsOpen() && !inputGate.Swallowed(identity)) {
                         if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
                             const int quickSlot=QuickSlotFromKey(code,button->GetUserEvent().c_str());
-                            if(HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
+                            const auto navigation=KeyboardWheelCommand(kbMove,AppliedKbCategoryPrevKey(),AppliedKbCategoryNextKey(),code);
+                            if(!kbMove && HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
+                            else if(navigation!=KbWheelCommand::None) {
+                                switch(navigation) {
+                                case KbWheelCommand::PreviousCategory:ChangeCategory(-1);break;
+                                case KbWheelCommand::NextCategory:ChangeCategory(1);break;
+                                case KbWheelCommand::PreviousPage:ChangePage(-1);break;
+                                case KbWheelCommand::NextPage:ChangePage(1);break;
+                                default:break;
+                                }
+                            } else if(HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
                             else switch (code) {
                             case 1: case 15: if(current.functions && (current.functionSection==FaceLight::Section::Followers || current.functionSection==FaceLight::Section::CycleMembers))FunctionBack();else Cancel(true); break; // Esc / Tab
-                            case 30: case 203: ChangeCategory(-1); break; // A / left
-                            case 32: case 205: ChangeCategory(1); break; // D / right
-                            case 17: case 200: ChangePage(-1); break; // W / up
-                            case 31: case 208: ChangePage(1); break; // S / down
                             case 28: Activate(false); break;
                             default: break;
                             }
@@ -1386,6 +1400,7 @@ namespace Wheel {
                                 if(current.sortingEdit){if(code==0)BeginSortDrag();else Activate(true);}
                                 else Activate(MouseUsesLeftHand(code,current.config.swapMouseHands,current.functions));
                             }
+                            else if (KbCategoryMouse(kbMove,code)) ChangeCategory(1);
                             else if (code == 8) ChangePage(-1);
                             else if (code == 9) ChangePage(1);
                         } else if(pad) {
@@ -1410,11 +1425,13 @@ namespace Wheel {
                     // A wheel entrance takes priority even if bound to movement.
                     auto controls=RE::ControlMap::GetSingleton();
                     const auto device=button->GetDevice();
-                    const bool movement=!toggle && !ReplacedEntrance(button,controllerSample) && controls &&
+                    const bool categoryBinding=button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
+                        (KbCategoryPrevKey(kbMove,AppliedKbCategoryPrevKey(),code) || KbCategoryNextKey(kbMove,AppliedKbCategoryNextKey(),code));
+                    const bool movement=kbMovement || (!categoryBinding && !toggle && !ReplacedEntrance(button,controllerSample) && controls &&
                         (device==RE::INPUT_DEVICE::kKeyboard || device==RE::INPUT_DEVICE::kMouse || device==RE::INPUT_DEVICE::kGamepad) &&
-                        IsMovementEvent(controls->GetUserEventName(code,button->GetDevice()));
+                        IsMovementEvent(controls->GetUserEventName(code,button->GetDevice())));
                     const auto decision = inputGate.Filter(identity, pressed, up,
-                        movement?captureBatch:consume, wheelImpulse, movement);
+                        kbMovement?false:movement?captureBatch:consume, wheelImpulse, movement);
                     if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
                         ((code>=2 && code<=11) || code==82 || (code>=79 && code<=81)))
                         SKSE::log::info("Numeric shortcut input: scan={} event='{}' wheel={} queued={} closing={} filter={}",
@@ -1438,7 +1455,8 @@ namespace Wheel {
                         suppress=decision==InputGate::Result::Suppress;
                     }
                 } else if (auto mouse = event->AsMouseMoveEvent(); mouse && captureBatch) {
-                    if (IsOpen()) {
+                    const auto current=Snapshot();
+                    if (current.open) {
                         std::lock_guard lock(viewMutex);
                         if(mouse->mouseInputX || mouse->mouseInputY){view.gamepad=false;padX=padY=0;}
                         const auto config=Config();
@@ -1627,7 +1645,7 @@ namespace Wheel {
         };
     }
 
-    View Snapshot() { std::lock_guard lock(viewMutex); auto copy=view; copy.config=Config();copy.appliedGamepadMove=AppliedGamepadMoveWhileOpen(); return copy; }
+    View Snapshot() { std::lock_guard lock(viewMutex); auto copy=view; copy.config=Config();copy.appliedGamepadMove=AppliedGamepadMoveWhileOpen();copy.appliedKbMove=AppliedKbMoveWhileOpen(); return copy; }
     void AdvanceGamepadPointer(float elapsed) {
         std::lock_guard lock(viewMutex);
         if(!view.open || !view.gamepad || (!view.settingsOpen && !view.outfitDialog))return;

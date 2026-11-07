@@ -10,6 +10,36 @@ inline int SortingShortcut(std::uint32_t scan,int modifiers) {
   return scan==20 && (modifiers==0 || modifiers==1)?modifiers:-1;
 }
 
+inline bool KbMovementKey(std::uint32_t code) {
+  return code==17 || code==31 || code==30 || code==32 ||
+    code==200 || code==208 || code==203 || code==205;
+}
+inline bool KbCategoryPrevKey(bool enabled,int binding,std::uint32_t code) {
+  return enabled && binding>0 && code==static_cast<std::uint32_t>(binding) && !KbMovementKey(code);
+}
+inline bool KbCategoryNextKey(bool enabled,int binding,std::uint32_t code) {
+  return enabled && binding>0 && code==static_cast<std::uint32_t>(binding) && !KbMovementKey(code);
+}
+enum class KbWheelCommand { None, PreviousCategory, NextCategory, PreviousPage, NextPage };
+inline KbWheelCommand KeyboardWheelCommand(bool move,int prevBinding,int nextBinding,std::uint32_t code) {
+  if(KbCategoryPrevKey(move,prevBinding,code))return KbWheelCommand::PreviousCategory;
+  if(KbCategoryNextKey(move,nextBinding,code))return KbWheelCommand::NextCategory;
+  if(move)return KbWheelCommand::None;
+  switch(code) {
+  case 30: case 203:return KbWheelCommand::PreviousCategory;
+  case 32: case 205:return KbWheelCommand::NextCategory;
+  case 17: case 200:return KbWheelCommand::PreviousPage;
+  case 31: case 208:return KbWheelCommand::NextPage;
+  default:return KbWheelCommand::None;
+  }
+}
+inline int KbWheelScroll(bool enabled,int x,int y) {
+  return enabled && x==0 && y!=0?(y>0?-1:1):0;
+}
+
+inline bool KbCategoryMouse(bool enabled,std::uint32_t code) {return enabled && code==2;}
+inline bool KbScrollCategory(bool leftShift,bool rightShift) {return leftShift || rightShift;}
+
 // Physical controller state survives sparse input polls. Held duration and the
 // device button map are not reliable substitutes for press/release events.
 class ControllerChordState {

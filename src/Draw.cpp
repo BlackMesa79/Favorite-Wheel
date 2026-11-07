@@ -402,8 +402,10 @@ namespace Wheel
             const float keyOffset = edge + 22.f;
             if (v.config.showHints && ribbon.size > 1)
             {
-                Keycap(d, {c.x - keyOffset * s, y}, v.gamepad?(v.config.gamepadCategoryButtons==1?"LT":"LB"):"A", t, s);
-                Keycap(d, {c.x + keyOffset * s, y}, v.gamepad?(v.config.gamepadCategoryButtons==1?"RT":"RB"):"D", t, s);
+                const char* prevLabel = v.gamepad?(v.config.gamepadCategoryButtons==1?"LT":"LB"):v.appliedKbMove?"Z":"A";
+                const char* nextLabel = v.gamepad?(v.config.gamepadCategoryButtons==1?"RT":"RB"):v.appliedKbMove?"C":"D";
+                Keycap(d, {c.x - keyOffset * s, y}, prevLabel, t, s);
+                Keycap(d, {c.x + keyOffset * s, y}, nextLabel, t, s);
             }
             for (int i = 0; i < ribbon.size; ++i)
             {
@@ -431,8 +433,8 @@ namespace Wheel
                         bottom = top + (pages.size - 1) * 34 * s;
             if (v.config.showHints)
             {
-                Keycap(d, {x, top - 34 * s}, v.gamepad?"UP":"W", t, s, total > 1);
-                Keycap(d, {x, bottom + 34 * s}, v.gamepad?"DN":"S", t, s, total > 1);
+                Keycap(d, {x, top - 34 * s}, v.gamepad?"UP":v.appliedKbMove?"^":"W", t, s, total > 1);
+                Keycap(d, {x, bottom + 34 * s}, v.gamepad?"DN":v.appliedKbMove?"v":"S", t, s, total > 1);
             }
             for (int i = 0; i < pages.size; ++i)
             {
@@ -636,10 +638,6 @@ namespace Wheel
                     Button(d,c,s,v,combatVoiceButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Voice));
                 } else if(!v.combatDialog && !v.cycleDialog) {
                     Button(d, c, s, v, outfitExportButton, tr("outfitExport"));
-                    Button(d,c,s,v,outfitModeButton,Outfits::ModeLabel(v.outfitId));
-                    Button(d,c,s,v,outfitLooseButton,std::string(tr("outfitLoose"))+(Outfits::IsLoose(v.outfitId)?" "+std::string(tr("on")):" "+std::string(tr("off"))));
-                    Button(d,c,s,v,outfitEditPiecesButton,tr("outfitEditPieces"));
-                    for(int i=0;i<7;++i)Button(d,c,s,v,outfitPartButton(i),Outfits::PartStateLabel(v.outfitId,static_cast<Outfits::Part>(i)));
                 } else if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleMemberDialog?"cycleRemove":"cycleEdit"));
             }
             else if (v.outfitDialog == 4 || v.outfitDialog == 5)
@@ -674,7 +672,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications","kbMoveWhileOpen","kbCategoryPrevKey","kbCategoryNextKey"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -693,11 +691,11 @@ namespace Wheel
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
                                           tr(config.allInventory?"scopeAll":"scopeFavorites"),
                                           tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
-                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off"),tr(config.keepOpenConsumables?"on":"off"),tr(config.showActionNotifications?"on":"off")};
+                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off"),tr(config.keepOpenConsumables?"on":"off"),tr(config.showActionNotifications?"on":"off"),tr(config.kbMoveWhileOpen?"on":"off"),config.kbCategoryPrevKey<0?tr("off"):key(config.kbCategoryPrevKey),config.kbCategoryNextKey<0?tr("off"):key(config.kbCategoryNextKey)};
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);
-                const float top = -173.f + slot * 31;
+                const float top = ValueButton(slot,v.settingsTab).y;
                 const float size = 16 * s * t.labelScale;
                 if (slot % 2 == 0)
                     d->AddRectFilled({c.x - 300 * s, c.y + top * s}, {c.x + 300 * s, c.y + (top + 28) * s},
@@ -706,10 +704,10 @@ namespace Wheel
                          Fit(tr(keys[row]), size, 300 * s), size, t.text);
                 if (!BindingRow(row))
                 {
-                    Button(d, c, s, v, MinusButton(slot), "-");
-                    Button(d, c, s, v, PlusButton(slot), "+");
+                    Button(d, c, s, v, MinusButton(slot,v.settingsTab), "-");
+                    Button(d, c, s, v, PlusButton(slot,v.settingsTab), "+");
                 }
-                Button(d, c, s, v, ValueButton(slot),v.capturingKey && v.captureBinding==row?"...":values[row]);
+                Button(d, c, s, v, ValueButton(slot,v.settingsTab),v.capturingKey && v.captureBinding==row?"...":values[row]);
             }
             Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsPhysicsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
@@ -719,8 +717,8 @@ namespace Wheel
             }
             if(v.settingsTab==1)Text(d,{c.x,c.y+36*s},Wrapped(tr("swapMouseHandsHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             if(v.settingsTab==2) {
-                Text(d,{c.x,c.y+61*s},Wrapped(tr("consumableRetentionHelp"),14*s,575*s,2),15*s,t.muted,575*s,t.textShadow);
-                Text(d,{c.x,c.y+104*s},Wrapped(tr("rememberLastWheelHelp"),14*s,575*s,3),14*s,t.muted,575*s,t.textShadow);
+                Text(d,{c.x,c.y+120*s},Wrapped(tr("consumableRetentionHelp"),13*s,575*s,2),13*s,t.muted,575*s,t.textShadow);
+                Text(d,{c.x,c.y+153*s},Wrapped(tr("rememberLastWheelHelp"),13*s,575*s,2),13*s,t.muted,575*s,t.textShadow);
             }
             if(v.settingsTab==3)Text(d,{c.x,c.y+10*s},Wrapped(tr("controllerSchemeHelp"),15*s,575*s,4),15*s,t.muted,575*s,t.textShadow);
             if(v.settingsTab==3)Text(d,{c.x,c.y+105*s},Wrapped(tr("gamepadMoveHelp"),14*s,575*s,4),14*s,t.muted,575*s,t.textShadow);
@@ -1184,7 +1182,9 @@ namespace Wheel
                     14 * s, t.muted, 0, t.textShadow);
                 Text(d, {c.x, top + 36 * s},
                      Fit(v.vampireRestricted?tr("vampireRestricted"):v.gamepad?tr(v.appliedGamepadMove?
-                         (config.timeMode==0?"padNavigationRight":"padNavigationMoving"):"padNavigation"):KeyLabel([&] {
+                         (config.timeMode==0?"padNavigationRight":"padNavigationMoving"):"padNavigation"):
+                         v.appliedKbMove?tr("kbMoveNavHint"):
+                         KeyLabel([&] {
                              auto x = config;
                              x.hotkey = config.switchKey;
                              return x;

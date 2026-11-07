@@ -5,12 +5,16 @@
 namespace Wheel {
     // Name-based gates also apply when Skyrim Souls removes kPausesGame.
     // Shared by entrance, queued opening, live wheel and menu observer checks.
+    // "Cursor Menu" is deliberately excluded: it is opened by IME/TextBridge
+    // during name entry and must not trigger cancellation. QJO's misc-quest
+    // sub-page sits inside Journal Menu (which is already in this list), so
+    // the journal's own name is sufficient to block wheel entry.
     template<class IsOpen>
     const char* BlockingWheelMenu(IsOpen&& isOpen) {
         for(auto name : {"Main Menu", "Loading Menu", "Console", "Dialogue Menu", "InventoryMenu", "MagicMenu",
                 "ContainerMenu", "BarterMenu", "GiftMenu", "Crafting Menu", "Book Menu", "Journal Menu", "MapMenu",
                 "RaceSex Menu", "MessageBoxMenu", "Lockpicking Menu", "Training Menu", "Sleep/Wait Menu", "FavoritesMenu",
-                "TweenMenu", "StatsMenu", "LevelUp Menu", "Cursor Menu"})
+                "TweenMenu", "StatsMenu", "LevelUp Menu"})
             if(isOpen(name))return name;
         return nullptr;
     }

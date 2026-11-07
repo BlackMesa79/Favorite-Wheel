@@ -295,13 +295,13 @@ namespace Wheel::Outfits {
             auto armor=object?object->As<RE::TESObjectARMO>():nullptr;
             if(armor && armor->IsShield() && data.second && data.second->IsWorn())shieldMask|=armor->GetSlotMask().underlying();
         }
-        const bool removeOnly=Wearing(inventory,matches,p);
+        const bool removeOnly=Wearing(inventory,matches);
         for(int i:matches)if(!removeOnly && (inventory[i].armor->GetSlotMask().underlying()&shieldMask)){Tell("outfitBlocked");return;}
         for(const auto& c:inventory)if(c.worn) {
             if(c.quest){Tell("outfitBlocked");return;}
         }
         Job next;next.preset=p;next.removeOnly=removeOnly;
-        next.operations=ReplacementPlan(inventory,matches,removeOnly,p);
+        next.operations=ReplacementPlan(inventory,matches,removeOnly);
         next.started=std::chrono::steady_clock::now();
         cancelRequested=false;job=std::move(next);busy=true;
         SKSE::log::info("Outfit {} started: mode=replacement removeOnly={} operations={}",id,removeOnly,job->operations.size());
@@ -323,7 +323,7 @@ namespace Wheel::Outfits {
                 auto inventory=Inventory();std::vector<int> matches;
                 const bool success=job->removeOnly?
                     std::none_of(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;}):
-                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches,job->preset);
+                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches);
                 Finish(success?(job->removeOnly?"outfitRemoved":"outfitApplied"):"outfitPartial");return;
             }
             const auto& op=job->operations[job->index];

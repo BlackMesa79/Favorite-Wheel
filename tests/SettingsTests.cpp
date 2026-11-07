@@ -18,7 +18,7 @@ int wmain(int argc,wchar_t** argv) {
     auto utf8=[](const std::filesystem::path& path){const auto text=path.u8string();return std::string(reinterpret_cast<const char*>(text.data()),text.size());};
     if(argc==3 && std::wstring_view(argv[1])==L"--verify-persisted") {
         SetSettingsPath(utf8(argv[2]));LoadSettings();const auto v=Config();
-        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && v.swapMouseHands && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
+        Check(!v.keepOpen && v.gamepadCategoryButtons==1 && v.gamepadMoveWhileOpen && v.kbMoveWhileOpen && v.kbCategoryPrevKey==45 && v.kbCategoryNextKey==47 && v.swapMouseHands && !v.hideEmptyCategories && v.allInventory && v.timeMode==1 && v.slowPercent==70 &&
             v.language=="zh_CN" && v.theme=="frost" && v.hotkey==44 && v.actionModifier==6 &&
             v.wheelScale==1.25f && v.positionX==64 && v.positionY==32 && !v.sounds && !v.animations,
             "A fresh process reads all applied settings from disk");
@@ -83,6 +83,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Fresh installs keep equipment open and use LB/RB categories");
     Check(Config().timeMode==0 && Config().slowPercent==50,"Fresh installs retain pause and a 50% optional slowdown");
     Check(!Config().gamepadMoveWhileOpen,"Split sticks remain opt-in on fresh installs");
+    Check(!Config().kbMoveWhileOpen && Config().kbCategoryPrevKey==44 && Config().kbCategoryNextKey==46,"Keyboard movement defaults off with Z/C category bindings");
     Check(!Config().rememberLastWheel,"Wheel memory remains opt-in for existing and fresh configurations");
     BeginSettings();auto remembered=Config();remembered.rememberLastWheel=true;EditSettings(remembered);RevertSettings();
     Check(!Config().rememberLastWheel,"Cancel does not enable wheel memory");
@@ -103,6 +104,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(!Config().allInventory,"Old INIs retain favorites-only behavior");
     Check(!Config().swapMouseHands,"Old INIs retain LMB right hand without rewriting them");
     Check(!Config().gamepadMoveWhileOpen,"Old INIs keep left-stick wheel selection when the option is missing");
+    Check(!Config().kbMoveWhileOpen && Config().kbCategoryPrevKey==44 && Config().kbCategoryNextKey==46,"Old INIs keep legacy keyboard navigation");
     Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Missing KeepOpen now defaults on without changing controller scheme");
     BeginSettings();auto continuous=Config();continuous.keepOpen=false;continuous.gamepadCategoryButtons=1;
     EditSettings(continuous);RevertSettings();Check(Config().keepOpen && Config().gamepadCategoryButtons==0,"Cancel restores continuous use and pad scheme");
@@ -169,22 +171,28 @@ int wmain(int argc,wchar_t** argv) {
         }
     }
     const auto original=Config();
-    BeginSettings(); auto edited=Config(); edited.swapMouseHands=true; edited.gamepadMoveWhileOpen=true;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
+    BeginSettings(); auto edited=Config(); edited.swapMouseHands=true; edited.gamepadMoveWhileOpen=true;edited.kbMoveWhileOpen=true;edited.kbCategoryPrevKey=45;edited.kbCategoryNextKey=47;edited.hideEmptyCategories=false; edited.switchKey=20;edited.wheelScale=1.25f; edited.positionX=64; edited.positionY=32; edited.overlayOpacity=50; edited.sounds=false; edited.animations=false; edited.theme="frost"; edited.hotkey=44; edited.language="zh_CN"; EditSettings(edited);
     Check(Config()==edited,"Live preview");
+    Check(!AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==44 && AppliedKbCategoryNextKey()==46,"Keyboard input remains applied while previewing changes");
     Check(!AppliedGamepadMoveWhileOpen(),"Pending toggle does not change the active selection stick");
     RevertSettings(); Check(Config()==original,"Cancel restores every setting");
     Check(!AppliedGamepadMoveWhileOpen(),"Cancel leaves the active stick scheme unchanged");
+    Check(!AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==44 && AppliedKbCategoryNextKey()==46,"Cancel preserves applied keyboard controls");
     BeginSettings(); EditSettings(edited); Check(SaveSettings(),"Save settings");
     Check(AppliedGamepadMoveWhileOpen(),"Successful Apply activates the new stick scheme");
+    Check(AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==45 && AppliedKbCategoryNextKey()==47,"Apply activates keyboard controls");
     RevertSettings(); Check(Config()==edited,"Closing after apply preserves applied values");
     LoadSettings(); Check(Config()==edited,"Settings survive reload");
-    BeginSettings();auto pendingOff=Config();pendingOff.gamepadMoveWhileOpen=false;EditSettings(pendingOff);
+    BeginSettings();auto pendingOff=Config();pendingOff.gamepadMoveWhileOpen=false;pendingOff.kbMoveWhileOpen=false;pendingOff.kbCategoryPrevKey=46;pendingOff.kbCategoryNextKey=44;EditSettings(pendingOff);
     Check(AppliedGamepadMoveWhileOpen(),"Pending disable preserves the right stick until Apply");
+    Check(AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==45 && AppliedKbCategoryNextKey()==47,"Pending disable/rebind keeps applied keyboard controls");
     DefaultSettings();Check(AppliedGamepadMoveWhileOpen() && !Config().gamepadMoveWhileOpen && Config().positionX==72,
         "Defaults preview preserves the applied stick scheme and restores right-side placement");
+    Check(AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==45 && AppliedKbCategoryNextKey()==47 && !Config().kbMoveWhileOpen && Config().kbCategoryPrevKey==44 && Config().kbCategoryNextKey==46,"Defaults preview does not activate keyboard changes");
     RevertSettings();Check(AppliedGamepadMoveWhileOpen(),"Canceling defaults preserves the applied right-stick scheme");
     BeginSettings();EditSettings(pendingOff);Check(SaveSettings(),"Apply left-stick selection again");
     Check(!AppliedGamepadMoveWhileOpen(),"Successful disable restores left-stick selection");
+    Check(!AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==46 && AppliedKbCategoryNextKey()==44,"Apply disables movement and saves swapped category bindings");
     BeginSettings();EditSettings(edited);Check(SaveSettings(),"Restore applied right-stick selection");
     {
         // Persist and reload through an actual child process, not the same
@@ -208,13 +216,14 @@ int wmain(int argc,wchar_t** argv) {
         const std::string before((std::istreambuf_iterator<char>(oldFile)),{});oldFile.close();
         Check(SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_READONLY),"Set read-only fixture");
         LoadSettings();Check(Config()==edited && bytes(path)==before,"Read-only settings load without modification");
-        BeginSettings();auto blocked=Config();blocked.positionX=12;blocked.gamepadMoveWhileOpen=false;EditSettings(blocked);
+        BeginSettings();auto blocked=Config();blocked.positionX=12;blocked.gamepadMoveWhileOpen=false;blocked.kbMoveWhileOpen=false;blocked.kbCategoryPrevKey=46;blocked.kbCategoryNextKey=-1;EditSettings(blocked);
         const bool written=SaveSettings();const auto diagnostic=SettingsDiagnostic();
         SetFileAttributesW(std::filesystem::absolute(path).c_str(),FILE_ATTRIBUTE_NORMAL);
         std::ifstream unchangedFile(path,std::ios::binary);
         const std::string unchanged((std::istreambuf_iterator<char>(unchangedFile)),{});unchangedFile.close();
         Check(!written && diagnostic.find("open-target")!=std::string::npos && unchanged==before,"Read-only save failure is explicit and leaves original file intact");
         Check(AppliedGamepadMoveWhileOpen(),"Failed Apply cannot switch the active stick scheme");
+        Check(AppliedKbMoveWhileOpen() && AppliedKbCategoryPrevKey()==45 && AppliedKbCategoryNextKey()==47,"Failed Apply cannot change keyboard controls");
         RevertSettings();LoadSettings();Check(Config()==edited,"Failed save does not change persisted settings");
         // Default game path is based on the executable, regardless of cwd.
         SetSettingsPath("");LoadSettings();const auto first=SettingsDiagnostic();
@@ -263,12 +272,28 @@ int wmain(int argc,wchar_t** argv) {
     Check(FontPath(japanese)!="auto" && !FallbackFontPaths().empty(),"Automatic installed font selection resolves before rendering");
     Check(ResolveLanguage("auto","fr-FR")=="fr" && ResolveLanguage("auto","fr-CA")=="fr",
         "Bundled generic French resolves regional Windows locales");
+    for(auto binding:{&Settings::kbCategoryPrevKey,&Settings::kbCategoryNextKey}) {
+        for(int scan:{-200,0,256,1000}) {
+            BeginSettings();auto invalid=Config();invalid.*binding=scan;EditSettings(invalid);
+            auto expected=invalid;expected.*binding=-1;
+            Check(Config()==expected,"Invalid category scan normalizes only its own binding");RevertSettings();
+        }
+        for(int scan:{-1,1,44,46,255}) {
+            BeginSettings();auto valid=Config();valid.*binding=scan;EditSettings(valid);
+            Check(Config()==valid,"Valid category scan preserves both independent bindings");RevertSettings();
+        }
+    }
     auto french=edited;french.language="fr";
     Check(Tr(french,"settings")=="PARAMÈTRES" && Tr(french,"hideEmptyCategories")=="Masquer les catégories vides" &&
         Tr(french,"outfitExported").find("FavoriteWheel/Outfits/Exports")!=std::string::npos,
         "Community French and current settings load with the real export path");
     Check(Tr(edited,"settings")=="设置","UTF-8 language");
     Check(Tr(edited,"gamepadMoveWhileOpen")=="左摇杆控制移动" && Tr(edited,"padSettingsHelpRight").find("右摇杆")!=std::string::npos,"Split stick controls are localized");
+    Check(Tr(edited,"kbMoveWhileOpen")=="键鼠移动模式" && Tr(edited,"kbCategoryPrevKey")=="分类切换← (Z)" && Tr(edited,"kbCategoryNextKey")=="分类切换→ (C)","Keyboard movement labels are localized");
+    for(const auto language:{"en","de","fr","ja","ko","pt_BR","ru"}) {
+        auto translated=edited;translated.language=language;
+        Check(Tr(translated,"kbMoveWhileOpen")=="KB+Mouse Move While Open" && Tr(translated,"kbCategoryPrevKey")=="Category Prev Key (Z)" && Tr(translated,"kbCategoryNextKey")=="Category Next Key (C)","Other languages expose English keyboard movement labels");
+    }
     Check(Tr(edited,"spells")=="法术" && Tr(edited,"shouts")=="龙吼" && Tr(edited,"powers")=="能力","Separated magic categories use localized labels");
     Check(ResolveLanguage("auto","ZH-cn")=="zh_CN" && ResolveLanguage("zh-CN","en-US")=="zh_CN","Case/hyphen normalization and explicit override");
     Check(ResolveLanguage("auto","en-GB")=="en" && ResolveLanguage("auto","es-ES")=="en","English variants and unavailable locales fall back to English");
@@ -341,13 +366,13 @@ int wmain(int argc,wchar_t** argv) {
     Check(WheelSlot(2,0)==-1 && WheelSlot(0,-1)==0 && WheelSlot(0,0)==-1,"Free pointer cannot use outside wheel or in center");
     Check(!applyButton.Contains(cancelButton.x+10,cancelButton.y+10),"Apply and cancel do not overlap");
     for(int tab:{0,1,2,3})for(int slot=0;slot<SettingCount(tab);++slot) {
-        const auto valueRect=ValueButton(slot);
-        Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
-        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && (tab==0 || valueRect.y+valueRect.h<145),"Settings rows stay below tabs and clear contextual help text");
+        const auto valueRect=ValueButton(slot,tab);
+        Check(valueRect.Contains(valueRect.x+5,valueRect.y+5) && !MinusButton(slot,tab).Contains(valueRect.x+5,valueRect.y+5),"Setting value and decrement targets are distinct");
+        Check(!generalTab.Contains(valueRect.x+5,valueRect.y+5) && !controlsTab.Contains(valueRect.x+5,valueRect.y+5) && !gamepadTab.Contains(valueRect.x+5,valueRect.y+5) && !gameplayTab.Contains(valueRect.x+5,valueRect.y+5) && (tab==0 || valueRect.y+valueRect.h<(tab==2?110:145)),"Settings rows stay below tabs and clear contextual help text");
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
-    Check(SettingCount(2)==7 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27,"Gameplay tab includes continuous use, empty categories and wheel memory");
+    Check(SettingCount(2)==10 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay tab includes continuous use, empty categories and wheel memory");
     Check(SettingCount(0)==11 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();

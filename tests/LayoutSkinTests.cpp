@@ -22,7 +22,7 @@ int main() {
     memory.Observe(true,true);memory.Observe(false,false);
     Check(!memory.Resolve(true,true,false) && memory.Resolve(false,true,true),"Restricted forms force inventory without overwriting human memory");
     memory.Reset();Check(!memory.Resolve(false,true,true),"Loading a save resets opening memory");
-    Check(SettingCount(2)==7 && SettingRow(2,6)==27,"Gameplay settings expose all current gameplay options");
+    Check(SettingCount(2)==10 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay settings expose all current gameplay options");
     Check(SettingCount(0)==11 && SettingRow(0,10)==28,"Display settings expose action-notification control");
     int hits=0,placements=0;
     for(const auto shape:{WheelShape::Circle,WheelShape::Ellipse,WheelShape::Polygon})

@@ -16,7 +16,7 @@ void Require(bool success,const char* stage) {
 Wheel::Settings Expected(bool unicodeFont) {
     auto value=Wheel::Settings{};
     value.language="zh_CN";value.theme="frost";value.positionX=64;value.positionY=32;
-    value.keepOpen=false;
+    value.keepOpen=false;value.kbMoveWhileOpen=true;value.kbCategoryPrevKey=46;value.kbCategoryNextKey=44;
     if(unicodeFont)value.font=Utf8(L"D:/字体/𠀀.ttf");
     return value;
 }

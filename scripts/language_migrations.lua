@@ -1,5 +1,11 @@
 -- Replace only exact previously shipped hints. Unknown/custom text stays intact.
 local old = {
+    kbMoveNavHint = {
+        ["Scroll: page · Shift+Scroll / Middle: category · Z or C: bind + Apply in move mode"] = true,
+        ["滚轮 翻页 · Shift+滚轮 / 中键 切类型 · Z或C：开启移动模式并配置、应用后生效"] = true,
+        ["Scroll: page  ·  Shift+Scroll: category  ·  Middle: category"] = true,
+        ["滚轮 翻页  ·  Shift+滚轮 切类型  ·  中键 切类型"] = true,
+    },
     combatSave = {
         ["AKTUELLE HÄNDE SPEICHERN"]=true,
         ["ENREGISTRER LES MAINS ACTUELLES"]=true,

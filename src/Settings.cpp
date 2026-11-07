@@ -72,6 +72,8 @@ namespace Wheel {
             if(v.switchKey<2 || v.switchKey>255 || v.switchKey==60)v.switchKey=19;
             if (v.hotkey < -1 || v.hotkey > 255) v.hotkey = -1;
             if(v.actionHotkey< -1 || v.actionHotkey>255)v.actionHotkey=-1;
+            if(v.kbCategoryPrevKey<=0 || v.kbCategoryPrevKey>255)v.kbCategoryPrevKey=-1;
+            if(v.kbCategoryNextKey<=0 || v.kbCategoryNextKey>255)v.kbCategoryNextKey=-1;
             v.hotkeyModifier=std::clamp(v.hotkeyModifier,0,7);
             v.actionModifier=std::clamp(v.actionModifier,0,7);
             if(v.gamepadHotkey!= -1 && (v.gamepadHotkey<266 || v.gamepadHotkey>281))v.gamepadHotkey=-1;
@@ -81,6 +83,9 @@ namespace Wheel {
     }
     Settings Config() { std::lock_guard lock(settingsMutex); return settings; }
     bool AppliedGamepadMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).gamepadMoveWhileOpen;}
+    bool AppliedKbMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbMoveWhileOpen;}
+    int AppliedKbCategoryPrevKey() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbCategoryPrevKey;}
+    int AppliedKbCategoryNextKey() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbCategoryNextKey;}
     void SetSettingsPath(const std::string& path) {
         std::lock_guard lock(settingsMutex);
         settingsPath=path.empty()?std::filesystem::path{}:std::filesystem::absolute(std::filesystem::u8path(path));
@@ -126,6 +131,9 @@ namespace Wheel {
             settings.gamepadActionModifier=number(L"Controls",L"GamepadActionModifier",settings.gamepadActionModifier);
             settings.gamepadCategoryButtons=number(L"Controls",L"GamepadCategoryButtons",settings.gamepadCategoryButtons);
             settings.gamepadMoveWhileOpen=number(L"Controls",L"GamepadMoveWhileOpen",settings.gamepadMoveWhileOpen)!=0;
+            settings.kbMoveWhileOpen=number(L"Controls",L"KbMoveWhileOpen",settings.kbMoveWhileOpen)!=0;
+            settings.kbCategoryPrevKey=number(L"Controls",L"KbCategoryPrevKey",settings.kbCategoryPrevKey);
+            settings.kbCategoryNextKey=number(L"Controls",L"KbCategoryNextKey",settings.kbCategoryNextKey);
             settings.swapMouseHands=number(L"Controls",L"SwapMouseHands",settings.swapMouseHands)!=0;
             settings.scale = number(L"Display",L"ScalePercent",static_cast<int>(settings.scale*100))/100.f;
             settings.sensitivity = number(L"Controls",L"SensitivityPercent",static_cast<int>(settings.sensitivity*100))/100.f;
@@ -224,6 +232,9 @@ namespace Wheel {
             write(L"Controls",L"GamepadActionModifier",std::to_string(settings.gamepadActionModifier)) &&
             write(L"Controls",L"GamepadCategoryButtons",std::to_string(settings.gamepadCategoryButtons)) &&
             write(L"Controls",L"GamepadMoveWhileOpen",settings.gamepadMoveWhileOpen?"1":"0") &&
+            write(L"Controls",L"KbMoveWhileOpen",settings.kbMoveWhileOpen?"1":"0") &&
+            write(L"Controls",L"KbCategoryPrevKey",std::to_string(settings.kbCategoryPrevKey)) &&
+            write(L"Controls",L"KbCategoryNextKey",std::to_string(settings.kbCategoryNextKey)) &&
             write(L"Controls",L"SwapMouseHands",settings.swapMouseHands?"1":"0") &&
             write(L"Controls",L"SensitivityPercent",std::to_string(static_cast<int>(settings.sensitivity*100+.5f))) &&
             write(L"Display",L"ScalePercent",std::to_string(static_cast<int>(settings.scale*100+.5f)));

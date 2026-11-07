@@ -64,6 +64,9 @@ int main(int argc,char** argv) {
     draft.hotkey=44;draft.positionX=20;draft.gamepadHotkey=268;draft.enabled=false;draft.font="preserved.ttf";
     Defaults(Page::Appearance);Require(draft.positionX==Settings{}.positionX && draft.hotkey==44 && draft.gamepadHotkey==268);
     Require(!draft.enabled && draft.font=="preserved.ttf");Defaults(Page::Keyboard);Require(draft.hotkey==Settings{}.hotkey && draft.gamepadHotkey==268);
+    draft.kbMoveWhileOpen=true;draft.kbCategoryPrevKey=46;draft.kbCategoryNextKey=44;
+    Defaults(Page::Controller);Require(draft.kbMoveWhileOpen && draft.kbCategoryPrevKey==46 && draft.kbCategoryNextKey==44);
+    Defaults(Page::Gameplay);Require(!draft.kbMoveWhileOpen && draft.kbCategoryPrevKey==44 && draft.kbCategoryNextKey==46);
     Refresh();
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level;
     Check(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
@@ -74,6 +77,7 @@ int main(int argc,char** argv) {
     auto raw=target.Get();context->OMSetRenderTargets(1,&raw,nullptr);
     IMGUI_CHECKVERSION();ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1100,760};io.DeltaTime=1.f/60;
     ImFontGlyphRangesBuilder glyphBuilder;glyphBuilder.AddRanges(io.Fonts->GetGlyphRangesChineseFull());
+    glyphBuilder.AddChar(0x2190);glyphBuilder.AddChar(0x2192); // Category direction labels.
     glyphBuilder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());ImVector<ImWchar> glyphs;glyphBuilder.BuildRanges(&glyphs);
     io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",20,nullptr,glyphs.Data);
     ImGui::StyleColorsDark();auto& style=ImGui::GetStyle();style.FramePadding={9,5};style.ItemSpacing={10,8};style.CellPadding={8,4};

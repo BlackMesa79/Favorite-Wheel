@@ -66,6 +66,8 @@ int main(int argc, char** argv) {
     if(argc>4 && (std::string(argv[4])=="controls-pad-move" || std::string(argv[4])=="pad-move" || std::string(argv[4])=="pad-move-pause")) {
         config.gamepadMoveWhileOpen=true;config.timeMode=std::string(argv[4])=="pad-move-pause"?0:1;
     }
+    if(argc>14){config.kbMoveWhileOpen=true;config.kbCategoryPrevKey=std::atoi(argv[14]);}
+    if(argc>15)config.kbCategoryNextKey=std::atoi(argv[15]);
     Wheel::EditSettings(config);
     Wheel::preview.config=config;Wheel::preview.appliedGamepadMove=config.gamepadMoveWhileOpen;
     Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";

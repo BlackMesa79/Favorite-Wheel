@@ -97,7 +97,49 @@ void CheckInputDispatch() {
     }
     InputDispatchChain<Event> empty(nullptr);empty.Finish();Check(!*empty.Events(),"Empty input polls remain valid");
 }
+void CheckKeyboardMovement() {
+    using namespace Wheel;
+    using C=KbWheelCommand;
+    for(const auto code:{17u,31u,30u,32u,200u,208u,203u,205u}) {
+        Check(KbMovementKey(code),"WASD and arrows are movement directions");
+        Check(KeyboardWheelCommand(true,static_cast<int>(code),static_cast<int>(code),code)==C::None,"Movement takes precedence over category binding");
+        InputGate gate;
+        for(int i=0;i<2;++i)Check(gate.Filter(code,true,false,false,false,true)==InputGate::Result::Pass,"New and held movement reach gameplay");
+        Check(gate.Filter(code,false,true,false,false,true)==InputGate::Result::Pass,"Movement release reaches gameplay");
+        gate.Filter(code,true,false,true,false,true);
+        Check(gate.Filter(code,true,false,false,false,true)==InputGate::Result::Resume,"Applying movement resumes a UI-held direction");
+    }
+    for(auto code:{30u,203u})Check(KeyboardWheelCommand(false,44,46,code)==C::PreviousCategory,"Legacy A/left category");
+    for(auto code:{32u,205u})Check(KeyboardWheelCommand(false,44,46,code)==C::NextCategory,"Legacy D/right category");
+    for(auto code:{17u,200u})Check(KeyboardWheelCommand(false,44,46,code)==C::PreviousPage,"Legacy W/up page");
+    for(auto code:{31u,208u})Check(KeyboardWheelCommand(false,44,46,code)==C::NextPage,"Legacy S/down page");
+    for(auto code:{44u,46u}) {
+        Check(KeyboardWheelCommand(true,44,46,code)==(code==44?C::PreviousCategory:C::NextCategory),"Z selects previous category and C selects next category");
+        Check(KeyboardWheelCommand(false,44,46,code)==C::None,"Disabled mode ignores optional binding");
+        Check(KeyboardWheelCommand(true,-1,-1,code)==C::None && KeyboardWheelCommand(true,0,0,code)==C::None,"Unset/nonpositive bindings are inactive");
+    }
+    for(auto code:{30u,32u,17u,31u,200u,208u,203u,205u})
+        Check(KeyboardWheelCommand(true,44,46,code)==C::None,"Default movement mode never navigates with WASD/arrows");
+    Check(KeyboardWheelCommand(true,46,44,46)==C::PreviousCategory && KeyboardWheelCommand(true,46,44,44)==C::NextCategory,"Both category bindings can be reassigned independently");
+    Check(KeyboardWheelCommand(true,-1,46,44)==C::None && KeyboardWheelCommand(true,-1,46,46)==C::NextCategory,"Previous binding can be disabled independently");
+    Check(KeyboardWheelCommand(true,44,-1,44)==C::PreviousCategory && KeyboardWheelCommand(true,44,-1,46)==C::None,"Next binding can be disabled independently");
+    Check(KeyboardWheelCommand(true,44,44,44)==C::PreviousCategory,"Previous category wins duplicate bindings");
+    for(auto code:{44u,46u}) {
+        const bool categoryBinding=KbCategoryPrevKey(true,44,code) || KbCategoryNextKey(true,46,code);
+        Check(categoryBinding,"Both category keys block remapped gameplay movement");
+        InputGate gate;
+        Check(gate.Filter(code,true,false,true,false,!categoryBinding)==InputGate::Result::Suppress,"Category press stays in UI");
+        Check(gate.Filter(code,false,true,true,false,!categoryBinding)==InputGate::Result::Suppress,"Category release stays in UI");
+    }
+    Check(!KbMovementKey(28) && !KbMovementKey(60) && !KbMovementKey(44),"Other keyboard actions remain separate");
+    Check(KbCategoryMouse(true,2) && !KbCategoryMouse(false,2),"Middle click changes category only in movement mode");
+    for(auto code:{0u,1u,8u,9u})Check(!KbCategoryMouse(true,code),"Other mouse buttons retain their actions");
+    Check(!KbScrollCategory(false,false) && KbScrollCategory(true,false) && KbScrollCategory(false,true) && KbScrollCategory(true,true),"Either Shift routes scroll to categories; unmodified scroll routes to pages");
+    Check(KbWheelScroll(true,0,120)==-1 && KbWheelScroll(true,0,-120)==1,"Scroll sign selects previous or next");
+    Check(KbWheelScroll(false,0,120)==0 && KbWheelScroll(true,1,120)==0 && KbWheelScroll(true,0,0)==0,"Disabled, horizontal and empty moves do not scroll");
+}
 int main() {
+    CheckKeyboardMovement();
     {
         bool loaded=true,loading=true;std::atomic<bool> queued{true};
         Check(!Wheel::DirectoryRequestNeeded(loaded,loading,queued),"An outstanding directory task is not duplicated");
@@ -260,7 +302,7 @@ int main() {
         }
         for(std::string_view overlay:{"HUD Menu","Cursor Menu","FavoriteWheelMenu","FavoriteWheelPauseGuard",""})
             Check(!BlockingWheelMenu([&](const char* name){return overlay==name;}),
-                "Gameplay HUD, cursor and the wheel's own menus do not block opening or its time session");
+                "Gameplay HUD, IME cursor and the wheel's own menus do not block opening or its time session");
     }
     Check(FavoritesKeyMatches(-1,16,16,"") && FavoritesKeyMatches(-1,33,33,""), "default and rebound physical favorites key");
     Check(ResolveFavoritesKey(-1,51)==51 && !FavoritesKeyMatches(-1,51,16,""),"Reported mapped=51 follows comma, not physical Q");

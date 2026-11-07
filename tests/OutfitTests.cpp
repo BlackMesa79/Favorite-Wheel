@@ -80,6 +80,35 @@ int main(){
             !OutfitBudgetAvailable(2,0) && !OutfitBudgetAvailable(1,3.),
             "Per-tick budget bounds both engine submissions and elapsed work");
     }
+    {
+        auto accessory=armor;accessory.base.id=0x9876;accessory.mask=64;accessory.optional=true;
+        auto extra=armor;extra.base.id=0x9877;
+        Preset legacy{7,"Full outfit",{armor,accessory}};
+        legacy.parts.fill(PartMode::Ignore);
+        legacy.parts[static_cast<unsigned>(Part::Ring)]=PartMode::Unequip;
+        std::vector<Candidate> current{{armor,true,4},{accessory,false,64},{extra,true,0}};
+        std::vector<int> resolved;
+        Check(Resolve(legacy,current,resolved)&&resolved==std::vector<int>{0,1},
+            "Ignore/Unequip and optional metadata never skip present outfit pieces");
+        const auto plan=ReplacementPlan(current,resolved,false,legacy);
+        Check(plan.size()==2&&plan[0].equip&&plan[0].piece==accessory&&!plan[1].equip&&plan[1].piece==extra,
+            "Full replacement equips optional pieces and removes unmatched zero-mask apparel");
+        Check(!Wearing(current,resolved,legacy),"Preset overload requires every piece worn");
+        current[1].worn=true;
+        Check(!Wearing(current,resolved,legacy),"Ignored regions do not permit extra worn apparel");
+        current[2].worn=false;
+        Check(Wearing(current,resolved,legacy)==Wearing(current,resolved)&&Wearing(current,resolved),
+            "Preset overload recognizes the same complete outfit as legacy");
+        current.pop_back();current.pop_back();
+        Check(!Resolve(legacy,current,resolved),"Missing optional pieces fail preflight instead of yielding negative indices");
+        current.push_back({accessory,false,64});current[1].piece.health+=.5f;
+        Check(!Resolve(legacy,current,resolved),"Strict matching still rejects changed instances");
+        legacy.loose=true;
+        Check(Resolve(legacy,current,resolved)&&resolved==std::vector<int>{0,1},"Saved loose matching remains supported");
+        std::vector<Preset> roundtrip;
+        Check(Decode(Encode({legacy}),roundtrip)&&roundtrip==std::vector<Preset>{legacy},
+            "Dormant FWO 2 part, optional and loose metadata survives unchanged");
+    }
     Preset outfit{1,"夜行套装",{armor}};
     std::vector<Preset> decoded;
     Check(Decode(Encode({outfit}),decoded) && decoded==std::vector<Preset>{outfit},"Unicode and instance fields survive serialization");

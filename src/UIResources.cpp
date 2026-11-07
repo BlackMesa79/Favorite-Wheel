@@ -113,6 +113,8 @@ namespace Wheel {
             {"settingsKeyboard","KEYBOARD"},{"settingsController","CONTROLLER"},
             {"consumableRetentionHelp","Potions and food use a separate switch. Poisons and presets close the wheel; consumption briefly releases pause."},{"keepOpenConsumables","Keep open after potions / food"},{"keepOpen","Keep open after equip"},{"gamepadCategoryButtons","Category buttons"},
             {"gamepadMoveWhileOpen","Left stick movement"},
+            {"kbMoveWhileOpen","KB+Mouse Move While Open"},{"kbCategoryPrevKey","Category Prev Key (Z)"},{"kbCategoryNextKey","Category Next Key (C)"},
+            {"kbMoveNavHint","Scroll: page  ·  Middle: category  ·  Z: previous  ·  C: next"},
             {"hideEmptyCategories","Hide empty categories"},
             {"gamepadMoveApplyHint","Stick controls change only after Apply; Cancel keeps the current scheme."},
             {"gamepadMoveHelp","On: left stick moves in Slow/Normal; right stick selects or moves dialog pointers. Pause and dialogs stop movement. Sprint buttons remain wheel controls."},

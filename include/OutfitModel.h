@@ -144,13 +144,11 @@ namespace Wheel::Outfits {
             if(problem)*problem={};
             for(std::size_t at=0;at<p.pieces.size();++at) {
                 const auto& piece=p.pieces[at];
-                if(p.parts[static_cast<std::size_t>(PartOf(piece.mask))]!=PartMode::Set){matches.push_back(-1);continue;}
                 int i=Match(piece,inventory);
                 if(i<0&&p.loose)for(int n=0;n<static_cast<int>(inventory.size());++n)
                     if(inventory[n].piece.base==piece.base&&inventory[n].piece.enchantment==piece.enchantment&&
                         std::find(used.begin(),used.end(),n)==used.end()&&(i<0||inventory[n].worn))i=n;
                 if(i<0 || std::find(used.begin(),used.end(),i)!=used.end()) {
-                    if(piece.optional){matches.push_back(-1);continue;}
                     if(problem) {
                         const bool basePresent=std::any_of(inventory.begin(),inventory.end(),[&](const auto& c){return c.piece.base==piece.base;});
                         *problem={i==-2?ResolveReason::Ambiguous:i<0?(basePresent?ResolveReason::Changed:ResolveReason::Missing):ResolveReason::Duplicate,at};
@@ -173,12 +171,8 @@ namespace Wheel::Outfits {
     template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches) {
             return WearingPieces(inventory,matches) && std::count_if(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;})==matches.size();
         }
-    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,const Preset& preset) {
-        bool found=false;
-        for(std::size_t at=0;at<matches.size();++at){const auto i=matches[at];if(i<0){if(preset.parts[static_cast<std::size_t>(PartOf(preset.pieces[at].mask))]==PartMode::Set&&!preset.pieces[at].optional)return false;continue;}found=true;if(static_cast<std::size_t>(i)>=inventory.size()||!inventory[i].worn)return false;}
-        if(!found)return false;const auto managed=ManagedMask(preset);
-        for(std::size_t i=0;i<inventory.size();++i)if(inventory[i].worn&&(inventory[i].mask&managed)&&std::find(matches.begin(),matches.end(),static_cast<int>(i))==matches.end())return false;
-        return true;
+    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,const Preset&) {
+        return Wearing(inventory,matches);
     }
 
 }
