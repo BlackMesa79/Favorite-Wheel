@@ -804,7 +804,10 @@ namespace Wheel {
                         if(!submit && Combat::Busy()) {
                             auto ui=RE::UI::GetSingleton();
                             const auto mode=CurrentFormMode();
-                            Combat::Tick((mode==FormMode::Human || mode==FormMode::Werewolf) && outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused());
+                            const bool valid=(mode==FormMode::Human || mode==FormMode::Werewolf) && outfitGeneration==epoch.load() && ValidPlayer() && Focused() && !BlockedMenu() && ui && !ui->GameIsPaused();
+                            if(!valid)SKSE::log::info("Combat tick interrupted: mode={} generation={} player={} focused={} blockedMenu={} paused={}",
+                                static_cast<int>(mode),outfitGeneration==epoch.load(),ValidPlayer(),Focused(),BlockedMenu(),!ui || ui->GameIsPaused());
+                            Combat::Tick(valid);
                         }
                     },failed);
                 });else actionTaskQueued=false;

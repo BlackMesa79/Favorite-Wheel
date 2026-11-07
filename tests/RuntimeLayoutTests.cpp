@@ -204,6 +204,10 @@ int wmain(int argc, wchar_t **argv)
         const auto actorOffset = layout.state == 0xB8 ? 0xE0 : 0xE8;
         Check(reinterpret_cast<std::byte *>(&character->GetActorRuntimeData()) == player.data() + actorOffset,
               "versioned actor runtime block");
+        auto voice=reinterpret_cast<RE::TESForm*>(std::uintptr_t{0x12345678});
+        Write(player,actorOffset+0x100,voice);
+        Check(character->GetActorRuntimeData().selectedPower==voice,
+              "versioned actor Voice selection stays independent of equippedForms and hand spells");
         alignas(RE::BSTimer) std::array<std::byte,0x40> timerBytes{};
         Write(timerBytes,0x34,static_cast<std::uint32_t>(2));Write(timerBytes,0x3A,true);
         auto timer=reinterpret_cast<RE::BSTimer*>(timerBytes.data());

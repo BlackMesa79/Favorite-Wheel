@@ -56,8 +56,51 @@ int main() {
     Check(StepComplete(both,Step::EquipLeft,magic.left),"A two-handed target uses one equip operation, not an empty-left cleanup after equip");
     Check(StepComplete(preserve,Step::ClearRight,{Kind::Object,sword}) &&
         StepComplete(preserve,Step::EquipLeft,{Kind::Spell,spell}),"Ignored hands accept any observed state without changing the target");
-    Check(StepComplete(voice,Step::EquipVoice,voice.voice) && !StepComplete(voice,Step::ClearVoice,voice.voice) &&
+    Check(StepComplete(voice,Step::EquipVoice,voice.voice) && StepComplete(voice,Step::ClearVoice,voice.voice) &&
         StepComplete(empty,Step::ClearVoice,{}),"Voice targets equip, clear and verify independently from hand slots");
+    Check(StepComplete(voice,Step::ClearVoice,{Kind::Voice,spell}),"Replacing Voice never requires observing an intermediate empty slot");
+    Check(!StepComplete(empty,Step::ClearVoice,voice.voice) && !StepComplete(empty,Step::ClearVoice,{},true),
+        "Explicit Voice unequip still requires both observed empty and callback completion");
+    for(auto p:{empty,pair,magic,both}) {
+        p.voice=voice.voice;
+        Check(HandednessMatches(p,Slot::Voice,false) && HandednessMatches(p,Slot::Voice,true),
+            "Voice preflight is independent of any hand weapon/spell handedness");
+        Check(HandednessMatches(p,Slot::Right,TwoHanded(p)) && !HandednessMatches(p,Slot::Right,!TwoHanded(p)),
+            "Hand targets retain their handedness validation");
+        Check(bool(Resolve(p,std::vector<Candidate>{{sword,2},{distinct}})),"Voice does not consume inventory capacity");
+    }
+    auto modes=pair;modes.voice=voice.voice;
+    for(auto slot:{Slot::Right,Slot::Left,Slot::Voice}) {
+        const auto original=modes;
+        const auto saved=slot==Slot::Right?modes.right:slot==Slot::Left?modes.left:modes.voice;
+        Check(CycleSlotMode(modes,slot),"Set to Ignore");
+        const auto ignored=slot==Slot::Right?modes.right:slot==Slot::Left?modes.left:modes.voice;
+        Check(ignored.kind==Kind::Ignore && ignored.piece==saved.piece && ignored.remembered==saved.kind,"Ignore retains exact item identity");
+        std::vector<Preset> restored;
+        Check(Decode(Encode({modes}),restored,3) && restored.front()==modes,"Inactive item survives save/load");
+        modes=restored.front();
+        Check(CycleSlotMode(modes,slot),"Ignore to Empty");
+        Check(Decode(Encode({modes}),restored,3) && restored.front()==modes,"Empty retains saved item too");
+        Check(CycleSlotMode(modes,slot) && modes==original,"Empty to Set restores original, without current gear");
+    }
+    auto bowModes=both;
+    Check(CycleSlotMode(bowModes,Slot::Right) && bowModes.twoHanded && !TwoHanded(bowModes),"Ignored bow remembers but does not activate two-handed semantics");
+    std::vector<Preset> savedBow;
+    Check(Decode(Encode({bowModes}),savedBow,3) && savedBow.front()==bowModes,"Ignored two-handed flag round trips with saved right item");
+    Check(CycleSlotMode(bowModes,Slot::Right) && bowModes.twoHanded && !TwoHanded(bowModes),"Empty right preserves bow handedness");
+    Check(CycleSlotMode(bowModes,Slot::Right) && bowModes==both && TwoHanded(bowModes),"Restored bow restores two-handed behavior");
+    Check(CycleSlotMode(bowModes,Slot::Right),"Ignore bow for conflict test");
+    bowModes.left=magic.left;
+    Check(CycleSlotMode(bowModes,Slot::Right),"Ignored bow to empty with active left");
+    const auto conflict=bowModes;
+    Check(!CycleSlotMode(bowModes,Slot::Right) && bowModes==conflict,"Conflicting restore is atomic and preserves saved items");
+    auto noItem=empty;
+    Check(CycleSlotMode(noItem,Slot::Voice) && noItem.voice.kind==Kind::Ignore &&
+        CycleSlotMode(noItem,Slot::Voice) && noItem==empty,"Never-captured slots cycle Empty/Ignore and skip Set");
+    auto malformed=voice;malformed.voice.remembered=Kind::Object;
+    Check(!Decode(Encode({malformed}),decoded),"Active targets cannot hide a second remembered kind");
+    malformed=empty;malformed.voice={Kind::Ignore,sword,Kind::Object};
+    Check(!Valid(malformed),"Inactive Voice cannot hide a weapon");
     auto damaged=pair.right;damaged.piece.health+=.1f;
     Check(!SameTarget(pair.right,damaged),"Observed completion must match the exact target weapon signature");
     auto bindings=all;int assigned=-1;
@@ -68,12 +111,12 @@ int main() {
     Check(AssignQuickSlot(bindings,magic.id,7) && !PresetForQuickSlot(bindings,0) && PresetForQuickSlot(bindings,7)==magic.id,
         "Moving a preset to slot 8 releases its old slot");
     std::vector<SlotBinding> savedBindings;
-    Check(Decode(Encode(bindings),decoded,2) && decoded==all && DecodeBindings(EncodeBindings(bindings),savedBindings),
-        "Equipment uses FWC2 for slot states; shortcuts have a separate record");
+    Check(Decode(Encode(bindings),decoded,3) && decoded==all && DecodeBindings(EncodeBindings(bindings),savedBindings),
+        "Equipment uses FWC3 for slot states; shortcuts have a separate record");
     ApplyBindings(decoded,savedBindings);
     Check(decoded==bindings,"Independent shortcut and equipment records restore the complete preset");
     auto beforeEquipment=std::vector<Preset>{};ApplyBindings(beforeEquipment,savedBindings);
-    Check(Decode(Encode(all),beforeEquipment,2),"Bindings can load before equipment");ApplyBindings(beforeEquipment,savedBindings);
+    Check(Decode(Encode(all),beforeEquipment,3),"Bindings can load before equipment");ApplyBindings(beforeEquipment,savedBindings);
     Check(beforeEquipment==bindings,"Record load order does not change restored shortcuts");
     const auto unchanged=bindings;
     Check(!AssignQuickSlot(bindings,999,1) && !AssignQuickSlot(bindings,pair.id,8) && bindings==unchanged,
@@ -84,6 +127,17 @@ int main() {
     const std::string legacy="FWC 1 1\n3 \"Unarmed\" 0\n0 \"\" 0 \"\" 0 \"\" 0 0 1 \"\" \"\"\n0 \"\" 0 \"\" 0 \"\" 0 0 1 \"\" \"\"\n";
     Check(Decode(legacy,decoded,1) && decoded==std::vector<Preset>{Preset{3,"Unarmed"}} && decoded[0].quickSlot==-1,
         "Legacy two-hand-slot records migrate with an empty Voice slot");
+    const std::string legacySpell="FWC 1 1\n4 \"Dual flames\" 0\n2 \"Skyrim.esm\" 22136 \"\" 0 \"\" 0 0 1 \"\" \"Flames\"\n2 \"Skyrim.esm\" 22136 \"\" 0 \"\" 0 0 1 \"\" \"Flames\"\n";
+    std::vector<Preset> oldSpells;
+    Check(Decode(legacySpell,oldSpells,1) && oldSpells.front()==magic,"Populated FWC1 spell references migrate unchanged");
+    const std::string legacy2="FWC 2 1\n9 \"Legacy bow and shout\" 1\n1 \"Skyrim.esm\" 4660 \"\" 0 \"\" 0 0 1 \"\" \"Bow\"\n4 \"\" 0 \"\" 0 \"\" 0 0 1 \"\" \"\"\n3 \"Skyrim.esm\" 26505 \"\" 0 \"\" 0 0 1 \"\" \"Shout\"\n";
+    std::vector<Preset> migrated;
+    Check(Decode(legacy2,migrated,2) && migrated.front().twoHanded && migrated.front().voice.kind==Kind::Voice &&
+        migrated.front().left.kind==Kind::Ignore,"Legacy FWC2 retains bow, Voice and Ignore");
+    const auto migratedOriginal=migrated;
+    Check(CycleSlotMode(migrated.front(),Slot::Right) && CycleSlotMode(migrated.front(),Slot::Right) &&
+        CycleSlotMode(migrated.front(),Slot::Right) && migrated==migratedOriginal,"Migrated active items seed retained mode cycling");
+    Check(!Decode(legacy2,migrated,3) && !Decode("FWC 4 0\n",migrated),"Mismatched and unknown equipment versions are rejected");
     auto bad=empty;bad.quickSlot=8;
     Check(!Valid(bad) && !DecodeBindings("FWQ 1 1\n3 8\n",savedBindings),"Corrupt slot values are rejected");
     auto collision=all;collision[0].quickSlot=0;collision[1].quickSlot=0;

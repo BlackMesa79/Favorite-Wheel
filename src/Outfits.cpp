@@ -272,7 +272,8 @@ namespace Wheel::Outfits {
         }catch(const std::exception& e){SKSE::log::warn("Outfit import canceled: {}",e.what());Tell("outfitImportFailed");return false;}
     }
     void Apply(std::uint32_t id) {
-        if(busy)return;
+        if(busy){SKSE::log::info("Outfit {} apply ignored: busy",id);return;}
+        SKSE::log::info("Outfit {} apply requested",id);
         Preset p;{std::lock_guard lock(mutex);for(const auto& entry:presets)if(entry.id==id)p=entry;}
         if(!p.id)return;
         auto inventory=Inventory();std::vector<int> matches;ResolveProblem problem;

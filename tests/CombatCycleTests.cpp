@@ -1,4 +1,5 @@
 #include "CombatCycleModel.h"
+#include "CombatPresetModel.h"
 #include "InputGate.h"
 #include <cstdlib>
 #include <iostream>
@@ -21,6 +22,15 @@ int main() {
     Check(Ordered(group)==std::vector<std::uint32_t>{10,20,30},"First activation starts at entry one");
     Check(!Commit(group,10,false) && group.current==0,"Failed preflight/equip never advances the position");
     Check(Commit(group,10,true) && Ordered(group)==std::vector<std::uint32_t>{20,30,10},"Successful application advances to the next entry");
+    Combat::Preset voicePreset{10,"Voice cycle"};
+    voicePreset.voice={Combat::Kind::Voice,{{"Skyrim.esm",0x1234},{},{},0,1.f,"","Power"}};
+    const auto originalVoice=voicePreset.voice;
+    Check(Combat::CycleSlotMode(voicePreset,Combat::Slot::Voice),"Cycle member can ignore its saved Voice");
+    std::vector<Combat::Preset> loadedPresets;
+    Check(Combat::Decode(Combat::Encode({voicePreset}),loadedPresets,3),"Cycle member retained equipment survives co-save");
+    Check(Combat::CycleSlotMode(loadedPresets[0],Combat::Slot::Voice) && Combat::CycleSlotMode(loadedPresets[0],Combat::Slot::Voice) &&
+        loadedPresets[0].voice==originalVoice,"Cycle member restores original Voice without recapture");
+    Check(!Commit(group,20,false) && group.current==10,"Voice failure does not advance the cycle");
     const auto before=group;
     Check(!Commit(group,999,true) && group==before,"A deleted member cannot be committed by an obsolete callback");
     Check(Commit(group,30,true) && Ordered(group).front()==10,"Last entry wraps to the first");
