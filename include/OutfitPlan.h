@@ -4,10 +4,10 @@ namespace Wheel::Outfits {
     struct PlannedOperation {Piece piece;bool equip;};
     // Candidate owns only an identity in the plan; runtime extras are reacquired per call.
     template<class Candidate> std::vector<PlannedOperation> ReplacementPlan(
-        const std::vector<Candidate>& inventory,const std::vector<int>& matches,bool removeOnly) {
+        const std::vector<Candidate>& inventory,const std::vector<int>& matches,bool removeOnly,const Preset& preset) {
         std::vector<PlannedOperation> result;
         if(!removeOnly) {
-            auto targets=matches;
+            std::vector<int> targets;for(int i:matches)if(i>=0)targets.push_back(i);
             // Skyrim biped slot 32 (Body): cover the torso before accessories.
             constexpr std::uint32_t body=1u<<(32-30);
             std::stable_sort(targets.begin(),targets.end(),[&](int a,int b){
@@ -15,10 +15,16 @@ namespace Wheel::Outfits {
             });
             for(int i:targets)if(!inventory[i].worn)result.push_back({inventory[i].piece,true});
         }
+        const auto managed=ManagedMask(preset);
         for(std::size_t i=0;i<inventory.size();++i)if(inventory[i].worn &&
-            (removeOnly || std::find(matches.begin(),matches.end(),static_cast<int>(i))==matches.end()))
+            (removeOnly ? std::find(matches.begin(),matches.end(),static_cast<int>(i))!=matches.end() :
+             ((inventory[i].mask&managed)!=0 && std::find(matches.begin(),matches.end(),static_cast<int>(i))==matches.end())))
             result.push_back({inventory[i].piece,false});
         return result;
+    }
+    template<class Candidate> std::vector<PlannedOperation> ReplacementPlan(
+        const std::vector<Candidate>& inventory,const std::vector<int>& matches,bool removeOnly) {
+        Preset legacy;legacy.parts.fill(PartMode::Set);return ReplacementPlan(inventory,matches,removeOnly,legacy);
     }
     // Limits submissions as well as time; one slow engine call cannot be preempted.
     inline bool OutfitBudgetAvailable(unsigned calls,double elapsedMilliseconds) {

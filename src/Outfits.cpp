@@ -55,10 +55,11 @@ namespace Wheel::Outfits {
                 int represented=0;const bool quest=data.second->IsQuestObject();
                 if(data.second->extraLists)for(auto extra:*data.second->extraLists) if(extra) {
                     represented+=std::max(1,extra->GetCount());
-                    result.push_back({Describe(armor,extra,labels),armor,extra,
+                    auto piece=Describe(armor,extra,labels);piece.mask=armor->GetSlotMask().underlying();
+                    result.push_back({std::move(piece),armor,extra,
                         extra->HasType<RE::ExtraWorn>()||extra->HasType<RE::ExtraWornLeft>(),quest,armor->GetSlotMask().underlying()});
                 }
-                if(data.first>represented)result.push_back({Describe(armor,nullptr,labels),armor,nullptr,false,quest,armor->GetSlotMask().underlying()});
+                if(data.first>represented){auto piece=Describe(armor,nullptr,labels);piece.mask=armor->GetSlotMask().underlying();result.push_back({std::move(piece),armor,nullptr,false,quest,armor->GetSlotMask().underlying()});}
             }
             const auto ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
             if(ms>8)SKSE::log::info("Outfit inventory scan: form={:08X}, candidates={}, ms={:.2f}",only,result.size(),ms);
@@ -76,6 +77,10 @@ namespace Wheel::Outfits {
             case ResolveReason::Duplicate:return "outfitItemDuplicate";
             default:return "outfitMissing";
             }
+        }
+        bool Commit(std::vector<Preset>& next) {
+            std::vector<Preset> validated;const auto text=Encode(next);
+            if(!Decode(text,validated))return false;presets=std::move(validated);return true;
         }
         void LogProblem(const Preset& preset,const std::vector<Candidate>& inventory,ResolveProblem problem,const char* stage) {
             if(problem.piece>=preset.pieces.size())return;
@@ -110,7 +115,7 @@ namespace Wheel::Outfits {
         std::uint32_t NextID() {std::uint32_t id=1;for(const auto& p:presets)id=std::max(id,p.id+1);return id;}
         void Save(SKSE::SerializationInterface* api) {
             std::lock_guard lock(mutex);const auto text=Encode(presets);
-            if(!api->WriteRecord(record,1,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets: presets={} bytes={}",presets.size(),text.size());
+            if(!api->WriteRecord(record,2,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets: presets={} bytes={}",presets.size(),text.size());
             else SKSE::log::info("Outfit co-save written: presets={} bytes={}",presets.size(),text.size());
             Combat::Save(api);Cycles::Save(api);Ordering::Save(api);
         }
@@ -123,7 +128,7 @@ namespace Wheel::Outfits {
                 if(type==Combat::bindingRecord){Combat::LoadBindings(api,version,length);continue;}
                 if(type==Cycles::record){Cycles::Load(api,version,length);continue;}
                 if(type==Ordering::record){Ordering::Load(api,version,length);continue;}
-                if(type!=record || version!=1 || length>1024*1024)continue;
+                if(type!=record || (version!=1&&version!=2) || length>1024*1024)continue;
                 std::string text(length,'\0');std::vector<Preset> loaded;
                 if(api->ReadRecordData(text.data(),length)!=length || !Decode(text,loaded)) {SKSE::log::error("Invalid outfit record");continue;}
                 for(auto& p:loaded)for(auto& x:p.pieces)for(auto r:{&x.base,&x.enchantment,&x.owner}) {
@@ -151,7 +156,7 @@ namespace Wheel::Outfits {
         result.push_back({{},Category::Armor,Tr(Config(),"outfitImport"),0,false,true,true,ActionKind::ImportOutfits});
         for(const auto& p:presets) {
             std::vector<int> matches;ResolveProblem problem;const bool valid=Resolve(p,inventory,matches,&problem);
-            result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&WearingPieces(inventory,matches),false,valid,ActionKind::Outfit,p.id});
+            result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&Wearing(inventory,matches,p),false,valid,ActionKind::Outfit,p.id});
             if(valid)reportedProblems.erase(p.id);
             else {
                 result.back().detail=Tr(Config(),ReasonKey(problem.reason))+": "+p.pieces[problem.piece].label;
@@ -166,7 +171,9 @@ namespace Wheel::Outfits {
     bool Capture(const std::string& name,std::uint32_t replace) {
         Preset next;next.name=name;if(!ValidName(name))return false;
         const auto inventory=Inventory(0,true);
-        for(const auto& c:inventory)if(c.worn)next.pieces.push_back(c.piece);
+        for(const auto& c:inventory)if(c.worn){auto p=c.piece;p.mask=c.mask;next.pieces.push_back(p);}
+        next.parts.fill(PartMode::Unequip);
+        for(const auto& c:inventory)if(c.worn)next.parts[static_cast<std::size_t>(PartOf(c.mask))]=PartMode::Set;
         if(next.pieces.empty()){Tell("outfitEmpty");return false;}
         if(next.pieces.size()>64){SKSE::log::warn("Outfit capture rejected: reason=piece-count pieces={} maximum=64",next.pieces.size());Tell("outfitSaveInvalid");return false;}
         std::vector<int> matches;ResolveProblem problem;
@@ -288,13 +295,13 @@ namespace Wheel::Outfits {
             auto armor=object?object->As<RE::TESObjectARMO>():nullptr;
             if(armor && armor->IsShield() && data.second && data.second->IsWorn())shieldMask|=armor->GetSlotMask().underlying();
         }
-        const bool removeOnly=Wearing(inventory,matches);
+        const bool removeOnly=Wearing(inventory,matches,p);
         for(int i:matches)if(!removeOnly && (inventory[i].armor->GetSlotMask().underlying()&shieldMask)){Tell("outfitBlocked");return;}
         for(const auto& c:inventory)if(c.worn) {
             if(c.quest){Tell("outfitBlocked");return;}
         }
         Job next;next.preset=p;next.removeOnly=removeOnly;
-        next.operations=ReplacementPlan(inventory,matches,removeOnly);
+        next.operations=ReplacementPlan(inventory,matches,removeOnly,p);
         next.started=std::chrono::steady_clock::now();
         cancelRequested=false;job=std::move(next);busy=true;
         SKSE::log::info("Outfit {} started: mode=replacement removeOnly={} operations={}",id,removeOnly,job->operations.size());
@@ -316,7 +323,7 @@ namespace Wheel::Outfits {
                 auto inventory=Inventory();std::vector<int> matches;
                 const bool success=job->removeOnly?
                     std::none_of(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;}):
-                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches);
+                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches,job->preset);
                 Finish(success?(job->removeOnly?"outfitRemoved":"outfitApplied"):"outfitPartial");return;
             }
             const auto& op=job->operations[job->index];
@@ -352,5 +359,57 @@ namespace Wheel::Outfits {
             SKSE::log::info("Outfit {} step {}/{} {} {:08X}: call_ms={:.2f}",job->preset.id,
                 job->index+1,job->operations.size(),op.equip?"equip":"unequip",form,ms);
         }
+    }
+    const char* PartLabel(Part p){static constexpr const char* names[]={"outfitHead","outfitBody","outfitHands","outfitFeet","outfitRing","outfitAmulet","outfitOther"};return names[static_cast<unsigned>(p)];}
+    const char* PartModeLabel(PartMode m){return m==PartMode::Set?"outfitSet":m==PartMode::Ignore?"outfitIgnore":"outfitUnequip";}
+    std::string ModeLabel(std::uint32_t id){
+        std::lock_guard lock(mutex);
+        for(const auto& p:presets)if(p.id==id){
+            bool anySet=false,anyIgnore=false,anyUnequip=false;
+            for(const auto& mode:p.parts){
+                if(mode==PartMode::Set)anySet=true;
+                else if(mode==PartMode::Ignore)anyIgnore=true;
+                else anyUnequip=true;
+            }
+            if(anySet && !anyIgnore && anyUnequip)return Tr(Config(),"outfitModeWhole");
+            if(anySet && anyIgnore && !anyUnequip)return Tr(Config(),"outfitModeOverlay");
+            return std::string(Tr(Config(),"outfitModeWhole"))+" / "+Tr(Config(),"outfitModeOverlay");
+        }
+        return Tr(Config(),"outfitModeWhole");
+    }
+    std::string PartStateLabel(std::uint32_t id,Part part){
+        std::lock_guard lock(mutex);
+        for(const auto& p:presets)if(p.id==id)return std::string(Tr(Config(),PartLabel(part)))+": "+Tr(Config(),PartModeLabel(p.parts[static_cast<unsigned>(part)]));
+        return "";
+    }
+    bool IsLoose(std::uint32_t id){std::lock_guard lock(mutex);for(const auto& p:presets)if(p.id==id)return p.loose;return false;}
+    bool ToggleMode(std::uint32_t id){
+        std::lock_guard lock(mutex);auto next=presets;
+        for(auto& p:next)if(p.id==id){
+            bool isOverlay=std::all_of(p.parts.begin(),p.parts.end(),[](PartMode m){return m!=PartMode::Unequip;});
+            p.parts.fill(isOverlay?PartMode::Unequip:PartMode::Ignore);
+            for(const auto& x:p.pieces)p.parts[static_cast<unsigned>(PartOf(x.mask))]=PartMode::Set;
+            return Commit(next);
+        }
+        return false;
+    }
+    bool CyclePart(std::uint32_t id,Part part){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){auto& mode=p.parts[static_cast<unsigned>(part)];mode=static_cast<PartMode>((static_cast<unsigned>(mode)+1)%3);return Commit(next);}return false;}
+    bool SetPartsPreset(std::uint32_t id,bool overlay){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){p.parts.fill(overlay?PartMode::Ignore:PartMode::Unequip);for(const auto& x:p.pieces)p.parts[static_cast<unsigned>(PartOf(x.mask))]=PartMode::Set;return Commit(next);}return false;}
+    bool TogglePieceOptional(std::uint32_t id,std::size_t index){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id&&index<p.pieces.size()){p.pieces[index].optional=!p.pieces[index].optional;return Commit(next);}return false;}
+    bool RemovePiece(std::uint32_t id,std::size_t index){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id&&index<p.pieces.size()&&p.pieces.size()>1){p.pieces.erase(p.pieces.begin()+index);return Commit(next);}return false;}
+    bool AddWorn(std::uint32_t id){auto inventory=Inventory(0,true);std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){for(const auto& c:inventory)if(c.worn&&std::none_of(p.pieces.begin(),p.pieces.end(),[&](const Piece& x){return Same(x,c.piece);})){if(p.pieces.size()==64)return false;p.pieces.push_back(c.piece);p.parts[static_cast<unsigned>(PartOf(c.mask))]=PartMode::Set;}return Commit(next);}return false;}
+    bool ToggleLoose(std::uint32_t id){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){p.loose=!p.loose;return Commit(next);}return false;}
+    std::vector<Piece> PieceEntries(std::uint32_t id){std::lock_guard lock(mutex);for(const auto& p:presets)if(p.id==id)return p.pieces;return {};}
+    std::vector<Item> PieceItems(std::uint32_t id) {
+        std::vector<Item> result;
+        auto pieces=PieceEntries(id);
+        Item add;add.name=Tr(Config(),"outfitAddWorn");add.action=ActionKind::AddWorn;add.actionId=id;add.magic=true;result.push_back(std::move(add));
+        for(std::size_t i=0;i<pieces.size();++i) {
+            const auto& piece=pieces[i];Item item;item.name=piece.label;item.category=Category::Armor;
+            item.action=ActionKind::OutfitPiece;item.actionId=id;item.actionIndex=static_cast<std::uint32_t>(i);
+            item.detail=Tr(Config(),piece.optional?"outfitPieceOptional":"outfitPieceRequired");item.magic=true;result.push_back(std::move(item));
+        }
+        Item back;back.name=Tr(Config(),"outfitBack");back.action=ActionKind::FunctionBack;back.magic=true;result.push_back(std::move(back));
+        return result;
     }
 }

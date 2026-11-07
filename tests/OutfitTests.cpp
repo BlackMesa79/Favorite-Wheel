@@ -102,6 +102,14 @@ int main(){
     }
     const auto original=decoded;
     Check(!Decode("FWO 9 1",decoded) && decoded==original,"Bad schema is transactional");
+    {
+        const std::string v1="FWO 1 1\n1 \"Legacy\" 1\n\"Skyrim.esm\" 4660 \"\" 0 \"\" 0 42 1 \"\" \"Legacy armor\"\n";
+        std::vector<Preset> migrated;
+        Check(Decode(v1,migrated)&&migrated.size()==1&&!migrated[0].loose&&
+            std::all_of(migrated[0].parts.begin(),migrated[0].parts.end(),[](PartMode m){return m==PartMode::Set;})&&
+            !migrated[0].pieces[0].optional&&Encode(migrated).find("FWO 2 ")==0,
+            "FWO 1 migrates to strict required-item replacement semantics and writes FWO 2");
+    }
     Check(!Decode(Encode({outfit})+"trailing",decoded),"Reject trailing data");
     Check(!Decode("FWO 1 1000000",decoded),"Reject excessive count");
     Check(!Decode(Encode({outfit,outfit}),decoded),"Reject duplicate ids");

@@ -2,6 +2,8 @@
 // Offscreen visual QA: uses the actual wheel drawing code, a WARP D3D11 device,
 // and synthetic inventory data. It does not launch or interact with Skyrim.
 #include "Wheel.h"
+#include "CombatPresets.h"
+#include "CombatPresetModel.h"
 #include "Settings.h"
 #include "WheelFonts.h"
 #include "UIResources.h"
@@ -24,6 +26,22 @@
 namespace Wheel {
     View preview;
     View Snapshot() { return preview; }
+}
+// Draw.cpp references the runtime preset label provider; previews use fixed
+// labels because this target deliberately excludes SKSE-backed preset storage.
+namespace Wheel::Combat {
+    std::string SlotLabel(std::uint32_t, Slot slot) {
+        switch (slot) {
+        case Slot::Left: return "Left: Set";
+        case Slot::Right: return "Right: Set";
+        default: return "Voice: Set";
+        }
+    }
+}
+namespace Wheel::Outfits {
+    std::string ModeLabel(std::uint32_t) { return "Full Outfit"; }
+    std::string PartStateLabel(std::uint32_t, Part) { return "Head: Set"; }
+    bool IsLoose(std::uint32_t) { return false; }
 }
 void Check(HRESULT hr) { if (FAILED(hr)) { std::cerr << "D3D11 failure: " << std::hex << hr; std::exit(1); } }
 int main(int argc, char** argv) {

@@ -7,6 +7,7 @@
 #include "Wheel.h"
 #include "CombatPresets.h"
 #include "CombatPresetModel.h"
+#include "Outfits.h"
 #include "QuickSlots.h"
 #include "WheelFonts.h"
 #include "WheelIcons.h"
@@ -610,16 +611,22 @@ namespace Wheel
             const auto &t = Style(v.config);
             auto tr = [&](const char *key) { return Tr(v.config, key); };
             const bool naming = v.outfitDialog == 1 || v.outfitDialog == 2;
-            PanelFrame(d, c, s, t, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMemberManage":"cycleManage"):v.combatDialog?(v.outfitDialog==1?"combatSave":"combatManage"):v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
+            PanelFrame(d, c, s, t, tr(v.outfitDialog==6?"outfitEditPieces":v.cycleDialog?(v.cycleMemberDialog?"cycleMemberManage":"cycleManage"):v.combatDialog?(v.outfitDialog==1?"combatSave":"combatManage"):v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
                        tr(naming ? "outfitNameEditHelp" : v.cycleMemberDialog ? "cycleMemberHelp" : "outfitManageHelp"));
             if (naming)
                 NameField(d, c, s, v);
+            else if(v.outfitDialog==6)
+                Text(d,{c.x,c.y-100*s},v.outfitName.text,20*s,t.text,520*s,t.textShadow);
             else if(v.cycleMemberDialog)
                 Text(d,{c.x,c.y-156*s},v.outfitName.text,22*s,t.text,520*s,t.textShadow);
             else
                 Button(d, c, s, v, outfitNameButton,
                        v.outfitName.text.empty() ? tr("outfitNameEmpty") : v.outfitName.text, true);
-            if (v.outfitDialog == 3)
+            if (v.outfitDialog == 6) {
+                Button(d,c,s,v,outfitOverwriteButton,tr("outfitPieceMakeOptional"));
+                Button(d,c,s,v,outfitDeleteButton,tr("outfitPieceRemove"));
+            }
+            else if (v.outfitDialog == 3)
             {
                 Button(d, c, s, v, outfitOverwriteButton, v.cycleCaptureKey?tr("cycleCaptureKey"):tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveUp":"cycleBind"):v.combatDialog?"combatOverwrite":"outfitOverwrite"));
                 Button(d, c, s, v, outfitDeleteButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveDown":"cycleClear"):"outfitDelete"), false, !v.cycleMemberDialog);
@@ -627,7 +634,13 @@ namespace Wheel
                     Button(d,c,s,v,combatLeftButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Left));
                     Button(d,c,s,v,combatRightButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Right));
                     Button(d,c,s,v,combatVoiceButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Voice));
-                } else if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleRemove":"cycleEdit"):"outfitExport"));
+                } else if(!v.combatDialog && !v.cycleDialog) {
+                    Button(d, c, s, v, outfitExportButton, tr("outfitExport"));
+                    Button(d,c,s,v,outfitModeButton,Outfits::ModeLabel(v.outfitId));
+                    Button(d,c,s,v,outfitLooseButton,std::string(tr("outfitLoose"))+(Outfits::IsLoose(v.outfitId)?" "+std::string(tr("on")):" "+std::string(tr("off"))));
+                    Button(d,c,s,v,outfitEditPiecesButton,tr("outfitEditPieces"));
+                    for(int i=0;i<7;++i)Button(d,c,s,v,outfitPartButton(i),Outfits::PartStateLabel(v.outfitId,static_cast<Outfits::Part>(i)));
+                } else if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleMemberDialog?"cycleRemove":"cycleEdit"));
             }
             else if (v.outfitDialog == 4 || v.outfitDialog == 5)
                 Text(d, {c.x, c.y - 40 * s}, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleConfirmRemove":"cycleConfirmClear"):v.combatDialog && v.outfitDialog==4?"combatConfirmOverwrite":v.outfitDialog == 4 ? "outfitConfirmOverwrite" : "outfitConfirmDelete"),

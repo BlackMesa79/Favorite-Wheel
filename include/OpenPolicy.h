@@ -10,7 +10,7 @@ namespace Wheel {
         for(auto name : {"Main Menu", "Loading Menu", "Console", "Dialogue Menu", "InventoryMenu", "MagicMenu",
                 "ContainerMenu", "BarterMenu", "GiftMenu", "Crafting Menu", "Book Menu", "Journal Menu", "MapMenu",
                 "RaceSex Menu", "MessageBoxMenu", "Lockpicking Menu", "Training Menu", "Sleep/Wait Menu", "FavoritesMenu",
-                "TweenMenu", "StatsMenu", "LevelUp Menu"})
+                "TweenMenu", "StatsMenu", "LevelUp Menu", "Cursor Menu"})
             if(isOpen(name))return name;
         return nullptr;
     }

@@ -25,6 +25,7 @@ namespace Wheel {
         std::uint32_t cycleGroup=1,cycleMember=0;
         std::string cycleBinding;
         std::uint32_t outfitId=0;
+        std::uint32_t outfitPieceIndex=0;
         NameEditor outfitName;
         std::string inventoryGlyphs;
         bool open = false;

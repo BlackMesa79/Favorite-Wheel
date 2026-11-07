@@ -15,7 +15,7 @@ namespace Wheel {
         float health = 1.0f;
         bool operator==(const ItemKey&) const = default;
     };
-    enum class ActionKind { Favorite, Outfit, SaveOutfit, ImportOutfits, FaceLightMenu, FaceLightFollowers, FunctionBack, FaceLightCommand, Combat, SaveCombat, Cycle, CycleMember, CycleCapture };
+    enum class ActionKind { Favorite, Outfit, SaveOutfit, ImportOutfits, FaceLightMenu, FaceLightFollowers, FunctionBack, FaceLightCommand, Combat, SaveCombat, Cycle, CycleMember, CycleCapture, OutfitPiece, AddWorn };
     enum class IconKind { Auto, Sword, Dagger, Axe, Mace, Bow, Crossbow, Staff, Arrow, Armor, Robe, Helmet, Gloves, Boots, Ring, Amulet, Shield, Potion, Food, Magic, Scroll, Torch, Other, LightPlayer, LightTarget, LightGroup, Back, Poison, Alteration, Conjuration, Destruction, Illusion, Restoration, Shout, Power, Book };
     struct Item {
         ItemKey key;

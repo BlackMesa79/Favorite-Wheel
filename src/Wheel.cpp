@@ -437,6 +437,7 @@ namespace Wheel {
             const auto current=Snapshot();const auto section=current.functionSection;
             if(mode==FormMode::Werewolf && section!=FaceLight::Section::Combat && section!=FaceLight::Section::Cycles && section!=FaceLight::Section::CycleMembers)return;
             auto entries=section==FaceLight::Section::Outfits?Outfits::Entries():section==FaceLight::Section::Combat?Combat::Entries():
+                section==FaceLight::Section::OutfitPieces?Outfits::PieceItems(current.outfitId):
                 section==FaceLight::Section::Cycles || section==FaceLight::Section::CycleMembers?Cycles::Entries(section==FaceLight::Section::CycleMembers?current.cycleGroup:0):FaceLight::Entries(section);
             if(mode==FormMode::Werewolf)std::erase_if(entries,[](const Item& item){return item.action!=ActionKind::Combat && item.action!=ActionKind::SaveCombat && item.action!=ActionKind::Cycle && item.action!=ActionKind::CycleMember && item.action!=ActionKind::CycleCapture && item.action!=ActionKind::FunctionBack;});
             Cycles::AnnotateMembership(entries);
@@ -524,7 +525,7 @@ namespace Wheel {
                 section=FaceLight::VisibleSection(section,view.faceLightAvailable);
                 if(CurrentFormMode()==FormMode::Werewolf && section!=FaceLight::Section::Combat && section!=FaceLight::Section::Cycles && section!=FaceLight::Section::CycleMembers)section=FaceLight::Section::Combat;
                 RememberFunctionPage();
-                functionCategory=section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section;
+                functionCategory=section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section==FaceLight::Section::OutfitPieces?FaceLight::Section::Outfits:section;
                 view.functionSection=section;view.page=FunctionPage(section);
                 if(!preservePointer)view.x=view.y=0;
             }
@@ -532,7 +533,7 @@ namespace Wheel {
         }
         void FunctionBack() {
             const auto section=Snapshot().functionSection;
-            FunctionNavigate(CurrentFormMode()==FormMode::Werewolf?FaceLight::Section::Combat:section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:FaceLight::Section::Outfits);
+            FunctionNavigate(CurrentFormMode()==FormMode::Werewolf?FaceLight::Section::Combat:section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section==FaceLight::Section::OutfitPieces?FaceLight::Section::Outfits:FaceLight::Section::Outfits);
         }
         void ChangeCategory(int direction) {
             const auto current=Snapshot();
@@ -621,6 +622,8 @@ namespace Wheel {
             if(selected.action==ActionKind::CycleCapture){QueueCycleCapture(selected.actionId);return;}
             if(selected.action==ActionKind::ImportOutfits){Outfits::Import();RefreshFunctions();return;}
             if(selected.action==ActionKind::Outfit && left){OutfitDialog(3,selected.actionId,selected.name);return;}
+            if(selected.action==ActionKind::OutfitPiece && left){std::lock_guard lock(viewMutex);view.outfitDialog=6;view.outfitId=selected.actionId;view.outfitPieceIndex=selected.actionIndex;view.outfitName.Set(selected.name);view.x=view.y=0;return;}
+            if(selected.action==ActionKind::AddWorn){Outfits::AddWorn(selected.actionId);RefreshFunctions();return;}
             if(selected.action==ActionKind::Combat && left){OutfitDialog(3,selected.actionId,selected.name,true);return;}
             if((selected.action==ActionKind::Cycle || selected.action==ActionKind::CycleMember) && left) {
                 CycleDialog(3,selected.actionId,selected.name,selected.action==ActionKind::CycleMember?selected.actionIndex:0);return;
@@ -1070,6 +1073,7 @@ namespace Wheel {
                 if(ok)EndOutfitDialog();return;
             }
             switch(current.outfitDialog) {
+            case 6: if(Outfits::TogglePieceOptional(current.outfitId,current.outfitPieceIndex))EndOutfitDialog();break;
             case 1:ok=current.combatDialog?Combat::Capture(current.outfitName.text):Outfits::Capture(current.outfitName.text);break;
             case 2:ok=current.combatDialog?Combat::Rename(current.outfitId,current.outfitName.text):Outfits::Rename(current.outfitId,current.outfitName.text);break;
             case 4:ok=current.combatDialog?Combat::Capture(current.outfitName.text,current.outfitId):Outfits::Capture(current.outfitName.text,current.outfitId);break;
@@ -1080,6 +1084,12 @@ namespace Wheel {
         }
         void OutfitClick() {
             const auto current=Snapshot();const float x=current.x*224,y=current.y*224;
+            if(current.outfitDialog==6) {
+                if(cancelButton.Contains(x,y)){EndOutfitDialog();return;}
+                if(outfitOverwriteButton.Contains(x,y)){if(Outfits::TogglePieceOptional(current.outfitId,current.outfitPieceIndex))EndOutfitDialog();return;}
+                if(outfitDeleteButton.Contains(x,y)){if(Outfits::RemovePiece(current.outfitId,current.outfitPieceIndex))EndOutfitDialog();return;}
+                return;
+            }
             if(current.outfitDialog!=3 && cancelButton.Contains(x,y)){EndOutfitDialog();return;}
             if(applyButton.Contains(x,y)){OutfitAccept();return;}
             if((current.outfitDialog==1 || current.outfitDialog==2) && outfitNameButton.Contains(x,y)) {
@@ -1107,6 +1117,12 @@ namespace Wheel {
             else if(current.combatDialog && combatRightButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Right))RefreshFunctions();}
             else if(current.combatDialog && combatVoiceButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Voice))RefreshFunctions();}
             else if(!current.combatDialog && outfitExportButton.Contains(x,y))Outfits::Export(current.outfitId);
+            else if(!current.combatDialog && outfitModeButton.Contains(x,y)){Outfits::ToggleMode(current.outfitId);RefreshFunctions();}
+            else if(!current.combatDialog && outfitLooseButton.Contains(x,y)){Outfits::ToggleLoose(current.outfitId);RefreshFunctions();}
+            else if(!current.combatDialog && outfitEditPiecesButton.Contains(x,y)){EndOutfitDialog();FunctionNavigate(FaceLight::Section::OutfitPieces);}
+            else if(!current.combatDialog) {
+                for(int i=0;i<7;++i)if(outfitPartButton(i).Contains(x,y)){if(Outfits::CyclePart(current.outfitId,static_cast<Outfits::Part>(i)))RefreshFunctions();}
+            }
         }
         void NameKey(std::uint32_t code,bool fallback) {
             std::lock_guard lock(viewMutex);

@@ -35,9 +35,13 @@ namespace Wheel {
     }
     inline constexpr Rect applyButton{100,235,185,42}, cancelButton{-95,235,175,42}, defaultsButton{-285,235,170,42};
     inline constexpr Rect outfitNameButton{-270,-180,540,48};
-    inline constexpr Rect outfitOverwriteButton{-270,-95,260,44}, outfitDeleteButton{10,-95,260,44};
-    inline constexpr Rect outfitExportButton{-270,-30,540,44};
+    inline constexpr Rect outfitOverwriteButton{-270,-110,260,40}, outfitDeleteButton{10,-110,260,40};
+    inline constexpr Rect outfitExportButton{-270,-60,260,40};
+    inline constexpr Rect outfitModeButton{10,-60,120,40};
+    inline constexpr Rect outfitLooseButton{140,-60,130,40};
+    inline constexpr Rect outfitEditPiecesButton{-270,-5,540,38};
     inline constexpr Rect combatRightButton{-270,-30,170,44},combatLeftButton{-85,-30,170,44},combatVoiceButton{100,-30,170,44};
+    inline constexpr Rect outfitPartButton(int idx){return idx<4?Rect{-270+idx*137.f,40,132,34}:Rect{-202.5f+(idx-4)*137.f,80,132,34};}
     inline constexpr Rect generalTab{-300,-210,144,28}, controlsTab{-148,-210,144,28}, gamepadTab{4,-210,144,28}, gameplayTab{156,-210,144,28};
     inline constexpr int GeneralRows[]{0,1,2,3,4,6,7,8,9,10,28};
     inline constexpr int ControlRows[]{5,12,13,14,11,25};
