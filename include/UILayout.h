@@ -36,6 +36,10 @@ namespace Wheel {
     inline constexpr Rect applyButton{100,235,185,42}, cancelButton{-95,235,175,42}, defaultsButton{-285,235,170,42};
     inline constexpr Rect outfitNameButton{-270,-180,540,48};
     inline constexpr Rect outfitOverwriteButton{-270,-95,260,44}, outfitDeleteButton{10,-95,260,44};
+    inline constexpr Rect outfitEditButton{-270,-30,260,44},outfitShareButton{10,-30,260,44};
+    inline constexpr Rect outfitDraftList{-300,-105,290,240},outfitInventoryList{10,-105,290,240};
+    inline constexpr Rect outfitRemoveButton{-300,162,290,32},outfitAddButton{10,162,290,32};
+    inline constexpr Rect OutfitFilterTab(int index){return {-300.f+index*86,-174,84,30};}
     inline constexpr Rect outfitExportButton{-270,-30,540,44};
     inline constexpr Rect combatRightButton{-270,-30,170,44},combatLeftButton{-85,-30,170,44},combatVoiceButton{100,-30,170,44};
     inline constexpr Rect generalTab{-300,-210,144,28}, controlsTab{-148,-210,144,28}, gamepadTab{4,-210,144,28}, gameplayTab{156,-210,144,28};

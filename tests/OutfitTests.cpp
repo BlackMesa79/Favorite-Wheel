@@ -1,4 +1,5 @@
 #include "OutfitModel.h"
+#include "OutfitEditModel.h"
 #include "OutfitStep.h"
 #include "OutfitPlan.h"
 #include <cstdlib>
@@ -8,6 +9,59 @@ using namespace Wheel::Outfits;
 void Check(bool result,const char* label){if(!result){std::cerr<<label<<'\n';std::exit(1);}}
 struct Candidate{Piece piece;bool worn=false;std::uint32_t mask=0;};
 int main(){
+    {
+        using namespace Edit;
+        auto row=[](unsigned id,std::uint32_t mask,std::uint32_t runtime=0) {
+            Piece p;p.base={"Skyrim.esm",id};p.label="Piece "+std::to_string(id);p.mask=mask;
+            return Row{p,runtime,false};
+        };
+        const auto head=row(1,1),body=row(2,4),oldBody=row(3,0,4),hands=row(4,8);
+        Preset original{12,"Unchanged name",{head.piece,oldBody.piece}};
+        original.loose=true;original.parts.fill(PartMode::Ignore);original.pieces[0].optional=true;
+        const auto before=original;
+        std::vector<Row> draft{{original.pieces[0],1,false},oldBody};std::vector<std::string> replaced;
+        Check(Add(draft,hands,replaced)==Result::Added && draft.size()==3 && replaced.empty(),"Editor adds non-conflicting instance");
+        Preset retained;
+        Check(Save(original,draft,retained) && retained.pieces[0].optional && retained.pieces[1].mask==0 && retained.parts==original.parts && retained.loose,"Unchanged pieces preserve optional and zero mask without adding rule behavior");
+        Check(Add(draft,hands,replaced)==Result::Duplicate && draft.size()==3,"Editor rejects Same identity");
+        Check(Add(draft,body,replaced)==Result::Added && draft.size()==3 && replaced==std::vector<std::string>{oldBody.piece.label},"Legacy zero mask resolves conflict using runtime base armor mask");
+        auto multi=row(5,1|4|8);
+        Check(Add(draft,multi,replaced)==Result::Added && draft.size()==1 && replaced.size()==3,"All overlapping pieces are replaced");
+        Check(!Erase(draft,4) && Erase(draft,0) && draft.empty(),"Erase validates index and allows empty draft");
+        Preset result=original;
+        Check(!Save(original,draft,result) && result==before,"Empty draft refuses save transactionally");
+        Check(original==before,"Discarding a draft leaves original unchanged");
+        for(unsigned i=1;i<=64;++i)Check(Add(draft,row(i,0),replaced)==Result::Added,"Editor accepts up to 64 pieces");
+        const auto full=draft;
+        Check(Add(draft,row(65,0),replaced)==Result::Limit && draft.size()==64 && draft.front().piece==full.front().piece,"65th piece rejected without mutation");
+        draft[0].runtimeMask=4;
+        Check(Add(draft,body,replaced)==Result::Duplicate,"Duplicate rejected before conflict replacement");
+        Check(Add(draft,row(66,4),replaced)==Result::Added && draft.size()==64,"Replacement at 64-piece cap succeeds");
+        Check(Save(original,draft,result) && result.id==original.id && result.name==original.name && result.parts==original.parts && result.loose==original.loose,"Save preserves identity and legacy rules");
+        std::vector<Preset> decoded;
+        Check(Decode(Encode({result}),decoded) && decoded[0]==result,"Edited preset roundtrips exactly");
+        draft.push_back(row(67,0));Check(!Save(original,draft,result),"Oversized draft refuses save");
+        for(const auto [mask,filter]:std::vector<std::pair<std::uint32_t,Filter>>{{1,Filter::Head},{4,Filter::Body},{8,Filter::Hands},{128,Filter::Feet},{64,Filter::Jewelry},{32,Filter::Jewelry},{1u<<20,Filter::Other},{0,Filter::Other},{5,Filter::Body}}) {
+            const auto candidate=row(1,0,mask);
+            for(int f=0;f<7;++f)Check(Matches(candidate,static_cast<Filter>(f))==(f==0 || f==static_cast<int>(filter)),"Filters follow PartOf including jewelry and runtime fallback");
+        }
+        State state;state.original=before;state.draft={{before.pieces[0],1,false}};
+        state.inventory={head,body,hands};state.Refresh();
+        Check(state.available==std::vector<std::size_t>{1,2},"Inventory excludes saved Same instances");
+        state.column=1;state.Execute();Check(state.draft.size()==2 && state.available.size()==1,"Selected inventory action updates visible list");
+        state.column=0;state.Execute();Check(state.draft.size()==1 && state.available.size()==2,"Removing returns instance to inventory list");
+        Check(before==state.original,"Actions never mutate original preset");
+        state.draft.clear();state.Refresh();state.Execute();Check(state.draft.empty(),"Empty list confirmation is safe");
+        state.column=1;state.loading=true;state.Execute();Check(state.draft.empty(),"Loading blocks draft actions");
+        state.loading=false;state.saving=true;state.Execute();Check(state.draft.empty(),"Saving blocks draft actions");
+        state.saving=false;state.inventory.clear();
+        for(unsigned i=0;i<12;++i)state.inventory.push_back(row(i+1,0));state.Refresh();
+        state.selected[1]=11;state.Clamp(true);
+        Check(state.scroll[1]==7,"Keyboard selection reveals the final row");
+        state.filter=Filter::Head;state.Refresh();
+        Check(state.available.empty() && state.selected[1]==0 && state.scroll[1]==0,"Empty filter clamps stale selection and scroll");
+        std::cout<<"Outfit editor: add/remove, all conflicts, legacy masks, duplicates, 1-64 bounds, filters, draft isolation and roundtrip passed\n";
+    }
     Check(!ValidName("   ") && !ValidName("a\nb") && ValidName("中文"),"Validate display names");
     using D=StepDecision;
     Check(DecideStep(true,false,false,0)==D::Issue,"Submit unequip once");

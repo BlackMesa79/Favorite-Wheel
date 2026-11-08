@@ -437,7 +437,6 @@ namespace Wheel {
             const auto current=Snapshot();const auto section=current.functionSection;
             if(mode==FormMode::Werewolf && section!=FaceLight::Section::Combat && section!=FaceLight::Section::Cycles && section!=FaceLight::Section::CycleMembers)return;
             auto entries=section==FaceLight::Section::Outfits?Outfits::Entries():section==FaceLight::Section::Combat?Combat::Entries():
-                section==FaceLight::Section::OutfitPieces?Outfits::PieceItems(current.outfitId):
                 section==FaceLight::Section::Cycles || section==FaceLight::Section::CycleMembers?Cycles::Entries(section==FaceLight::Section::CycleMembers?current.cycleGroup:0):FaceLight::Entries(section);
             if(mode==FormMode::Werewolf)std::erase_if(entries,[](const Item& item){return item.action!=ActionKind::Combat && item.action!=ActionKind::SaveCombat && item.action!=ActionKind::Cycle && item.action!=ActionKind::CycleMember && item.action!=ActionKind::CycleCapture && item.action!=ActionKind::FunctionBack;});
             Cycles::AnnotateMembership(entries);
@@ -525,7 +524,7 @@ namespace Wheel {
                 section=FaceLight::VisibleSection(section,view.faceLightAvailable);
                 if(CurrentFormMode()==FormMode::Werewolf && section!=FaceLight::Section::Combat && section!=FaceLight::Section::Cycles && section!=FaceLight::Section::CycleMembers)section=FaceLight::Section::Combat;
                 RememberFunctionPage();
-                functionCategory=section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section==FaceLight::Section::OutfitPieces?FaceLight::Section::Outfits:section;
+                functionCategory=section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section;
                 view.functionSection=section;view.page=FunctionPage(section);
                 if(!preservePointer)view.x=view.y=0;
             }
@@ -533,7 +532,7 @@ namespace Wheel {
         }
         void FunctionBack() {
             const auto section=Snapshot().functionSection;
-            FunctionNavigate(CurrentFormMode()==FormMode::Werewolf?FaceLight::Section::Combat:section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:section==FaceLight::Section::OutfitPieces?FaceLight::Section::Outfits:FaceLight::Section::Outfits);
+            FunctionNavigate(CurrentFormMode()==FormMode::Werewolf?FaceLight::Section::Combat:section==FaceLight::Section::Followers?FaceLight::Section::Lighting:section==FaceLight::Section::CycleMembers?FaceLight::Section::Cycles:FaceLight::Section::Outfits);
         }
         void ChangeCategory(int direction) {
             const auto current=Snapshot();
@@ -570,8 +569,9 @@ namespace Wheel {
             SyncWheelTime();
         }
         void EndOutfitDialog() {
+            std::lock_guard lifecycle(lifecycleMutex);
             if(Snapshot().outfitDialog==1 || Snapshot().outfitDialog==2)TextBridge::Reset();
-            {std::lock_guard lock(viewMutex);view.outfitDialog=0;view.combatDialog=view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false;view.x=view.y=0;}
+            {std::lock_guard lock(viewMutex);view.outfitDialog=0;view.outfitEdit={};view.combatDialog=view.cycleDialog=view.cycleMemberDialog=view.cycleCaptureKey=false;view.x=view.y=0;}
             SyncWheelTime();RefreshFunctions();
         }
         void CycleDialog(int mode,std::uint32_t group,const std::string& name,std::uint32_t member=0) {
@@ -622,8 +622,6 @@ namespace Wheel {
             if(selected.action==ActionKind::CycleCapture){QueueCycleCapture(selected.actionId);return;}
             if(selected.action==ActionKind::ImportOutfits){Outfits::Import();RefreshFunctions();return;}
             if(selected.action==ActionKind::Outfit && left){OutfitDialog(3,selected.actionId,selected.name);return;}
-            if(selected.action==ActionKind::OutfitPiece && left){std::lock_guard lock(viewMutex);view.outfitDialog=6;view.outfitId=selected.actionId;view.outfitPieceIndex=selected.actionIndex;view.outfitName.Set(selected.name);view.x=view.y=0;return;}
-            if(selected.action==ActionKind::AddWorn){Outfits::AddWorn(selected.actionId);RefreshFunctions();return;}
             if(selected.action==ActionKind::Combat && left){OutfitDialog(3,selected.actionId,selected.name,true);return;}
             if((selected.action==ActionKind::Cycle || selected.action==ActionKind::CycleMember) && left) {
                 CycleDialog(3,selected.actionId,selected.name,selected.action==ActionKind::CycleMember?selected.actionIndex:0);return;
@@ -1067,8 +1065,93 @@ namespace Wheel {
             }
         }
 
+        std::uint64_t outfitEditRequest=0; // Protected by lifecycleMutex.
+        void BeginOutfitEdit() {
+            std::lock_guard lifecycle(lifecycleMutex);
+            const auto current=Snapshot();
+            if(current.outfitDialog!=3 || current.combatDialog || current.cycleDialog)return;
+            const auto generation=epoch.load(),serial=openSerial.load();const auto request=++outfitEditRequest;
+            {std::lock_guard lock(viewMutex);view.outfitEdit={};view.outfitEdit.loading=true;view.outfitDialog=7;view.x=view.y=0;}
+            auto tasks=SKSE::GetTaskInterface();
+            if(!tasks){std::lock_guard lock(viewMutex);view.outfitEdit.loading=false;view.outfitEdit.messageKey="outfitEditLoadError";return;}
+            tasks->AddTask([id=current.outfitId,generation,serial,request] {
+                std::lock_guard lifecycle(lifecycleMutex);
+                const auto current=Snapshot();
+                if(generation!=epoch.load() || serial!=openSerial.load() || request!=outfitEditRequest || !current.open || current.outfitDialog!=7)return;
+                Outfits::Edit::State edit;
+                const bool ok=Outfits::BeginEdit(id,edit);
+                if(!ok)edit.messageKey="outfitEditLoadError";
+                std::string glyphs;
+                for(const auto& row:edit.inventory)glyphs+=row.piece.label;
+                for(const auto& row:edit.draft)glyphs+=row.piece.label;
+                std::lock_guard lock(viewMutex);view.outfitEdit=std::move(edit);view.inventoryGlyphs+=glyphs;
+            });
+        }
+        void SaveOutfitEdit() {
+            std::lock_guard lifecycle(lifecycleMutex);
+            const auto current=Snapshot();
+            if(current.outfitDialog!=7 || current.outfitEdit.loading || current.outfitEdit.saving)return;
+            Outfits::Preset checked;
+            if(!Outfits::Edit::Save(current.outfitEdit.original,current.outfitEdit.draft,checked)) {
+                std::lock_guard lock(viewMutex);view.outfitEdit.messageKey="outfitEditCountError";view.outfitEdit.replaced.clear();return;
+            }
+            const auto generation=epoch.load(),serial=openSerial.load();const auto request=outfitEditRequest;
+            auto tasks=SKSE::GetTaskInterface();
+            if(!tasks){std::lock_guard lock(viewMutex);view.outfitEdit.messageKey="outfitEditSaveError";view.outfitEdit.replaced.clear();return;}
+            {std::lock_guard lock(viewMutex);view.outfitEdit.saving=true;}
+            tasks->AddTask([edit=current.outfitEdit,generation,serial,request] {
+                std::lock_guard lifecycle(lifecycleMutex);
+                const auto current=Snapshot();
+                if(generation!=epoch.load() || serial!=openSerial.load() || request!=outfitEditRequest || !current.open || current.outfitDialog!=7)return;
+                if(Outfits::SaveEdit(edit))EndOutfitDialog(); // RefreshFunctions runs outside viewMutex.
+                else {std::lock_guard lock(viewMutex);view.outfitEdit.saving=false;view.outfitEdit.messageKey="outfitEditSaveError";view.outfitEdit.replaced.clear();}
+            });
+        }
+        void EditNavigate(int column,int direction,int filter=0) {
+            std::lock_guard lifecycle(lifecycleMutex);
+            std::lock_guard lock(viewMutex);auto& edit=view.outfitEdit;
+            if(edit.loading || edit.saving)return;
+            if(column>=0)edit.column=column;
+            if(filter){edit.filter=static_cast<Outfits::Edit::Filter>((static_cast<int>(edit.filter)+filter+7)%7);edit.selected[1]=edit.scroll[1]=0;edit.Refresh();}
+            edit.selected[edit.column]+=direction;edit.Clamp(true);edit.clickedColumn=-1;
+        }
+        void EditExecute() {std::lock_guard lifecycle(lifecycleMutex);std::lock_guard lock(viewMutex);view.outfitEdit.Execute();}
+        void EditScroll(int direction) {
+            std::lock_guard lifecycle(lifecycleMutex);
+            std::lock_guard lock(viewMutex);auto& edit=view.outfitEdit;
+            const float x=view.x*224,y=view.y*224;
+            const int col=outfitDraftList.Contains(x,y)?0:outfitInventoryList.Contains(x,y)?1:-1;
+            if(col<0 || edit.loading || edit.saving)return;
+            edit.scroll[col]+=direction;edit.Clamp();edit.clickedColumn=-1;
+        }
+        void EditClick() {
+            std::lock_guard lifecycle(lifecycleMutex);
+            const auto current=Snapshot();const float x=current.x*224,y=current.y*224;
+            if(cancelButton.Contains(x,y)){EndOutfitDialog();return;}
+            if(applyButton.Contains(x,y)){SaveOutfitEdit();return;}
+            std::lock_guard lock(viewMutex);auto& edit=view.outfitEdit;
+            if(edit.loading || edit.saving)return;
+            for(int i=0;i<7;++i)if(OutfitFilterTab(i).Contains(x,y)) {
+                edit.filter=static_cast<Outfits::Edit::Filter>(i);edit.selected[1]=edit.scroll[1]=0;edit.column=1;edit.Refresh();return;
+            }
+            if(outfitRemoveButton.Contains(x,y) || outfitAddButton.Contains(x,y)) {
+                edit.column=outfitRemoveButton.Contains(x,y)?0:1;edit.Execute();return;
+            }
+            for(int col=0;col<2;++col) {
+                const auto rect=col?outfitInventoryList:outfitDraftList;
+                if(!rect.Contains(x,y))continue;
+                const int slot=static_cast<int>((y-rect.y)/48);
+                const int row=edit.scroll[col]+slot;
+                if(slot>=Outfits::Edit::visibleRows || row>=edit.Count(col))return;
+                const double now=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                const bool twice=edit.clickedColumn==col && edit.clickedRow==row && now-edit.clickedAt<=.35;
+                edit.column=col;edit.selected[col]=row;edit.clickedColumn=col;edit.clickedRow=row;edit.clickedAt=now;
+                if(twice)edit.Execute();return;
+            }
+        }
         void OutfitAccept() {
             const auto current=Snapshot();bool ok=false;
+            if(current.outfitDialog==7){SaveOutfitEdit();return;}
             if(current.cycleDialog) {
                 if(current.outfitDialog==2)ok=Cycles::Rename(current.cycleGroup,current.outfitName.text);
                 else if(current.outfitDialog==5)ok=current.cycleMemberDialog?Cycles::Remove(current.cycleGroup,current.cycleMember):Cycles::Clear(current.cycleGroup);
@@ -1076,7 +1159,6 @@ namespace Wheel {
                 if(ok)EndOutfitDialog();return;
             }
             switch(current.outfitDialog) {
-            case 6: if(Outfits::TogglePieceOptional(current.outfitId,current.outfitPieceIndex))EndOutfitDialog();break;
             case 1:ok=current.combatDialog?Combat::Capture(current.outfitName.text):Outfits::Capture(current.outfitName.text);break;
             case 2:ok=current.combatDialog?Combat::Rename(current.outfitId,current.outfitName.text):Outfits::Rename(current.outfitId,current.outfitName.text);break;
             case 4:ok=current.combatDialog?Combat::Capture(current.outfitName.text,current.outfitId):Outfits::Capture(current.outfitName.text,current.outfitId);break;
@@ -1087,12 +1169,7 @@ namespace Wheel {
         }
         void OutfitClick() {
             const auto current=Snapshot();const float x=current.x*224,y=current.y*224;
-            if(current.outfitDialog==6) {
-                if(cancelButton.Contains(x,y)){EndOutfitDialog();return;}
-                if(outfitOverwriteButton.Contains(x,y)){if(Outfits::TogglePieceOptional(current.outfitId,current.outfitPieceIndex))EndOutfitDialog();return;}
-                if(outfitDeleteButton.Contains(x,y)){if(Outfits::RemovePiece(current.outfitId,current.outfitPieceIndex))EndOutfitDialog();return;}
-                return;
-            }
+            if(current.outfitDialog==7){EditClick();return;}
             if(current.outfitDialog!=3 && cancelButton.Contains(x,y)){EndOutfitDialog();return;}
             if(applyButton.Contains(x,y)){OutfitAccept();return;}
             if((current.outfitDialog==1 || current.outfitDialog==2) && outfitNameButton.Contains(x,y)) {
@@ -1119,7 +1196,8 @@ namespace Wheel {
             else if(current.combatDialog && combatLeftButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Left))RefreshFunctions();}
             else if(current.combatDialog && combatRightButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Right))RefreshFunctions();}
             else if(current.combatDialog && combatVoiceButton.Contains(x,y)){if(Combat::CycleSlot(current.outfitId,Combat::Slot::Voice))RefreshFunctions();}
-            else if(!current.combatDialog && outfitExportButton.Contains(x,y))Outfits::Export(current.outfitId);
+            else if(!current.combatDialog && outfitEditButton.Contains(x,y))BeginOutfitEdit();
+            else if(!current.combatDialog && outfitShareButton.Contains(x,y))Outfits::Export(current.outfitId);
 
         }
         void NameKey(std::uint32_t code,bool fallback) {
@@ -1316,7 +1394,26 @@ namespace Wheel {
                         TryCombatQuickSlot(QuickSlotFromKey(code,button->GetUserEvent().c_str()),toggle,HeldModifiers())) {
                         consume=true;
                     } else if(down && current.open && current.outfitDialog && !inputGate.Swallowed(identity)) {
-                        if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
+                        if(current.outfitDialog==7) {
+                            if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
+                                if(code==1 || code==15)EndOutfitDialog();
+                                else if(code==63)SaveOutfitEdit(); // F5; Enter edits the selected row.
+                                else if(code==28)EditExecute();
+                                else if(code==200 || code==17)EditNavigate(-1,-1);
+                                else if(code==208 || code==31)EditNavigate(-1,1);
+                                else if(code==203 || code==30)EditNavigate(0,0);
+                                else if(code==205 || code==32)EditNavigate(1,0);
+                                else if(code==16)EditNavigate(-1,0,-1);
+                                else if(code==18)EditNavigate(-1,0,1);
+                            }else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse) {
+                                if(code==0)EditClick();else if(code==8 || code==9)EditScroll(code==8?-1:1);
+                            }else if(pad==277)EndOutfitDialog();
+                            else if(pad==279)SaveOutfitEdit();
+                            else if(pad==276)EditExecute();
+                            else if(pad==266 || pad==267)EditNavigate(-1,pad==266?-1:1);
+                            else if(pad==268 || pad==269)EditNavigate(pad==268?0:1,0);
+                            else if(pad==274 || pad==275)EditNavigate(-1,0,pad==274?-1:1);
+                        }else if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
                             if(current.cycleCaptureKey) {
                                 if(code==1){std::lock_guard lock(viewMutex);view.cycleCaptureKey=false;}
                                 else if(!ModifierBit(code)) {

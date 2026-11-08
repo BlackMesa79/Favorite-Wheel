@@ -38,11 +38,6 @@ namespace Wheel::Combat {
         }
     }
 }
-namespace Wheel::Outfits {
-    std::string ModeLabel(std::uint32_t) { return "Full Outfit"; }
-    std::string PartStateLabel(std::uint32_t, Part) { return "Head: Set"; }
-    bool IsLoose(std::uint32_t) { return false; }
-}
 void Check(HRESULT hr) { if (FAILED(hr)) { std::cerr << "D3D11 failure: " << std::hex << hr; std::exit(1); } }
 int main(int argc, char** argv) {
     using Microsoft::WRL::ComPtr;
@@ -168,6 +163,23 @@ int main(int argc, char** argv) {
                 Wheel::preview.outfitName.Move(-1,true);Wheel::preview.outfitName.Move(-1,true);
             }
         }
+    }
+    if(argc>4 && std::string(argv[4])=="outfit-edit") {
+        using namespace Wheel;using namespace Wheel::Outfits;
+        const bool zh=config.language=="zh_CN";
+        preview.functions=true;preview.outfitDialog=7;preview.outfitId=12;
+        preview.outfitName.Set(zh?"旅行者的礼仪服装与珠宝收藏":"Traveler's ceremonial apparel and jewelry collection");
+        auto& edit=preview.outfitEdit;edit.original.id=12;edit.original.name=preview.outfitName.text;
+        for(unsigned i=0;i<16;++i) {
+            Piece p;p.base={"Skyrim.esm",i+1};p.mask=i%2?64:4;
+            p.label=(zh?"精工附魔的皇家旅行长袍与极长名称测试配件 ":"Mastercrafted enchanted ceremonial traveler apparel with a very long name ")+std::to_string(i+1);
+            edit.inventory.push_back({p,p.mask,i%3==0});
+            if(i<8)edit.draft.push_back(edit.inventory.back());
+            preview.inventoryGlyphs+=p.label;
+        }
+        edit.Refresh();edit.scroll[0]=2;edit.scroll[1]=3;edit.selected[0]=3;edit.selected[1]=4;edit.column=1;
+        edit.messageKey="outfitEditReplaced";edit.replaced=zh?"旧旅行长袍、皇家护手":"Old traveling robes, Royal gauntlets";
+        preview.inventoryGlyphs+=edit.replaced;preview.x=preview.y=0;
     }
     if(argc>4 && (std::string(argv[4])=="lighting" || std::string(argv[4])=="followers")) {
         using namespace Wheel;

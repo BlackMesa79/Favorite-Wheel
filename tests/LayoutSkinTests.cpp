@@ -2,6 +2,7 @@
 #include "InputBindings.h"
 #include "UILayout.h"
 #include <cstdlib>
+#include <vector>
 #include <iostream>
 
 namespace {
@@ -9,6 +10,22 @@ namespace {
 }
 int main() {
     using namespace Wheel;
+    {
+        const std::vector<Rect> management{outfitNameButton,outfitOverwriteButton,outfitDeleteButton,outfitEditButton,outfitShareButton,applyButton,cancelButton};
+        std::vector<Rect> editor{outfitDraftList,outfitInventoryList,outfitRemoveButton,outfitAddButton,applyButton,cancelButton,{-300,-214,600,24}};
+        for(int i=0;i<7;++i)editor.push_back(OutfitFilterTab(i));
+        // Management actions are replaced by the editor, never drawn behind its lists.
+        for(const auto& panel:{management,editor})for(std::size_t i=0;i<panel.size();++i) {
+            const auto& rect=panel[i];
+            Check(rect.x>=-340 && rect.x+rect.w<=340 && rect.y>=-325 && rect.y+rect.h<=325,"Outfit controls stay inside PanelFrame");
+            for(std::size_t j=i+1;j<panel.size();++j)Check(!Overlaps(rect,panel[j]),"Outfit controls and lists do not overlap in their panel");
+        }
+        for(const auto [w,h]:std::vector<std::pair<float,float>>{{1280.f,720.f},{1920.f,1080.f},{2560.f,1440.f},{3840.f,2160.f}})for(float user:{.6f,1.f,2.f}) {
+            const float scale=std::min(std::min(w/1280.f,h/900.f)*user,std::min(w/800.f,h/830.f));
+            Check(680*scale<=w && 650*scale<=h,"Outfit panel fits 720p through 4K");
+        }
+        std::cout<<"Outfit management/editor controls, lists and 720p-4K panel bounds passed\n";
+    }
     constexpr float step=2*std::numbers::pi_v<float>/slots;
     Check(SortingShortcut(20,0)==0 && SortingShortcut(20,1)==1,"T cycles and Shift+T edits");
     Check(SortingShortcut(20,2)==-1 && SortingShortcut(20,3)==-1 && SortingShortcut(20,4)==-1 && SortingShortcut(60,0)==-1,

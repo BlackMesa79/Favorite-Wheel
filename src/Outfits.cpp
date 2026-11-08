@@ -360,56 +360,30 @@ namespace Wheel::Outfits {
                 job->index+1,job->operations.size(),op.equip?"equip":"unequip",form,ms);
         }
     }
-    const char* PartLabel(Part p){static constexpr const char* names[]={"outfitHead","outfitBody","outfitHands","outfitFeet","outfitRing","outfitAmulet","outfitOther"};return names[static_cast<unsigned>(p)];}
-    const char* PartModeLabel(PartMode m){return m==PartMode::Set?"outfitSet":m==PartMode::Ignore?"outfitIgnore":"outfitUnequip";}
-    std::string ModeLabel(std::uint32_t id){
-        std::lock_guard lock(mutex);
-        for(const auto& p:presets)if(p.id==id){
-            bool anySet=false,anyIgnore=false,anyUnequip=false;
-            for(const auto& mode:p.parts){
-                if(mode==PartMode::Set)anySet=true;
-                else if(mode==PartMode::Ignore)anyIgnore=true;
-                else anyUnequip=true;
-            }
-            if(anySet && !anyIgnore && anyUnequip)return Tr(Config(),"outfitModeWhole");
-            if(anySet && anyIgnore && !anyUnequip)return Tr(Config(),"outfitModeOverlay");
-            return std::string(Tr(Config(),"outfitModeWhole"))+" / "+Tr(Config(),"outfitModeOverlay");
+    bool BeginEdit(std::uint32_t id,Edit::State& state) {
+        Edit::State next;
+        {std::lock_guard lock(mutex);
+            const auto found=std::find_if(presets.begin(),presets.end(),[&](const Preset& p){return p.id==id;});
+            if(found==presets.end())return false;next.original=*found;
         }
-        return Tr(Config(),"outfitModeWhole");
+        // Game thread only. No extra-data pointers escape this snapshot.
+        const auto inventory=Inventory(0,true);
+        for(const auto& c:inventory)next.inventory.push_back({c.piece,c.mask,c.worn});
+        for(const auto& piece:next.original.pieces) {
+            auto armor=RE::TESForm::LookupByID<RE::TESObjectARMO>(RuntimeID(piece.base));
+            const auto mask=armor?armor->GetSlotMask().underlying():0;
+            const bool worn=std::any_of(inventory.begin(),inventory.end(),[&](const Candidate& c){return c.worn && Same(piece,c.piece);});
+            next.draft.push_back({piece,mask,worn});
+        }
+        next.Refresh();state=std::move(next);return true;
     }
-    std::string PartStateLabel(std::uint32_t id,Part part){
-        std::lock_guard lock(mutex);
-        for(const auto& p:presets)if(p.id==id)return std::string(Tr(Config(),PartLabel(part)))+": "+Tr(Config(),PartModeLabel(p.parts[static_cast<unsigned>(part)]));
-        return "";
-    }
-    bool IsLoose(std::uint32_t id){std::lock_guard lock(mutex);for(const auto& p:presets)if(p.id==id)return p.loose;return false;}
-    bool ToggleMode(std::uint32_t id){
+    bool SaveEdit(const Edit::State& state) {
+        Preset edited;if(!Edit::Save(state.original,state.draft,edited))return false;
         std::lock_guard lock(mutex);auto next=presets;
-        for(auto& p:next)if(p.id==id){
-            bool isOverlay=std::all_of(p.parts.begin(),p.parts.end(),[](PartMode m){return m!=PartMode::Unequip;});
-            p.parts.fill(isOverlay?PartMode::Unequip:PartMode::Ignore);
-            for(const auto& x:p.pieces)p.parts[static_cast<unsigned>(PartOf(x.mask))]=PartMode::Set;
-            return Commit(next);
+        for(auto& p:next)if(p.id==edited.id) {
+            // Reject stale drafts instead of overwriting another change.
+            if(p!=state.original)return false;p=std::move(edited);return Commit(next);
         }
         return false;
-    }
-    bool CyclePart(std::uint32_t id,Part part){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){auto& mode=p.parts[static_cast<unsigned>(part)];mode=static_cast<PartMode>((static_cast<unsigned>(mode)+1)%3);return Commit(next);}return false;}
-    bool SetPartsPreset(std::uint32_t id,bool overlay){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){p.parts.fill(overlay?PartMode::Ignore:PartMode::Unequip);for(const auto& x:p.pieces)p.parts[static_cast<unsigned>(PartOf(x.mask))]=PartMode::Set;return Commit(next);}return false;}
-    bool TogglePieceOptional(std::uint32_t id,std::size_t index){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id&&index<p.pieces.size()){p.pieces[index].optional=!p.pieces[index].optional;return Commit(next);}return false;}
-    bool RemovePiece(std::uint32_t id,std::size_t index){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id&&index<p.pieces.size()&&p.pieces.size()>1){p.pieces.erase(p.pieces.begin()+index);return Commit(next);}return false;}
-    bool AddWorn(std::uint32_t id){auto inventory=Inventory(0,true);std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){for(const auto& c:inventory)if(c.worn&&std::none_of(p.pieces.begin(),p.pieces.end(),[&](const Piece& x){return Same(x,c.piece);})){if(p.pieces.size()==64)return false;p.pieces.push_back(c.piece);p.parts[static_cast<unsigned>(PartOf(c.mask))]=PartMode::Set;}return Commit(next);}return false;}
-    bool ToggleLoose(std::uint32_t id){std::lock_guard lock(mutex);auto next=presets;for(auto& p:next)if(p.id==id){p.loose=!p.loose;return Commit(next);}return false;}
-    std::vector<Piece> PieceEntries(std::uint32_t id){std::lock_guard lock(mutex);for(const auto& p:presets)if(p.id==id)return p.pieces;return {};}
-    std::vector<Item> PieceItems(std::uint32_t id) {
-        std::vector<Item> result;
-        auto pieces=PieceEntries(id);
-        Item add;add.name=Tr(Config(),"outfitAddWorn");add.action=ActionKind::AddWorn;add.actionId=id;add.magic=true;result.push_back(std::move(add));
-        for(std::size_t i=0;i<pieces.size();++i) {
-            const auto& piece=pieces[i];Item item;item.name=piece.label;item.category=Category::Armor;
-            item.action=ActionKind::OutfitPiece;item.actionId=id;item.actionIndex=static_cast<std::uint32_t>(i);
-            item.detail=Tr(Config(),piece.optional?"outfitPieceOptional":"outfitPieceRequired");item.magic=true;result.push_back(std::move(item));
-        }
-        Item back;back.name=Tr(Config(),"outfitBack");back.action=ActionKind::FunctionBack;back.magic=true;result.push_back(std::move(back));
-        return result;
     }
 }

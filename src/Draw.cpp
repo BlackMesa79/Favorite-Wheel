@@ -608,27 +608,55 @@ namespace Wheel
             }
             PublishNameHits(editor.text, std::move(hits));
         }
+        void OutfitEditPanel(ImDrawList* d,ImVec2 c,float s,const View& v) {
+            const auto& t=Style(v.config);const auto& edit=v.outfitEdit;
+            auto tr=[&](const char* key){return Tr(v.config,key);};
+            PanelFrame(d,c,s,t,tr("outfitEditTitle"),tr(v.gamepad?"outfitEditPadHelp":"outfitEditKeyHelp"));
+            Text(d,{c.x,c.y-202*s},Fit(v.outfitName.text,18*s,590*s),18*s,t.text);
+            for(int i=0;i<7;++i)Button(d,c,s,v,OutfitFilterTab(i),tr(Outfits::Edit::filterKeys[i]),i==static_cast<int>(edit.filter));
+            LeftText(d,{c.x-295*s,c.y-127*s},tr("outfitEditDraft"),16*s,t.text);
+            LeftText(d,{c.x+15*s,c.y-127*s},tr("outfitEditInventory"),16*s,t.text);
+            Text(d,{c.x-45*s,c.y-119*s},std::to_string(edit.draft.size())+" / 64",14*s,t.muted);
+            for(int col=0;col<2;++col) {
+                const auto rect=col?outfitInventoryList:outfitDraftList;
+                const ImVec2 a{c.x+rect.x*s,c.y+rect.y*s},b{a.x+rect.w*s,a.y+rect.h*s};
+                d->AddRectFilled(a,b,Alpha(t.sector,.9f));d->AddRect(a,b,col==edit.column?t.accent:t.border);
+                d->PushClipRect(a,b,true);
+                for(int slot=0;slot<Outfits::Edit::visibleRows;++slot) {
+                    const int index=edit.scroll[col]+slot;if(index>=edit.Count(col))break;
+                    const auto& row=col?edit.inventory[edit.available[index]]:edit.draft[index];
+                    const float top=a.y+slot*48*s;
+                    if(index==edit.selected[col])d->AddRectFilled({a.x+2*s,top+2*s},{b.x-2*s,top+46*s},Alpha(t.accent,col==edit.column?.25f:.10f));
+                    LeftText(d,{a.x+9*s,top+6*s},Fit(row.piece.label,16*s,270*s),16*s,t.text);
+                    const auto part=tr(Outfits::Edit::filterKeys[static_cast<int>(Outfits::Edit::Category(row.Mask()))]);
+                    LeftText(d,{a.x+9*s,top+28*s},Fit(part+(row.worn?"  /  "+tr("outfitEditWorn"):""),12*s,270*s),12*s,row.worn?t.accent:t.muted);
+                }
+                if(!edit.Count(col))Text(d,{(a.x+b.x)/2,(a.y+b.y)/2},tr(edit.loading?"outfitEditLoading":"outfitEditEmpty"),14*s,t.muted);
+                d->PopClipRect();
+                const int count=edit.Count(col),first=count?edit.scroll[col]+1:0,last=std::min(count,edit.scroll[col]+Outfits::Edit::visibleRows);
+                Text(d,{(a.x+b.x)/2,c.y+148*s},std::to_string(first)+" - "+std::to_string(last)+" / "+std::to_string(count),12*s,t.muted);
+            }
+            Button(d,c,s,v,outfitRemoveButton,tr("outfitEditRemove"));Button(d,c,s,v,outfitAddButton,tr("outfitEditAdd"));
+            if(!edit.messageKey.empty())Text(d,{c.x,c.y+202*s},Fit(tr(edit.messageKey.c_str())+(edit.replaced.empty()?"":" "+edit.replaced),12*s,600*s),12*s,t.accent);
+            Button(d,c,s,v,cancelButton,tr("cancel"));Button(d,c,s,v,applyButton,tr(edit.saving?"outfitEditSaving":"outfitEditSave"),true);
+            Text(d,{c.x,c.y+298*s},Fit(tr("outfitEditMouseHelp"),12*s,610*s),12*s,t.muted);
+        }
         void OutfitPanel(ImDrawList *d, ImVec2 c, float s, const View &v)
         {
             const auto &t = Style(v.config);
             auto tr = [&](const char *key) { return Tr(v.config, key); };
+            if(v.outfitDialog==7){OutfitEditPanel(d,c,s,v);return;}
             const bool naming = v.outfitDialog == 1 || v.outfitDialog == 2;
-            PanelFrame(d, c, s, t, tr(v.outfitDialog==6?"outfitEditPieces":v.cycleDialog?(v.cycleMemberDialog?"cycleMemberManage":"cycleManage"):v.combatDialog?(v.outfitDialog==1?"combatSave":"combatManage"):v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
+            PanelFrame(d, c, s, t, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMemberManage":"cycleManage"):v.combatDialog?(v.outfitDialog==1?"combatSave":"combatManage"):v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
                        tr(naming ? "outfitNameEditHelp" : v.cycleMemberDialog ? "cycleMemberHelp" : "outfitManageHelp"));
             if (naming)
                 NameField(d, c, s, v);
-            else if(v.outfitDialog==6)
-                Text(d,{c.x,c.y-100*s},v.outfitName.text,20*s,t.text,520*s,t.textShadow);
             else if(v.cycleMemberDialog)
                 Text(d,{c.x,c.y-156*s},v.outfitName.text,22*s,t.text,520*s,t.textShadow);
             else
                 Button(d, c, s, v, outfitNameButton,
                        v.outfitName.text.empty() ? tr("outfitNameEmpty") : v.outfitName.text, true);
-            if (v.outfitDialog == 6) {
-                Button(d,c,s,v,outfitOverwriteButton,tr("outfitPieceMakeOptional"));
-                Button(d,c,s,v,outfitDeleteButton,tr("outfitPieceRemove"));
-            }
-            else if (v.outfitDialog == 3)
+            if (v.outfitDialog == 3)
             {
                 Button(d, c, s, v, outfitOverwriteButton, v.cycleCaptureKey?tr("cycleCaptureKey"):tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveUp":"cycleBind"):v.combatDialog?"combatOverwrite":"outfitOverwrite"));
                 Button(d, c, s, v, outfitDeleteButton, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMoveDown":"cycleClear"):"outfitDelete"), false, !v.cycleMemberDialog);
@@ -637,7 +665,8 @@ namespace Wheel
                     Button(d,c,s,v,combatRightButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Right));
                     Button(d,c,s,v,combatVoiceButton,Combat::SlotLabel(v.outfitId,Combat::Slot::Voice));
                 } else if(!v.combatDialog && !v.cycleDialog) {
-                    Button(d, c, s, v, outfitExportButton, tr("outfitExport"));
+                    Button(d,c,s,v,outfitEditButton,tr("outfitEditTitle"));
+                    Button(d,c,s,v,outfitShareButton,tr("outfitExport"));
                 } else if(!v.combatDialog)Button(d, c, s, v, outfitExportButton, tr(v.cycleMemberDialog?"cycleRemove":"cycleEdit"));
             }
             else if (v.outfitDialog == 4 || v.outfitDialog == 5)

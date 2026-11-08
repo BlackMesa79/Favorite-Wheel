@@ -3,6 +3,7 @@
 #include "Settings.h"
 #include "SortDrag.h"
 #include "NameEditor.h"
+#include "OutfitEditModel.h"
 #include "FaceLightClient.h"
 #include "CategoryNavigation.h"
 #include <vector>
@@ -19,13 +20,13 @@ namespace Wheel {
         std::string sortingLabel;
         bool faceLightAvailable=false;
         FaceLight::Section functionSection=FaceLight::Section::Outfits;
-        int outfitDialog=0; // 1 new name, 2 rename, 3 manage, 4 overwrite confirmation, 5 delete confirmation
+        int outfitDialog=0; // 1 new name, 2 rename, 3 manage, 4 overwrite confirmation, 5 delete confirmation, 7 outfit draft editor
         bool combatDialog=false; // Shared name/management widgets, separate preset family.
         bool cycleDialog=false,cycleMemberDialog=false,cycleCaptureKey=false;
         std::uint32_t cycleGroup=1,cycleMember=0;
         std::string cycleBinding;
         std::uint32_t outfitId=0;
-        std::uint32_t outfitPieceIndex=0;
+        Outfits::Edit::State outfitEdit;
         NameEditor outfitName;
         std::string inventoryGlyphs;
         bool open = false;
