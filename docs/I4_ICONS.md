@@ -39,3 +39,12 @@ BOOBIES 的当前实际启用版本目录包含 10 个 SWF，THICC 包含 46 个
 - **规则规模**：已装规则 1117 条图标赋值，其中 213 条引用 SkyUI 自带的 SWF（通常位于 BSA 中），因此运行时必须通过游戏资源系统读取文件。
 
 验证产物（含第三方美术衍生 PNG）只保存在本地 `build/i4-preview/`，不进入仓库或安装包。以上都是离屏渲染结果，尚未进行游戏内验证。
+
+## 2026-11-11 与本项目相关的已装注入器
+
+本机同时还装了 **Inventory Interface Information Injector Improved**（Nexus 192976，v0.4.0）。核实结论：
+
+- 它只提供 `SKSE/Plugins/InventoryInjectorImproved.dll`，**不自带规则文件**。`SKSE/Plugins/InventoryInjector/*.json` 仍由原版 I4 读取，轮盘照常读同一批 JSON，规则来源不变。
+- 它 hook 的是 SkyUI 的 `processList` 与 `FavoritesMenu::ProcessMessage`（DLL 内字符串 `Favorites: hooked FavoritesMenu::ProcessMessage`、`I4Hook: wrapped {}.processList`），即“背包里已经填好的 SkyUI 条目”的转写与缓存，另有持久化缓存文件（`ENTR`/`HEAD` 记录）。
+- 这是对 Scaleform 层的优化。轮盘不经过 SkyUI，第三期由 `Collect` + `Derive` 自行生成等价字段，因此不受它的缓存影响；两者在同一原版收藏菜单上注册 hook 时可能有加载顺序相关的影响，需在游戏内验收（AC-10）时确认，尤其是 Improved 的 `FavoritesHook` 是否与轮盘快捷键或暂停状态交互。
+- 另装有 **Dynamic Inventory Icon Injector**（DIII，状态图标注入），与本方案无关，不读取其规则。

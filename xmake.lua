@@ -56,7 +56,7 @@ target("FavoriteWheel")
     add_rules("commonlibsse-ng.plugin", {name = "FavoriteWheel", author = "BlackMesa79", description = "Categorized vanilla favorites wheel"})
     add_deps("commonlibsse-ng", "wheel-imgui", "wheel-miniz", "wheel-plutovg")
     add_files("src/*.cpp")
-    add_includedirs("include")
+    add_includedirs("include", "extern/json/single_include")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
     set_pcxxheader("include/PCH.h")
     add_syslinks("d3d11", "dxgi", "d3dcompiler", "user32", "windowscodecs", "ole32")
@@ -66,6 +66,11 @@ target("FavoriteWheel")
         local pluginsdir = path.join(moddir, "SKSE", "Plugins")
         os.mkdir(pluginsdir)
         os.cp(target:targetfile(), path.join(pluginsdir, "FavoriteWheel.dll"))
+        -- Offline logic work can deploy only the DLL, retaining all user resources.
+        if os.getenv("FAVORITEWHEEL_DEPLOY_DLL_ONLY") == "1" then
+            cprint("FavoriteWheel DLL deployed to %s", moddir)
+            return
+        end
         -- Main settings use built-in defaults; Apply creates the player-owned INI.
         -- Never deploy the source checkout's example configuration.
         local themesdir = path.join(pluginsdir, "FavoriteWheel", "Themes")
@@ -369,4 +374,18 @@ for _, name in ipairs({"SwfRasterTests", "SwfRasterHardeningTests", "I4IconDump"
         add_includedirs("include")
         add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
         add_syslinks("windowscodecs", "ole32")
+end
+
+for _, name in ipairs({"I4RulesTests", "I4EntryTests", "I4RuleAudit"}) do
+    target(name)
+        set_kind("binary")
+        set_default(false)
+        set_rundir(os.projectdir())
+        add_includedirs("include", "extern/json/single_include")
+        add_files("src/I4Rules.cpp", "src/I4Entry.cpp")
+        if name == "I4RuleAudit" then
+            add_files("tools/I4RuleAudit/main.cpp")
+        else
+            add_files("tests/" .. name .. ".cpp")
+        end
 end

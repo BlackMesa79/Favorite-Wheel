@@ -19,3 +19,7 @@ License texts for bundled/link-time dependencies are included under licenses/ in
 - PlutoVG v1.3.1: MIT, Samuel Ugochukwu and contributors. Revision `57f82ac9ffc98fb47833f1661583b347b2a08dd3`; https://github.com/sammycage/plutovg. Full upstream terms: `licenses/LICENSE-plutovg.txt`. Its bundled FreeType-derived rasterizer/stroker and stb headers retain their upstream notices; see `licenses/LICENSE-plutovg-components.txt` and the full FreeType License in `licenses/LICENSE-FreeType.txt`.
 
 SWF input artwork and local FFDec comparison exports are user-owned local test inputs, never bundled with FavoriteWheel.
+
+- nlohmann/json v3.11.3: MIT, Niels Lohmann and contributors. Revision `9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03`; https://github.com/nlohmann/json. Header-only; full terms: `licenses/LICENSE-nlohmann-json.txt`.
+- InventoryInjector (I4): MIT, Copyright (c) 2023 Parapets. Semantic port of rule parsing/matching and default icons from revision `52cc4cb30f2ec09eba104606c8cdd17050c3a2bf`; https://github.com/Exit-9B/InventoryInjector. Full terms: `licenses/LICENSE-InventoryInjector.txt`.
+- SkyUI field derivation references `schlangster/skyui@8354287`, `src/ItemMenus/InventoryDataSetter.as`, `MagicDataSetter.as` and `src/Common/skyui/defines/`. No SkyUI movies or artwork are distributed.

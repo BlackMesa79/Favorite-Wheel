@@ -37,11 +37,12 @@ try {
         $imguiRevision = (& git -C extern/imgui rev-parse HEAD).Trim()
         if ($imguiRevision -ne 'f5befd2d29e66809cd1110a152e375a7f1981f06') { throw 'Unexpected Dear ImGui revision.' }
     }
-    $rasterDependencies = @(
+    $pinnedDependencies = @(
         @{ Name='miniz'; Tag='3.0.2'; Revision='293d4db1b7d0ffee9756d035b9ac6f7431ef8492'; Repo='richgel999/miniz' },
-        @{ Name='plutovg'; Tag='v1.3.1'; Revision='57f82ac9ffc98fb47833f1661583b347b2a08dd3'; Repo='sammycage/plutovg' }
+        @{ Name='plutovg'; Tag='v1.3.1'; Revision='57f82ac9ffc98fb47833f1661583b347b2a08dd3'; Repo='sammycage/plutovg' },
+        @{ Name='json'; Tag='v3.11.3'; Revision='9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03'; Repo='nlohmann/json' }
     )
-    foreach ($dependency in $rasterDependencies) {
+    foreach ($dependency in $pinnedDependencies) {
         $destination = 'extern/' + $dependency.Name
         if (!(Test-Path ($destination + '/.git'))) {
             & git -c http.sslBackend=openssl clone --depth 1 --branch $dependency.Tag ('https://github.com/' + $dependency.Repo + '.git') $destination
