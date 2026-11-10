@@ -1,5 +1,6 @@
 #pragma once
 #include "UIResources.h"
+#include "ImageSampler.h"
 #include <cstddef>
 #include <span>
 #include <string>
@@ -15,5 +16,6 @@ namespace Wheel::SkinTextures {
     // Renderer-thread-only. Decode/upload once at initialization, never during drawing.
     Report Initialize(ID3D11Device*,ID3D11DeviceContext*,std::span<const Theme>);
     ID3D11ShaderResourceView* Surface(const Theme&);
+    const ImageSampler* Sampler();
     void Reset();
 }

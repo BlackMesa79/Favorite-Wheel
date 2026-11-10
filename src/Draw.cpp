@@ -200,6 +200,7 @@ namespace Wheel
             if(!texture || b.x<=a.x || b.y<=a.y) {paint();return;}
             // The texture replaces the white pixel for the existing fill mesh:
             // no extra translucent rectangle and no sampling outside its silhouette.
+            const ImageSampler::Scope sampling(d,SkinTextures::Sampler());
             d->PushTextureID(reinterpret_cast<ImTextureID>(texture));
             const int first=d->VtxBuffer.Size;
             paint();

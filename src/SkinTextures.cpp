@@ -12,6 +12,7 @@ namespace Wheel::SkinTextures {
     namespace {
         using Microsoft::WRL::ComPtr;
         struct Entry {std::string path;float strength=0;ComPtr<ID3D11ShaderResourceView> view;};
+        ImageSampler sampler;
         std::unordered_map<std::string,Entry> surfaces;
         constexpr std::size_t maxTextures=16,maxTexels=4*1024*1024;
         constexpr UINT maxDimension=1024;
@@ -59,10 +60,12 @@ namespace Wheel::SkinTextures {
             return view;
         }
     }
-    void Reset() {surfaces.clear();}
+    const ImageSampler* Sampler() {return &sampler;}
+    void Reset() {surfaces.clear();sampler.Reset();}
     Report Initialize(ID3D11Device* device,ID3D11DeviceContext* context,std::span<const Theme> themes) {
         Reset();Report report;
         if(!device || !context)return report;
+        if(!sampler.Initialize(device)){report.warnings.push_back("Material sampler unavailable; using solid surfaces");return report;}
         const auto initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
         struct COMBalance {bool owned;~COMBalance(){if(owned)CoUninitialize();}} balance{SUCCEEDED(initialized)};
         ComPtr<IWICImagingFactory> factory;

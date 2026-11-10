@@ -11,6 +11,7 @@ inline void DrawIcon(ImDrawList* d, ImVec2 origin, const Item& item, float s, Im
     if (s <= 0.f) return;
     if(theme)if(const auto image=IconLibrary::Find(*theme,item);image.view) {
         const float w=20*s*std::min(1.f,image.aspect),h=20*s/std::max(1.f,image.aspect);
+        const ImageSampler::Scope sampling(d,image.sampler);
         d->AddImage((ImTextureID)image.view,{origin.x-w,origin.y-h},{origin.x+w,origin.y+h},{0,0},{1,1},
             image.tint?ink:(ink&IM_COL32_A_MASK)|IM_COL32(255,255,255,0));
         return;

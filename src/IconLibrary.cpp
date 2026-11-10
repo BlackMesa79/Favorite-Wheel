@@ -15,6 +15,7 @@ namespace {
     struct Texture {ComPtr<ID3D11ShaderResourceView> view;float aspect=1;};
     struct Entry {std::string path;bool tint=true;};
     struct Pack {std::unordered_map<std::string,Entry> icons;std::unordered_map<std::string,std::string> forms;};
+    ImageSampler sampler;
     std::unordered_map<std::string,Pack> packs;
     std::unordered_map<std::string,Texture> textures;
     std::string Trim(std::string s) {const auto a=s.find_first_not_of(" \t\r\n");return a==s.npos?"":s.substr(a,s.find_last_not_of(" \t\r\n")-a+1);}
@@ -87,9 +88,10 @@ const char* Key(const Item& item) {
     default:return "other";
     }
 }
-void Reset(){packs.clear();textures.clear();}
+void Reset(){packs.clear();textures.clear();sampler.Reset();}
 Report Initialize(ID3D11Device* device,ID3D11DeviceContext* context,std::span<const Theme> themes) {
     Reset();Report report;if(!device || !context)return report;
+    if(!sampler.Initialize(device)){report.warnings.push_back("Icon sampler unavailable; using built-in icons");return report;}
     const auto initialized=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
     struct Balance {bool owned;~Balance(){if(owned)CoUninitialize();}} balance{SUCCEEDED(initialized)};
     ComPtr<IWICImagingFactory> factory;
@@ -138,7 +140,7 @@ Image Find(const Theme& theme,const Item& item) {
     auto get=[&](const std::string& key)->Image {
         const auto entry=pack.icons.find(key);if(entry==pack.icons.end())return {};
         const auto texture=textures.find(entry->second.path);if(texture==textures.end() || !texture->second.view)return {};
-        return {texture->second.view.Get(),texture->second.aspect,entry->second.tint};
+        return {texture->second.view.Get(),texture->second.aspect,entry->second.tint,&sampler};
     };
     if(item.action==ActionKind::Favorite)if(const auto mapping=pack.forms.find(item.iconForm);mapping!=pack.forms.end())
         if(auto image=get(mapping->second);image.view)return image;
