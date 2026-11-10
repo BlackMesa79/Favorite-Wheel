@@ -52,6 +52,7 @@
 |---|---|---|
 | [reports/20261028-takeover-review-audit.md](reports/20261028-takeover-review-audit.md) | 接手全项目审查 | 最新 |
 | [plans/20261028-takeover-review.md](plans/20261028-takeover-review.md) | 修复计划草案（等待用户挑选） | DRAFT |
+| [plans/20261110-i4-icons.md](plans/20261110-i4-icons.md) | I4 图标库接入方案（SWF 栅格化 + 规则匹配 + 配色） | DRAFT |
 | [plans/_template.md](plans/_template.md) | 计划模板 | — |
 | [CODE_REVIEW_2026-10-26.md](CODE_REVIEW_2026-10-26.md) | 0.9.0 发布前审查 | 历史；遗留项已并入最新审查 |
 | [CODE_REVIEW_2026-10-24.md](CODE_REVIEW_2026-10-24.md) | 全面审查 | 历史；#2/#3/#4/#6 和 P1 打包问题仍未修复，见最新审查的 A-02、A-08、A-16、A-17、A-18 |

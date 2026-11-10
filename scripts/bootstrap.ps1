@@ -37,5 +37,18 @@ try {
         $imguiRevision = (& git -C extern/imgui rev-parse HEAD).Trim()
         if ($imguiRevision -ne 'f5befd2d29e66809cd1110a152e375a7f1981f06') { throw 'Unexpected Dear ImGui revision.' }
     }
+    $rasterDependencies = @(
+        @{ Name='miniz'; Tag='3.0.2'; Revision='293d4db1b7d0ffee9756d035b9ac6f7431ef8492'; Repo='richgel999/miniz' },
+        @{ Name='plutovg'; Tag='v1.3.1'; Revision='57f82ac9ffc98fb47833f1661583b347b2a08dd3'; Repo='sammycage/plutovg' }
+    )
+    foreach ($dependency in $rasterDependencies) {
+        $destination = 'extern/' + $dependency.Name
+        if (!(Test-Path ($destination + '/.git'))) {
+            & git -c http.sslBackend=openssl clone --depth 1 --branch $dependency.Tag ('https://github.com/' + $dependency.Repo + '.git') $destination
+            if ($LASTEXITCODE -ne 0) { throw ($dependency.Name + ' download failed.') }
+        }
+        $actualRevision = (& git -C $destination rev-parse HEAD).Trim()
+        if ($actualRevision -ne $dependency.Revision) { throw ('Unexpected ' + $dependency.Name + ' revision: ' + $actualRevision) }
+    }
     Write-Output 'Dependencies ready. Run xmake f -m release -y, then xmake.'
 } finally { Pop-Location }

@@ -27,3 +27,15 @@ BOOBIES 的当前实际启用版本目录包含 10 个 SWF，THICC 包含 46 个
 图标渲染需单独验证 Scaleform 与 ImGui/CS 的桥接和缓存成本；不能把所有 SWF 当作 PNG 直接加载。本次没有复制任何第三方美术进安装包或源码包，也没有引入新的运行时依赖。
 
 参考：[BOOBIES](https://www.nexusmods.com/skyrimspecialedition/mods/89241)、[I4](https://www.nexusmods.com/skyrimspecialedition/mods/85702)。本地安装文件是本次统计依据。
+
+## 2026-11-10 离线验证结论
+
+本节结论说明这条路线可行，正式接入方案见 [plans/20261110-i4-icons.md](plans/20261110-i4-icons.md)（DRAFT，待用户确认）。
+
+- **SWF 结构**：已装的图标 SWF 都是 AS2 时代的格式（版本 8/10），只包含静态矢量形状（DefineShape1–2 为主）和少量无损位图，没有 AS3 代码，每个图标是一个 sprite 加一个主时间轴帧标签。因此不需要 Scaleform 运行时，自研的轻量解析与栅格化就足够。
+- **FFDec 导出与 WheelPreview 验证**：BOOBIES 共 225 个标签，其中 189 个非空、36 个是空占位。转成 PNG 并套进现有图标包后，在轮盘里可以正常辨认。舞台画布会裁掉部分图案，所以必须使用 sprite 的实际边界。
+- **锯齿**：原因是 ImGui DX11 后端的采样器设置了 `MaxLOD=0`，不使用 mip，与图标转换无关。已在 `035c453` 中通过 `ImageSampler` 修复。
+- **配色**：225 个图标都没有明显的第二种颜色，转成“白色 + 原 alpha”的遮罩后，乘色就等于替换成目标色。I4 的 `iconColor`、主题色都可以这样实现；直接给彩色原图乘色会变暗、偏色。
+- **规则规模**：已装规则 1117 条图标赋值，其中 213 条引用 SkyUI 自带的 SWF（通常位于 BSA 中），因此运行时必须通过游戏资源系统读取文件。
+
+验证产物（含第三方美术衍生 PNG）只保存在本地 `build/i4-preview/`，不进入仓库或安装包。以上都是离屏渲染结果，尚未进行游戏内验证。

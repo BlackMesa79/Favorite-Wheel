@@ -32,11 +32,29 @@ target("wheel-imgui")
     add_includedirs("extern/imgui", "extern/imgui/backends", {public = true})
     add_syslinks("d3d11", "dxgi", "d3dcompiler")
 
+-- Pinned by bootstrap.ps1; only the zlib subset of miniz is linked.
+target("wheel-miniz")
+    set_kind("static")
+    set_languages("c11")
+    add_files("extern/miniz/miniz.c", "extern/miniz/miniz_tinfl.c", "extern/miniz/miniz_tdef.c")
+    add_includedirs("extern/miniz", "include/third_party", {public = true})
+    add_defines("MINIZ_NO_ARCHIVE_APIS", "MINIZ_NO_STDIO", "MINIZ_NO_ZLIB_COMPATIBLE_NAMES", {public = true})
+
+target("wheel-plutovg")
+    set_kind("static")
+    set_languages("c11")
+    add_files("extern/plutovg/source/*.c")
+    add_includedirs("extern/plutovg/include", {public = true})
+    add_defines("PLUTOVG_BUILD_STATIC", {public = true})
+    -- Private: fail fast on allocation failure inside PlutoVG (unchecked upstream).
+    add_includedirs("include/third_party")
+    add_forceincludes("plutovg_checked_alloc.h")
+
 target("FavoriteWheel")
     set_kind("shared")
     add_rules("favoritewheel.version")
     add_rules("commonlibsse-ng.plugin", {name = "FavoriteWheel", author = "BlackMesa79", description = "Categorized vanilla favorites wheel"})
-    add_deps("commonlibsse-ng", "wheel-imgui")
+    add_deps("commonlibsse-ng", "wheel-imgui", "wheel-miniz", "wheel-plutovg")
     add_files("src/*.cpp")
     add_includedirs("include")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
@@ -329,3 +347,26 @@ target("ImageSamplerTests")
     add_includedirs("include")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
     add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")
+
+-- Offline rasterizer targets never load SKSE or deploy game assets.
+-- SwfRasterTests: functional regression. SwfRasterHardeningTests: malformed
+-- input, stroke bounds, extreme transforms and work budgets (run separately).
+local swf_offline_sources = {
+    SwfRasterTests = "tests/SwfRasterTests.cpp",
+    SwfRasterHardeningTests = "tests/SwfRasterHardeningTests.cpp",
+    I4IconDump = "tools/I4IconDump/main.cpp",
+}
+for _, name in ipairs({"SwfRasterTests", "SwfRasterHardeningTests", "I4IconDump"}) do
+    target(name)
+        set_kind("binary")
+        set_default(false)
+        set_rundir(os.projectdir())
+        add_deps("wheel-miniz", "wheel-plutovg")
+        add_files("src/SwfRaster.cpp")
+        add_files(swf_offline_sources[name])
+        add_headerfiles("tests/SwfRasterFixtures.h")
+        if name == "I4IconDump" then add_defines("WHEEL_SWF_DIAGNOSTICS") end
+        add_includedirs("include")
+        add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN")
+        add_syslinks("windowscodecs", "ole32")
+end
