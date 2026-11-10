@@ -79,6 +79,11 @@ def measure_strokes(out,folder):
     (out/(folder+'-results.json')).write_text(json.dumps(results,indent=2));print([(r['index'],r['column_alpha_sum'],r['width_ok']) for r in results])
     return all(r['width_ok'] for r in results)
 
+def temporary_directory():
+    import tempfile
+    parent=Path('build/tmp/test_grid');parent.mkdir(parents=True,exist_ok=True)
+    return tempfile.TemporaryDirectory(dir=parent)
+
 class GridTests(unittest.TestCase):
     def image(self,array):
         a=np.zeros((*array.shape,4),np.uint8);a[:,:,3]=array;return Image.fromarray(a)
@@ -99,21 +104,19 @@ class GridTests(unittest.TestCase):
         a=np.full((10,10),100,np.uint8);b=np.full((10,10),50,np.uint8)
         self.assertAlmostEqual(scores(self.image(a),self.image(b))['soft_iou'],.5)
     def test_duplicate_label_uses_first_frame(self):
-        import tempfile
         from reference import prepare
         raw=rectangle_swf([-200,2000,-100,1200],[100,1700,200,1000])
         # Append a second same-named empty frame. First-label semantics must
         # preserve the first rectangle, matching Movie::main.labels.emplace.
         body=raw[8:-6]+tag_bytes(28,struct.pack('<H',1))+tag_bytes(43,b'grid\0')+tag_bytes(1,b'')+tag_bytes(0,b'')
         duplicate=raw[:4]+struct.pack('<I',len(body)+8)+body
-        with tempfile.TemporaryDirectory(dir='build/i4-phase1/round3') as d:
+        with temporary_directory() as d:
             a=Path(d)/'one.swf';b=Path(d)/'two.swf';a.write_bytes(raw);b.write_bytes(duplicate)
             self.assertEqual(prepare(a,'grid'),prepare(b,'grid'))
 
     def test_swf_fixture_and_frame_copy(self):
-        import tempfile
         from reference import prepare
-        with tempfile.TemporaryDirectory(dir='build/i4-phase1/round3') as d:
+        with temporary_directory() as d:
             p=Path(d)/'rect.swf';p.write_bytes(rectangle_swf([-200,2000,-100,1200],[100,1700,200,1000]))
             file,labels,rect,zoom,invalid=prepare(p,'grid')
             self.assertEqual(labels,{'grid':1});self.assertEqual(invalid,[])
