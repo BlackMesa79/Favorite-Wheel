@@ -2,22 +2,37 @@
 
 更新日期：2026-11-11（Asia/Hong_Kong）。第 1、2A 节为当前状态；第 3–7 节及旧 `HANDOFF.md` 是历史交接记录，`docs/RELEASE_0.9.0.md` 只描述 0.9.0 发布。不要把历史待测事项或旧方案当成当前实现。
 
-## 1. 当前状态
+## 1. 当前状态（新会话从这里开始）
 
-- 项目路径：`D:\MyFiles\Documents\ChatGPT\SKSE模组 收藏轮盘`，Windows / PowerShell / C++ / xmake / SKSE。
-- 当前版本 **0.10.0**，插件元数据 **0.10.0.0**；0.10.0 已打包。
-- 当前分支：`feat/outfit-parts-p1`，HEAD `2899d45`（I4 第三期 T-5 设置/面板/翻译/I4Debug，见 2A.3d）；`609f066` 为 SGT/MISC 乐器修复；`162c959` 为 I4 第三期 T-4 游戏端接入（见 2A.3c）；`a581cbe` 为 I4 第二期 I4Rules/I4Entry（见 2A.3b）；`ef2517b` 为 test_grid 临时目录修复； `f51bd04` 为 I4 第一期 SwfRaster（见 2A.3）。2026-11-11 在 `f51bd04` 的干净 worktree（不含乐器修复，关闭部署）中复验：全部 C++ 测试（含加固）、主 DLL、I4IconDump 构建通过；发现 test_grid 依赖 build/ 下既有目录，已由 Coder 修复并在干净环境复验通过。上一个提交 `035c453` 是 PNG 图标/皮肤材质 mip 采样修复。
-- 正在开发：**I4 图标库接入**，第一期（`f51bd04`）、第二期（`a581cbe`）、第三期 T-4（`162c959`）、T-5（`2899d45`）已提交；下一步 T-4b（磁盘缓存）、T-6（预览场景与文档），然后用户做完整 AC-10 验收，详见第 2A 节。
-- **SGT/MISC 乐器修复**：已提交 `609f066`（独立 `fix:` 提交，在 T-5 之前）。2026-11-11 用户游戏内验收通过。验收项（用户提供的原测试单）：
+- 项目路径：`D:\MyFiles\Documents\ChatGPT\SKSE模组 收藏轮盘`，Windows / PowerShell / C++23 / xmake / SKSE。
+- 当前版本 **0.10.0**，插件元数据 **0.10.0.0**；0.10.0 已打包（发布包见第 3 节）。I4 与乐器修复完成后再决定下一个版本号和发布策略。
+- 分支 `feat/outfit-parts-p1`（未推送）。本分支自 0.10.0 之后的提交，按时间先后：
+
+| 提交 | 内容 |
+|---|---|
+| `035c453` | fix：PNG 图标与皮肤材质 mip 采样 |
+| `f51bd04` | I4 第一期：离线 SWF 解析与栅格化（SwfRaster） |
+| `ef2517b` | fix：test_grid 临时目录 |
+| `a581cbe` | I4 第二期：I4Rules 规则匹配、I4Entry::Derive |
+| `162c959` | I4 第三期 T-4：游戏端接入、后台栅格化、纹理缓存 |
+| `609f066` | fix：收藏的 MISC/SGT 乐器走原生装备路径（用户已验收） |
+| `2899d45` | I4 第三期 T-5：设置项、设置面板、翻译、I4Debug、加载日志汇总 |
+| `ce5b4a5` | docs：HANDOFF |
+| `58a0cd3` | I4 第三期 T-4b：磁盘位图缓存 |
+| （本文件） | docs：HANDOFF 整理 |
+
+- 工作区唯一未提交的改动：`tests/WheelPreview.cpp`，新增 4 个 i4-* 预览场景（依赖 `build/` 下的第三方图标 PNG）。用户决定留到 T-6，改为走真实 I4 渲染路径后再提交。**不要提交，也不要还原。**
+- 已部署 DLL：`H:/Games/Dev Skyrim/mods/36 - FavoriteWheel/SKSE/Plugins/FavoriteWheel.dll`，SHA256 `28EF5462FB2E8418C09BC860FE28D4531F5BD4B098CDE94C47F3B24394513A9F`（工作区构建，内容等同 T-4b 提交）。干净 worktree 构建产物的哈希会不同（路径等元数据差异），以部署目录为准。
+- **下一步**：见 2A.4 待办。按顺序是：用户实机检查 T-5/T-4b → T-6 → 用户完整 AC-10 验收 → 决定版本号与发布。
+
+### 1.1 SGT/MISC 乐器修复（`609f066`，已验收）
+
+- 代码：收藏的 MISC 物品即使 `usable=false`，也走原生 `EquipObject(player, obj, extra, 1, nullptr, false, false, true, false)`（`Item.miscFallback` + `UseFavorite` 回退块 + `Wheel.cpp` 选择时不拦截）；回退路径与原 `TalentInstrument` 路径在装备前，若武器已拔出则先 `DrawWeaponMagicHands(false)`。
+- 2026-11-11 用户游戏内验收通过（用户提供的原测试单）：
   - A 组（Bug 1）：武器收起时，轮盘“其他”中点鼓/笛/鲁特琴，有动画和音效；拔出武器后点同一乐器，先收刀再正常演奏（修复前只有音效）。日志 `SGT instrument native use requested: form=000DABA7/A9/AB...`。
   - B 组（Bug 2）：用 Favorite Things 收藏的非原版 5 个 FormID 的 SGT 乐器，在轮盘点击不再提示“此类物品暂需在背包中使用”。日志 `MISC fallback equip: form=... extra=...`；带 SGT 脚本的会触发演奏。
   - C 组（回归）：原版 5 个 SGT 乐器（0xDABA7/A9/AB/105177/105109）仍走 `SGT instrument native use requested`，不走 fallback；未收藏的普通杂物仍提示 unsupported。
-  - 主会话核对 13:27–13:29 的游戏日志：有 `000DABA9`、`00105177` 的 `SGT instrument native use requested`，与 A/C 组一致；该份日志中没有 `MISC fallback equip`，B 组依据用户口头确认。
-  - 代码：收藏的 MISC 物品即使 `usable=false`，也走原生 `EquipObject(player, obj, extra, 1, nullptr, false, false, true, false)`（`Item.miscFallback` + `UseFavorite` 回退块 + `Wheel.cpp` 选择时不拦截）；回退路径与原 `TalentInstrument` 路径在装备前若武器已拔出先 `DrawWeaponMagicHands(false)`。
-- 工作区仅剩未提交：`tests/WheelPreview.cpp`（4 个 i4-* 预览场景，用户决定留到 T-6）与本文件。
-- 已部署 DLL：`6196D593…8206CE`（工作区构建，内容等同 `2899d45`；部署目录与构建产物一致）。干净 worktree 构建产物哈希不同（路径等元数据差异），以部署目录为准。
-- 0.10.0 发布包：`dist/FavoriteWheel-0.10.0.zip`，SHA256 `43fca6fb36bc14378b206f19c28a3e5c460cf2fadd865a4f9879f614012641f7`；发布 DLL SHA256 `A436626BF7DD5AAF08BAC7FD999F62EB01655F908159E06AF3A370E183CBDF99`。
-- 乐器修复已验收；版本号与发布策略待 I4 完成后一并决定。
+  - 主会话核对 13:27–13:29 的游戏日志：有 `000DABA9`、`00105177` 的 `SGT instrument native use requested`，与 A/C 组一致；该份日志没有 `MISC fallback equip`，B 组依据用户口头确认。
 
 ## 2. 重要工作约定
 
@@ -29,8 +44,20 @@
 - 委派约定（2026-11-10 用户确认）：实现交给 codeg 助手 **Coder**（`delegate_to_agent`，`assistant_id=2`），测试交给 **Tester**（`assistant_id=3`，已换为 Codex），都不传 `agent_type`。不要自动上传、提交、推送或修改其他模组。
 - **委派限制（重要）**：凡是涉及 SwfRaster “异常输入 / 越界 / 资源耗尽 / 加固回归”的任务，Coder 和 Tester 都会拒绝（child_rejected），拒绝后该会话被锁定。加固用例已拆到 `SwfRasterHardeningTests`；普通回归只跑 `SwfRasterTests`，可以委派（2026-11-10 已验证 Tester 接受）。不要换措辞绕过；这类工作由主会话完成，或交给用户决定。
 - 控制日志输出；读图片前生成长边不超过 1280 像素、目标不超过 300 KB 的预览，按具体检查目标逐张查看。
+- **本轮形成的工作流程**（用户认可）：Coder 实现 → 主会话审阅代码与报告 → Tester 独立回归与审阅（只读）→ Coder 修复 → **干净 worktree 复验** → 单独提交 → 更新本文件。各轮报告放 `build/i4-phase3/<任务>/REPORT.md`，不入库。
+- **干净 worktree 复验做法**：
+  - `git worktree add --detach ../fw-verify-x HEAD`，复制要提交的文件进去。
+  - 用 PowerShell `New-Item -ItemType Junction` 把 `extern` 联接到主仓库；联接要用 `cmd //c rmdir` 删除，**不要用 rm -rf**。
+  - 从主仓库复制 `build/.gens/commonlibsse-ng/windows/x64/release/minhook-v1.3.4`，避免 CommonLib 联网下载 minhook。GitHub 连接曾被重置；该目录自带 sha256 校验标记。
+  - 配置：`xmake f -y -p windows -a x64 -m release --deploy_dir=`，关闭部署；不加 `-p windows` 会误选 mingw。
+  - 首次构建会完整编译 CommonLib，约 6 分钟，建议放后台运行。
+  - 提交后在主仓库执行 `git update-ref refs/heads/feat/outfit-parts-p1 <新> <旧>`，再执行 `git reset`（mixed，不改工作区文件）同步索引，然后 `git worktree remove --force`。
+- **部署约定补充**：只改代码时可设 `FAVORITEWHEEL_DEPLOY_DLL_ONLY=1`，只部署 DLL（默认关闭，用户确认保留）。新增翻译键时必须完整部署，并在部署前后对比部署目录全部 21 个 INI 的 SHA256：只允许语言文件追加键，用户主配置不得变化。
+- WheelPreview 截图回归：`WheelPreview.exe <out.bmp> 1280 800 <mode> en classic`。
+  - `schools` 稳定：`0e0d15982e18eff904983e25a855fae56a3bdc430ef0bce40386f18f29d27753`，从 I4 之前一直不变。
+  - `normal` **不能当作严格的字节基线**：WheelPreview 会预热全部语言，字体图集的排布随语言文件中的中文字形集合变化。实测：I4 之前和 T-4b（`58a0cd3`）都是 `db6a9fa6…1dd60c`，T-5 的语言文件下是 `92983a4a…6e66e`（差 11 像素，在底部文字）；在 T-4b 树上把语言文件换回 T-5 版本，哈希又回到 `92983a4a…`。只要新增翻译含新汉字，就可能变。验证“I4 关闭时渲染不变”请用 `schools`，或在语言文件相同的前提下对比 `normal`。
 
-## 2A. I4 图标库接入（进行中）
+## 2A. I4 图标库接入（进行中：第一、二期与第三期 T-4/T-5/T-4b 已提交，剩 T-6 与验收）
 
 ### 2A.1 文档
 
@@ -50,8 +77,9 @@
 - `I4IconScope=All`：没有规则的物品也使用 SkyUI 默认图标。
 - 优先级（方案 4.4.1）：主题图标包 `[Forms]` → 图标包新增的 `[I4]` 段（按 `source|label` 重绘）→ I4 规则图标 → 图标包分类 → SkyUI 默认图标 → 内置图标；主题可声明 `I4Icons=Off`。
 - 设置项放在主 INI 和设置面板，不放进主题。
-- **磁盘位图缓存**：放在游戏根目录 `Data/SKSE/Plugins/FavoriteWheel/IconCache/`，**不放** `My Games`（避免多个 MO2 实例共享）。缓存键为 SWF 内容 SHA-256 + 标签 + 变体 + 边长 + 转换器版本。设计见方案 4.4、AC-11、T-4b，属于第三期，尚未实现。
-- 分三期实施：第一期 SWF 栅格化 → 第二期规则引擎与字段推导 → 第三期接入游戏、缓存和设置。
+- **磁盘位图缓存**：放在游戏根目录 `Data/SKSE/Plugins/FavoriteWheel/IconCache/`，**不放** `My Games`（避免多个 MO2 实例共享）。缓存键为 SWF 内容 SHA-256 + 标签 + 变体 + 边长 + 转换器版本。已在 T-4b 实现（见 2A.3e）。
+- 分三期实施：第一期 SWF 栅格化 → 第二期规则引擎与字段推导 → 第三期接入游戏（T-4）、设置（T-5）、磁盘缓存（T-4b）、预览与文档（T-6）。
+- 2026-11-11：`tests/WheelPreview.cpp` 的 i4-* 场景留到 T-6；乐器修复与 T-5 同轮、独立提交；示例 `FavoriteWheel.ini` 补齐全部 7 个 I4 键；`FAVORITEWHEEL_DEPLOY_DLL_ONLY` 保留。
 
 ### 2A.3 第一期（SwfRaster）现状：已提交 `f51bd04`
 
@@ -109,17 +137,46 @@
 - 轮盘设置“外观”页 11→14 行（仅此页行距压缩为 24），新增 I4 图标、配色、范围三项和 `i4ApplyHint`（应用后生效）；SKSE Menu Framework 外观页同步。预算与 I4Debug 仅在 INI。8 种语言新增 9 键。
 - I4Debug：`Resolve(Entry&, std::vector<RuleMatch>*)` 重载，输出命中规则“文件#序号”；关闭时不构造字符串。Tester 探针 6204 组对照确认与原 Resolve 结果一致。
 - 加载日志（`include/I4LoadLog.h`）：重复警告合并计数，缺失插件按插件汇总并附引用次数；本机 1347 行 → 63 行（62 个插件、1285 次引用），附一行无害说明。
-- AC-8：`schools` 截图字节一致；`normal` 截图 11 像素差异（(903,645)–(964,651) 底部文字），原因是新增中文“图”字改变 WheelPreview 预热全部语言后的字体图集；隔离副本恢复旧中文语言文件后哈希回到基线。主会话决定接受，不改 WheelFonts。当前 normal 哈希 `92983a4a…6e66e`。
+- AC-8：`schools` 截图字节一致；`normal` 截图 11 像素差异（(903,645)–(964,651) 底部文字），原因是新增中文“图”字改变 WheelPreview 预热全部语言后的字体图集；隔离副本恢复旧中文语言文件后哈希回到基线。主会话决定接受，不改 WheelFonts。T-4b 新增的语言键使 `normal` 恢复为 `db6a9fa6…`，说明这一差异只来自语言字形集合（见第 2 节“WheelPreview 截图回归”）。
 - 复验：Coder 报告 `build/i4-phase3/t5/REPORT.md`、`t5-logfix/REPORT.md`；Tester 回归全部通过（其 REPORT.md 未写出，结论由主会话从 `build/i4-phase3/tester-t5/` 下日志与 JSON 核对）；干净 worktree（基于 `609f066`）全部测试通过后提交。
 - 2026-11-11 用户实机（T-4 DLL，T-5 部署前）：法术、药水显示 I4 图标，Theme 配色正常。`I4 load: files=31 rules=671 rejected=0 elapsed_ms=98.218`；12 次快照 42–44 项，`collect_derive_resolve_ms` 0.256–0.626（满足 AC-7 的 100 项 < 1 ms；尚无 500 项全背包实测）。SWF 诊断 3 条（i4iconaddon、magus/gourmet、skyui psychosteve：sprite End 容错、不支持 tag 9/69），对应图标正常。
 - T-5 的设置面板与配色切换尚未实机验证。
 
+### 2A.3e 第三期 T-4b（磁盘位图缓存）：已提交 `58a0cd3`
+
+- 新文件：`include/IconCache.h`、`src/IconCache.cpp`（不依赖 CommonLib，可离线测试）、`tests/IconCacheTests.cpp`。修改 I4Textures（工作线程先查缓存，未命中再 Render 并写入）、I4Game（缓存目录）、I4Runtime、Settings、FrameworkSettings、8 种语言、示例 INI、docs。
+- 位置：`<SkyrimSE.exe 目录>/Data/SKSE/Plugins/FavoriteWheel/IconCache/<sha256>.fwic`（用 `GetModuleFileNameW` 定位）。MO2 下预期写进 overwrite 或输出 mod，**尚未实机确认**。
+- 格式：魔数 `FWIC`，含格式版本、转换器版本（`IconCache.h` 中常量为 1，**修改 SwfRaster 栅格化逻辑时必须递增**），条目表包括标签、变体、边长、偏移、长度、CRC32；像素用 miniz 压缩。读取时把文件当作不可信输入完整校验，任何一项不合格就丢弃整个文件、只告警一次。SHA-256 用 BCrypt 计算。
+- 写入：同目录写 `.tmp`，执行 `FlushFileBuffers` 后用 `MoveFileExW(REPLACE_EXISTING|WRITE_THROUGH)` 替换。**批量落盘**：每 32 条或 4 MiB 写一次，切换 SWF 或队列空闲时也会写出。退出游戏时尚未写出的条目丢弃，析构和卸载时不做 IO。50 标签 × 2 变体的合成 SWF 实测：首次写入 100 → 4 次，耗时 220 → 53 ms；第二次全部命中。
+- 容量：按 mtime 做 LRU，在开启缓存或修改容量时 Trim；之后每成功写入 8 次，或累计写入达到容量的 1/4（最多 16 MiB）时再 Trim。两次 Trim 之间允许短暂超出预算。**mtime 更新失败、Trim 失败只告警一次，不停用缓存**（兼顾 MO2）。内容读写失败或目录不可写时，退化为只在内存中缓存。
+- 设置：主 INI `[Display]` 下 `I4IconCache=1`、`I4IconCacheMB=64`（8–512）；为 0 时完全不读写磁盘。“清空图标缓存”按钮、开关、容量只放在 SKSE Menu Framework 外观页；轮盘内外观页已有 14 行，不再加。8 种语言各新增 6 键。
+- 线程：哈希计算、缓存读写、Render 都在唯一的工作线程上执行；不持有 `state.mutex` 时才做 IO；游戏线程和渲染线程不会等待缓存。
+- 复验：Coder 报告 `build/i4-phase3/t4b/`、`t4b-fix1/`（批量落盘、示例 INI）、`t4b-fix2/`（mtime/Trim 降级、文档）；Tester `build/i4-phase3/tester-t4b/REPORT.md`（PASS，确认问题 C1 与疑点 Q1 已由 fix2 修复）；干净 worktree 全部测试通过后提交。
+- 构建和测试从未在游戏目录创建 `IconCache/`。实机首次运行时才会生成。
+
 ### 2A.4 待办（按顺序）
 
-1. 用户审阅加固部分（`tests/SwfRasterHardeningTests.cpp` 与 `build/i4-phase1/round4/REPORT.md`）；不要把运行它的任务委派给 Coder/Tester。
-2. `tests/WheelPreview.cpp` 的 4 个 I4 预览场景：用户 2026-11-11 决定暂不提交，留到 T-6 改为走真实 I4 渲染路径后再提交。
-3. 用户实机检查 T-5：设置面板新三项、三种配色切换、I4Debug 输出、加载日志汇总。
-4. 第三期剩余：T-4b（磁盘缓存）→ T-6（预览场景与文档）；最后由用户做游戏内验收（AC-10）。
+1. **用户实机检查 T-5 与 T-4b**（当前部署的 DLL 已包含两者）：
+   - F2 打开设置，外观页底部有 I4 图标、配色、范围三项；切换后点“应用”，配色应在下一帧变化。三种配色分别为 Theme、I4、Original。
+   - SKSE Menu Framework 外观页：I4 三项、缓存开关、容量、“清空图标缓存”按钮及状态。
+   - 启动日志：插件告警应约为 63 行，并有一行 `1285 references to 62 missing plugins`；主 INI `[General]` 设 `I4Debug=1` 后，每个物品输出一行匹配结果。
+   - 缓存：首次进游戏打开轮盘后，查看 `IconCache/*.fwic` 实际落在 MO2 的哪个目录；第二次启动后，日志里的 Render 应明显减少。清空按钮应可用。日志中如出现 `cannot update access time` 属正常降级。
+2. **T-6**：WheelPreview I4 场景改用合成 SWF 夹具，走真实的 I4 渲染路径，不依赖第三方美术；然后处理工作区里 `tests/WheelPreview.cpp` 的 i4-* 场景（改造或替换后提交）。同时更新文档：`I4_ICONS.md`、`ICON_LIBRARY.md`（`[I4]` 段、`I4Icons=Off`）、README、方案 §8。
+3. **用户完整 AC-10 验收**：清单草稿在 `build/i4-phase3/tester/REPORT.md` 第 6 节，T-5、T-4b 新增的项目需要补充进去。重点包括：
+   - 与背包图标对比（BOOBIES 覆盖的物品和法术）；
+   - 首次打开时从回退图标切换到 I4 图标；
+   - 切换窗口或设备重建后的恢复；
+   - 全背包模式 500 项的快照耗时（AC-7）；
+   - 与 **I4 Improved**（hook 了 `FavoritesMenu::ProcessMessage` 和 SkyUI `processList`）的共存。
+4. 用户审阅 SwfRaster 加固部分（`tests/SwfRasterHardeningTests.cpp`、`build/i4-phase1/round4/REPORT.md`）。**不要委派**给 Coder 或 Tester。
+5. 决定版本号与发布策略（0.11.0？），更新 changelog 和发布材料。
+
+已知遗留（不在当前计划内，需用户决定是否立项）：
+- 渲染器一旦异常就永久 failed，没有设备恢复入口（T-4 Tester 报告 C3，T-4 之前就存在）。
+- MergeMapper 重映射未实现（本机未安装 MergeMapper）。
+- `src/I4RuleTables.inc` 的生成脚本只在 `build/i4-phase2/generate-tables.py`，未入库。
+- SwfRaster 已知限制见 2A.3。
+- 本机 I4 规则引用了 62 个未安装的插件，这些引用永远不会匹配，属正常现象。
 
 ### 2A.5 离线环境与资源
 
@@ -259,8 +316,10 @@ node release-materials/0.9.0/render-description.cjs
 ```
 
 - 其他测试按需要构建并执行同目录 `<Target>.exe`，不为交接文件重复完整构建。
+- **I4 相关回归集**（离线目标都是 `set_default(false)`，需显式 `xmake build -j 2 <目标>`）：IconCacheTests、I4IntegrationTests、I4RulesTests、I4EntryTests、SwfRasterTests、IconLibraryTests、SettingsTests、SettingsPersistenceTests、WheelLogicTests、ImageSamplerTests、SkinTextureTests，加上 `xmake lua scripts/test_language_migrations.lua`。当前检查数：IconCache 292、I4Integration 820、I4Rules 1178、I4Entry 1029、SwfRaster 172999。I4RulesTests 含壁钟计时断言，负载高时可能偶发失败，应单独重跑，不改阈值。`SwfRasterHardeningTests`（5028）只由主会话运行。
+- AC-5 规则对照：`build/windows/x64/release/I4RuleAudit.exe "H:/Games/Dev Skyrim/mods" "H:/Games/Dev Skyrim/profiles/Basic - OStim" "D:/MyFiles/Documents/My Games/Skyrim Special Edition/SKSE/InventoryInjector.log" <输出目录> "H:/SteamLibrary/steamapps/common/Skyrim Special Edition/Skyrim.ccc"`，预期 31 文件、671 规则、0 差异。
 - 打包脚本为 `scripts/package.ps1`，从 xmake 获取版本，可能覆盖同版本归档；只有实际需要重新打包时运行，先明确版本与保留策略。
-- 离屏预览程序 `WheelPreview.exe` 可用 `drag-sort`、`drag-sort-static`、`drag-drop`、`drag-settled`、`numeric-sort`、`sorting`、`gameplay` 模式；图片预处理后再读。
-- Python：`C:\Users\BlackMesa\AppData\Local\Programs\Python\Python313\python.exe`，读写显式 UTF-8；本机 Pillow 不可用，可用 System.Drawing 生成预览。Node：`C:\Program Files\nodejs\node.exe`。
-- 游戏日志：`D:\MyFiles\Documents\My Games\Skyrim Special Edition\SKSE\FavoriteWheel.log`。
+- 离屏预览程序 `WheelPreview.exe <out.bmp> <宽> <高> <模式> <语言> <主题>`，可用 `normal`、`schools`、`drag-sort`、`drag-sort-static`、`drag-drop`、`drag-settled`、`numeric-sort`、`sorting`、`gameplay` 等模式；图片预处理后再读。
+- Python：`C:\Users\BlackMesa\AppData\Local\Programs\Python\Python313\python.exe`，读写显式 UTF-8；本机已有 Pillow 和 NumPy。Node：`C:\Program Files\nodejs\node.exe`。
+- 游戏日志：`D:\MyFiles\Documents\My Games\Skyrim Special Edition\SKSE\FavoriteWheel.log`；I4 自身日志在同目录 `InventoryInjector.log`；MO2 实例 `H:/Games/Dev Skyrim`，配置 `profiles/Basic - OStim`，游戏本体 `H:/SteamLibrary/steamapps/common/Skyrim Special Edition`。
 - 接手时先看 `git status --short`、本文件及相关专题文档，再围绕用户新请求做最小必要改动。不要重做已完成发布流程，也不要把历史未实现想法自动当成新授权。
