@@ -139,6 +139,26 @@ void ParsingAndValidation() {
     Load(std::span(&file,1),options);CHECK(calls==1);
     options.sourceExists=[](std::string_view){return false;};CHECK(Load(std::span(&file,1),options).rejected==2);
     CHECK(Load(std::span(&file,1)).warnings.size()==2);
+    // Missing-source diagnostics aggregate across plugins and normalized spellings.
+    std::pair<std::string,std::string> missingFiles[]={
+        {"First.esp",Json{{"rules",Json::array({
+            Rule({{"x",1}},{{"iconSource","Missing\\Icons.SWF"},{"iconLabel","lost"},{"marker",7}}),
+            Rule({{"x",2}},{{"iconSource","missing/icons.swf"},{"iconLabel","lost"}})})}}.dump()},
+        {"Second.esl",Json{{"rules",Json::array({
+            Rule({{"x",3}},{{"iconSource","MISSING/ICONS.SWF"},{"iconLabel","lost"},{"marker",9}}),
+            Rule({{"x",4}},{{"iconSource","another.swf"},{"iconLabel","lost"},{"marker",10}})})}}.dump()}
+    };
+    report=Load(missingFiles,options);
+    CHECK(report.files==2);CHECK(report.rules==3);CHECK(report.rejected==1);
+    const auto summarized=std::count_if(report.warnings.begin(),report.warnings.end(),[](const auto& warning){return warning.starts_with("missing iconSource:");});
+    CHECK(summarized==2);CHECK(report.warnings.size()==3); // Two sources plus the unchanged empty-assign rejection.
+    const auto summary=std::find_if(report.warnings.begin(),report.warnings.end(),[](const auto& warning){return warning.starts_with("missing iconSource: missing/icons.swf;");});
+    CHECK(summary!=report.warnings.end());CHECK(summary->find("affected rules=3")!=summary->npos);
+    CHECK(summary->find("First.esp (2)")!=summary->npos);CHECK(summary->find("Second.esl (1)")!=summary->npos);
+    e=Fields({{"x",1},{"formType",41},{"iconSource","kept.swf"},{"iconLabel","kept"}});auto retained=Resolve(e);
+    CHECK(Is(e,"marker",7));CHECK(retained.source=="kept.swf");CHECK(retained.label=="default_weapon");CHECK(retained.origin==IconOrigin::Default);
+    e=Fields({{"x",3},{"formType",41},{"iconSource","kept.swf"},{"iconLabel","kept"}});retained=Resolve(e);
+    CHECK(Is(e,"marker",9));CHECK(retained.source=="kept.swf");CHECK(retained.label=="default_weapon");CHECK(retained.origin==IconOrigin::Default);
     // A file parse failure cannot discard other successfully parsed files.
     std::pair<std::string,std::string> files[]={{"bad","not json"},{"good",R"({"rules":[{"match":{"x":1},"assign":{"iconLabel":"hit"}}]})"}};
     report=Load(files,Options());CHECK(report.files==1);CHECK(report.rules==1);CHECK(report.warnings.size()==1);

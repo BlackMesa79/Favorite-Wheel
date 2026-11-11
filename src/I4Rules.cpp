@@ -271,6 +271,8 @@ struct Parser {
     LoadReport& report;
     std::string file;
     std::map<std::string, bool> sources;
+    // Aggregate diagnostics only; preserve original source validation/matching semantics.
+    std::map<std::string, std::map<std::string, std::size_t>> missingSources;
     std::uint32_t FormId(const std::string& text) {
         const auto sep = text.find('|');
         if (sep == std::string::npos) throw std::runtime_error("Expected plugin|hexID: " + text);
@@ -363,7 +365,11 @@ struct Parser {
                 valid = it->second;
             }
             if (!valid) {
-                report.warnings.push_back(file + ": invalid iconSource; removed iconSource/iconLabel");
+                if(const auto* s = source->String()) {
+                    auto key = *s;
+                    for(auto& c : key) { if(c >= 'A' && c <= 'Z') c += 'a'-'A'; if(c == '\\') c = '/'; }
+                    ++missingSources[key][file];
+                } else report.warnings.push_back(file + ": invalid iconSource; removed iconSource/iconLabel");
                 rule.assign.Erase("iconSource"); rule.assign.Erase("iconLabel");
             }
         } else if (rule.assign.Get("iconLabel")) rule.assign.Set("iconSource", Value{});
@@ -460,7 +466,7 @@ LoadReport Load(std::span<const std::pair<std::string, std::string>> pluginJson,
     auto rules = std::make_shared<Ruleset>();
     if (!options.sourceExists && !pluginJson.empty()) report.warnings.emplace_back("sourceExists not supplied: icon sources assumed present (offline)");
     if (!options.pluginPrefix && !pluginJson.empty()) report.warnings.emplace_back("pluginPrefix not supplied: plugin-qualified IDs resolve to zero (offline)");
-    Parser parser{options, report, {}, {}};
+    Parser parser{options, report, {}, {}, {}};
     for (const auto& [name, text] : pluginJson) {
         parser.file = name;
         try {
@@ -477,6 +483,17 @@ LoadReport Load(std::span<const std::pair<std::string, std::string>> pluginJson,
                 } catch (const std::exception& ex) { ++report.rejected; report.warnings.push_back(name+": rule "+std::to_string(i)+": "+ex.what()); }
             }
         } catch (const std::exception& ex) { report.warnings.push_back(name+": "+ex.what()); }
+    }
+    for(const auto& [source, plugins] : parser.missingSources) {
+        std::size_t count = 0;
+        std::string names;
+        for(const auto& [plugin, affected] : plugins) {
+            count += affected;
+            if(!names.empty()) names += ", ";
+            names += plugin + " (" + std::to_string(affected) + ")";
+        }
+        report.warnings.push_back("missing iconSource: " + source + "; affected rules=" + std::to_string(count) +
+            "; plugins=" + names + "; removed iconSource/iconLabel");
     }
     rules->Index(); current.store(std::move(rules));
     return report;

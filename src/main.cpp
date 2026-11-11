@@ -1,4 +1,5 @@
 #include "Wheel.h"
+#include "I4Game.h"
 #include "RuntimeSupport.h"
 #include "Outfits.h"
 #include "Settings.h"
@@ -11,6 +12,7 @@ namespace {
         case SKSE::MessagingInterface::kPostPostLoad: Wheel::FaceLight::Discover(); Wheel::FrameworkSettings::Register(); break;
         case SKSE::MessagingInterface::kDataLoaded:
             if (Wheel::Config().enabled) {
+                Wheel::I4::LoadFromGame();
                 if (!Wheel::InstallRenderer() || !Wheel::InstallWheel())
                     SKSE::log::error("FavoriteWheel initialization failed. See preceding errors.");
                 else SKSE::log::info("Renderer route=present-framebuffer-stable-v1");

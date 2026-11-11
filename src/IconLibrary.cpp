@@ -1,4 +1,5 @@
 #include "IconLibrary.h"
+#include "I4Textures.h"
 #include <Windows.h>
 #include <d3d11.h>
 #include <wincodec.h>
@@ -14,7 +15,7 @@ namespace {
     using Microsoft::WRL::ComPtr;
     struct Texture {ComPtr<ID3D11ShaderResourceView> view;float aspect=1;};
     struct Entry {std::string path;bool tint=true;};
-    struct Pack {std::unordered_map<std::string,Entry> icons;std::unordered_map<std::string,std::string> forms;};
+    struct Pack {std::unordered_map<std::string,Entry> icons;std::unordered_map<std::string,std::string> forms;std::map<I4::IconKey,std::string> i4;};
     ImageSampler sampler;
     std::unordered_map<std::string,Pack> packs;
     std::unordered_map<std::string,Texture> textures;
@@ -121,6 +122,11 @@ Report Initialize(ID3D11Device* device,ID3D11DeviceContext* context,std::span<co
                 std::uint32_t id=0;const auto parsed=std::from_chars(hex.data(),hex.data()+hex.size(),id,16);
                 if(parsed.ec!=std::errc{} || parsed.ptr!=hex.data()+hex.size() || !id || id>0xFFFFFF){invalid=true;continue;}
                 pack.forms[FormKey(Trim(key.substr(0,bar)),id)]=Lower(value);
+            }else if(section=="i4") {
+                // Keep the label byte-for-byte, including whitespace before =.
+                const auto raw=line.substr(0,equal);const auto bar=raw.find('|');
+                if(bar==raw.npos || bar==0 || bar+1==raw.size() || value.empty()){invalid=true;continue;}
+                pack.i4[{I4::SourceKey(Trim(raw.substr(0,bar))),raw.substr(bar+1)}]=Lower(value);
             }else invalid=true;
         }
         // Sorted loading makes resource-budget fallback deterministic.
@@ -135,18 +141,32 @@ Report Initialize(ID3D11Device* device,ID3D11DeviceContext* context,std::span<co
     return report;
 }
 Image Find(const Theme& theme,const Item& item) {
-    const auto found=packs.find(theme.iconPack);if(found==packs.end())return {};
-    const auto& pack=found->second;
+    const auto found=packs.find(theme.iconPack);
+    const Pack* pack=found==packs.end()?nullptr:&found->second;
     auto get=[&](const std::string& key)->Image {
-        const auto entry=pack.icons.find(key);if(entry==pack.icons.end())return {};
+        if(!pack)return {};
+        const auto entry=pack->icons.find(key);if(entry==pack->icons.end())return {};
         const auto texture=textures.find(entry->second.path);if(texture==textures.end() || !texture->second.view)return {};
         return {texture->second.view.Get(),texture->second.aspect,entry->second.tint,&sampler};
     };
-    if(item.action==ActionKind::Favorite)if(const auto mapping=pack.forms.find(item.iconForm);mapping!=pack.forms.end())
+    const bool eligible=item.action==ActionKind::Favorite && I4::Eligible(item.i4,theme.i4IconsOff);
+    auto i4=[&]()->Image {
+        if(!eligible)return {};
+        const auto texture=I4Textures::Find(item.i4);if(!texture.view)return {};
+        Image image{texture.view,1,I4::Runtime().color!=I4::ColorMode::Original,texture.sampler};
+        if(I4::Runtime().color==I4::ColorMode::I4)image.color=item.i4.color;
+        return image;
+    };
+    if(pack && item.action==ActionKind::Favorite)if(const auto mapping=pack->forms.find(item.iconForm);mapping!=pack->forms.end())
         if(auto image=get(mapping->second);image.view)return image;
+    if(pack && eligible)if(const auto mapping=pack->i4.find(I4::Identity(item.i4));mapping!=pack->i4.end())
+        if(auto image=get(mapping->second);image.view)return image;
+    if(item.i4.origin==I4::IconOrigin::Rule)if(auto image=i4();image.view)return image;
     if(auto image=get(Key(item));image.view)return image;
     const auto kind=EffectiveKind(item);
-    if(item.action==ActionKind::Favorite && kind>=IconKind::Alteration && kind<=IconKind::Power)return get("magic");
+    if(item.action==ActionKind::Favorite && kind>=IconKind::Alteration && kind<=IconKind::Power)
+        if(auto image=get("magic");image.view)return image;
+    if(item.i4.origin==I4::IconOrigin::Default)return i4();
     return {};
 }
 }

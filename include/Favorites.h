@@ -3,6 +3,7 @@
 #include "FaceLightingAPI.h"
 #include "ItemInfo.h"
 #include "EquipPolicy.h"
+#include "I4Rules.h"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -47,6 +48,7 @@ namespace Wheel {
         bool book=false; // Reading opens native UI; never retain the wheel.
         std::string iconForm; // Stable plugin|local FormID snapshot for icon mappings.
         bool miscDisplayStack=false; // Display-only aggregate; native bindings remain per instance.
+        I4::Icon i4; // Game-thread snapshot; Draw never queries engine fields.
     };
     inline void SetQuickSlotSnapshot(Item& item,int slot) {
         if(item.weaponStack && item.favorited && item.quickSlot!=slot)item.weaponStackHotkey=slot>=0?slot:255;

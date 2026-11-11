@@ -15,6 +15,7 @@ namespace Wheel {
         ThemeStyle style=ThemeStyle::ClassicGold; // Component shapes, independent of colors and layout.
         FrameStyle frameStyle=FrameStyle::Plain;
         LayoutSkin layout;
+        bool i4IconsOff=false; // Theme opt-out; omitted INI token means Auto.
         std::string iconPack; // Resolved IconPacks/<id>/icons.ini; empty uses built-in icons.
         std::string surfaceTexture; // Resolved local PNG; empty means the solid-color fallback.
         float materialStrength=.85f, materialZoom=1.f;

@@ -3,6 +3,7 @@
 #include "WheelFonts.h"
 #include "SkinTextures.h"
 #include "IconLibrary.h"
+#include "I4Textures.h"
 #include "Transition.h"
 #include "TextBridgeClient.h"
 #include <Windows.h>
@@ -90,6 +91,7 @@ namespace Wheel {
                 }
             }
             if(!ImGui_ImplDX11_CreateDeviceObjects()) return false;
+            I4Textures::Initialize(device.Get(),context.Get());
             const auto icons=IconLibrary::Initialize(device.Get(),context.Get(),Themes());
             for(const auto& warning:icons.warnings)SKSE::log::warn("{}",warning);
             SKSE::log::info("Icon library ready: textures={} texels={}",icons.textures,icons.texels);
@@ -168,6 +170,7 @@ namespace Wheel {
             const auto now = std::chrono::steady_clock::now();
             io.DeltaTime = std::clamp(std::chrono::duration<float>(now - lastFrame).count(), .001f, .1f);
             lastFrame = now;
+            I4Textures::BeginFrame(66.f*ViewScale(io.DisplaySize.x,io.DisplaySize.y,view)*Style(view.config).iconScale);
             ImGui_ImplDX11_NewFrame();
             ImGui::NewFrame();
             DrawWheel(view,opacity,transition.value);
@@ -199,7 +202,7 @@ namespace Wheel {
                     }
                     if (ready && !renderedInMenu && (IsOpen() || fading)) Render(chain);
                 } catch (const std::exception& e) {
-                    IconLibrary::Reset();SkinTextures::Reset();
+                    I4Textures::Reset();IconLibrary::Reset();SkinTextures::Reset();
                     ready = false; failed = true;
                     SKSE::log::error("Wheel rendering disabled: {}", e.what());
                     if (auto tasks = SKSE::GetTaskInterface()) tasks->AddTask([] { Cancel(); });
@@ -222,7 +225,7 @@ namespace Wheel {
             Render(targetSwapChain);
             renderedInMenu=true;
         } catch(const std::exception& e) {
-            IconLibrary::Reset();SkinTextures::Reset();ready=false;failed=true;
+            I4Textures::Reset();IconLibrary::Reset();SkinTextures::Reset();ready=false;failed=true;
             SKSE::log::error("Wheel menu rendering disabled: {}",e.what());
             if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask([]{Cancel();});
         }

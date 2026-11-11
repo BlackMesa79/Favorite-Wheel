@@ -1,4 +1,6 @@
 #include "Favorites.h"
+#include "I4Game.h"
+#include "I4Textures.h"
 #include "IconLibrary.h"
 #include "Settings.h"
 #include "ActorRuntime.h"
@@ -215,7 +217,7 @@ namespace Wheel {
             return HandEquip::None; // Apparel/ammunition are equipped, but not in a hand.
         }
         void AppendInventory(std::vector<Item>& result,RE::TESBoundObject* object,int count,
-            RE::InventoryEntryData* entry,bool allInventory,const Item* exact=nullptr) {
+            RE::InventoryEntryData* entry,bool allInventory,const Item* exact=nullptr,double* i4Milliseconds=nullptr) {
             if(!object || count<=0)return;
             const auto category=Classify(object);const auto icon=ClassifyIcon(object);const bool usable=Supported(object);
             const bool instrument=TalentInstrument(object);
@@ -244,6 +246,11 @@ namespace Wheel {
                     item.handEquip=InventoryHand(object,stack->right,stack->left);
                 }
                 if(hotkey){const int assigned=static_cast<int>(hotkey->hotkey.underlying());item.quickSlot=ValidQuickSlot(assigned)?assigned:-1;}
+                if(I4::Runtime().icons && I4::dataAvailable.load()) {
+                    const auto i4Started=std::chrono::steady_clock::now();
+                    auto fields=I4::Derive(I4::Collect(object,entry));item.i4=I4::Resolve(fields);
+                    if(i4Milliseconds)*i4Milliseconds+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-i4Started).count();
+                }
             };
             if(object->As<RE::TESObjectWEAP>()) {
                 const auto copies=WeaponCopies(count,entry);
@@ -303,6 +310,7 @@ namespace Wheel {
 
     static std::vector<Item> CollectDirectory(bool allInventory,bool includeInfo) {
         const auto started=std::chrono::steady_clock::now();
+        double i4Milliseconds=0;
         std::vector<Item> result;
         const auto player = RE::PlayerCharacter::GetSingleton();
         if (!player) return result;
@@ -329,7 +337,7 @@ namespace Wheel {
         for(const auto& [object,stock]:inventory) {
             if(stock.count<=0 || (!allInventory && (!stock.entry || !stock.entry->IsFavorited())))continue;
             const auto first=result.size();
-            AppendInventory(result,object,static_cast<int>(std::min<std::int64_t>(stock.count,INT_MAX)),stock.entry,allInventory);
+            AppendInventory(result,object,static_cast<int>(std::min<std::int64_t>(stock.count,INT_MAX)),stock.entry,allInventory,nullptr,&i4Milliseconds);
             const auto mode=sortModes[static_cast<int>(Classify(object))];
             if(includeInfo || Ordering::Numeric(mode))for(auto i=first;i<result.size();++i) {
                 const auto stats=CaptureItemInfo(object,reinterpret_cast<RE::ExtraDataList*>(result[i].key.extra),player,includeInfo);
@@ -395,6 +403,11 @@ namespace Wheel {
                 }
                 result.push_back({{form->GetFormID()}, *category, name && *name ? name : "?", 1, equipped, true, true});
                 result.back().inventoryWide=allInventory;result.back().iconForm=IconForm(form);
+                if(I4::Runtime().icons && I4::dataAvailable.load()) {
+                    const auto i4Started=std::chrono::steady_clock::now();
+                    auto fields=I4::Derive(I4::Collect(form,nullptr));result.back().i4=I4::Resolve(fields);
+                    i4Milliseconds+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-i4Started).count();
+                }
                 if(spell) {
                     const auto school=spell->GetAssociatedSkill();
                     result.back().sortType=school==RE::ActorValue::kNone?999:static_cast<int>(school);
@@ -428,6 +441,10 @@ namespace Wheel {
             return a.key.extra < b.key.extra;
         });
         const auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+        std::vector<I4::Icon> icons;icons.reserve(result.size());
+        for(const auto& item:result)icons.push_back(item.i4);
+        I4Textures::RequestSnapshot(icons);
+        SKSE::log::info("I4 snapshot: items={} collect_derive_resolve_ms={:.3f}",result.size(),i4Milliseconds);
         SKSE::log::info("Inventory directory: scope={} items={} details={} total_ms={:.2f}",allInventory?"all":"favorites",result.size(),includeInfo,elapsed);
         return result;
     }

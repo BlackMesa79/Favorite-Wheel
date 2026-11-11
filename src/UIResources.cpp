@@ -397,6 +397,9 @@ namespace Wheel {
                     const auto manifest=(std::filesystem::u8path(root)/"IconPacks"/pack/"icons.ini").generic_u8string();
                     entry.iconPack.assign(manifest.begin(),manifest.end());
                 }
+                auto i4=Trim(values["I4Icons"]);
+                std::transform(i4.begin(),i4.end(),i4.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
+                entry.i4IconsOff=i4=="off";
                 auto style=Trim(values["Style"]);
                 std::transform(style.begin(),style.end(),style.begin(),[](unsigned char c){return c>='A' && c<='Z'?c+'a'-'A':c;});
                 entry.style=style=="skyrim"?ThemeStyle::Skyrim:style=="classic"?ThemeStyle::ClassicGold:ThemeStyle::Etched;
