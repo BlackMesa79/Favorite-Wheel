@@ -23,6 +23,8 @@ namespace {
         Scheduler schedule;
         Logger logger;
         std::map<std::string,Source> sources;
+        std::vector<I4::Icon> snapshot;
+        I4::RuntimeConfig config;
         std::set<I4::IconKey> pins, failed, uploadWarned;
         std::set<I4::TextureKey> uploadFailed;
         std::set<I4::TextureKey> requested;
@@ -49,9 +51,14 @@ namespace {
     std::set<I4::IconKey> failedForFrame;
 
     void RetryUploadsLocked() {
-        // One attempt per texture key per snapshot/size epoch, independent of warnings.
+        // One attempt per texture key per snapshot/size/budget epoch, independent of warnings.
         for(const auto& key:state.uploadFailed)state.requested.erase(key);
         state.uploadFailed.clear();
+    }
+    void UpdatePinsLocked(const I4::RuntimeConfig& config) {
+        std::set<I4::IconKey> pins;
+        for(const auto& icon:state.snapshot)if(I4::Eligible(icon,false,config))pins.insert(I4::Identity(icon));
+        if(state.pins!=pins){state.pins=std::move(pins);RetryUploadsLocked();}
     }
     void QueueLocked() {
         if(state.stop)return;
@@ -165,11 +172,10 @@ void Configure(Reader reader,Scheduler schedule,Logger logger) {
     state.stop=false;if(!state.worker.joinable())state.worker=std::thread(Worker);
 }
 void RequestSnapshot(std::span<const I4::Icon> icons) {
-    std::set<I4::IconKey> pins;
-    for(const auto& icon:icons)if(I4::Eligible(icon))pins.insert(I4::Identity(icon));
     {
         std::lock_guard lock(state.mutex);
-        if(state.pins!=pins){state.pins=std::move(pins);RetryUploadsLocked();}
+        state.snapshot.assign(icons.begin(),icons.end());
+        UpdatePinsLocked(I4::Runtime());
         QueueLocked();
     }
     ScheduleReads();
@@ -187,17 +193,31 @@ void Initialize(ID3D11Device* newDevice,ID3D11DeviceContext* newContext) {
 }
 void BeginFrame(float maximumIconPixels) {
     uploaded=0;
+    const auto config=I4::Runtime();
+    const auto limit=std::size_t(config.textureBudgetMB)*1024*1024;
     std::deque<std::string> warnings;Logger logger;
     {
         std::lock_guard lock(state.mutex);
         const auto edge=I4::TextureEdge(maximumIconPixels);
-        if(state.edge!=edge){state.edge=edge;RetryUploadsLocked();QueueLocked();}
+        const bool changed=state.edge!=edge || state.config.textureBudgetMB!=config.textureBudgetMB ||
+            state.config.icons!=config.icons || state.config.scope!=config.scope;
+        if(state.edge!=edge || config.textureBudgetMB>state.config.textureBudgetMB)RetryUploadsLocked();
+        state.edge=edge;
+        if(changed){UpdatePinsLocked(config);QueueLocked();}
+        state.config=config;
         budget.Pin(state.pins,state.edge);failedForFrame=state.failed;
         warnings.swap(state.warnings);logger=state.logger;
     }
     if(logger)for(const auto& warning:warnings)logger(warning);
     ScheduleReads();
     if(!device || !context)return;
+    // Trim even when there are no pending uploads. Current snapshot textures stay pinned.
+    std::vector<I4::TextureKey> trimmed;
+    budget.Trim(limit,trimmed);
+    for(const auto& old:trimmed)textures.erase(old);
+    if(!trimmed.empty()) {
+        std::lock_guard lock(state.mutex);for(const auto& old:trimmed)state.requested.erase(old);
+    }
     unsigned attempts=0;
     while(attempts<I4::TextureBudget::uploadsPerFrame) {
         Ready ready;
@@ -213,7 +233,7 @@ void BeginFrame(float maximumIconPixels) {
         ++attempts;
         const auto& key=ready.work.key;
         std::vector<I4::TextureKey> evicted;
-        const bool admitted=budget.Admit(key,std::size_t(I4::Runtime().textureBudgetMB)*1024*1024,evicted);
+        const bool admitted=budget.Admit(key,limit,evicted);
         for(const auto& old:evicted)textures.erase(old);
         {
             std::lock_guard lock(state.mutex);for(const auto& old:evicted)state.requested.erase(old);

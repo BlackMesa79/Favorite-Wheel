@@ -63,6 +63,11 @@ int wmain(int argc,wchar_t** argv) try {
         Require(value.kbMoveWhileOpen && value.kbCategoryPrevKey==46 && value.kbCategoryNextKey==44 && value.theme=="skyrim" && value.positionX==61 && value.font==Utf8(L"D:/字体/𠀀.ttf"),"fresh-process disk settings");
         Require(GetPrivateProfileIntW(L"Controls",L"KbMoveWhileOpen",-999,argv[2])==1 && GetPrivateProfileIntW(L"Controls",L"KbCategoryPrevKey",-999,argv[2])==46 && GetPrivateProfileIntW(L"Controls",L"KbCategoryNextKey",-999,argv[2])==44,"external reader sees keyboard controls");
         // A separate reader must also see explicit default and changed keys.
+        Require(!value.i4Icons && value.i4IconColor=="Original" && value.i4IconScope=="Rule" && value.i4TextureBudgetMB==64 && value.i4Debug,"fresh-process I4 settings");
+        Require(GetPrivateProfileIntW(L"Display",L"I4Icons",-999,argv[2])==0 && GetPrivateProfileIntW(L"Display",L"I4TextureBudgetMB",-999,argv[2])==64 && GetPrivateProfileIntW(L"General",L"I4Debug",-999,argv[2])==1,"external reader sees explicit I4 numeric fields");
+        wchar_t color[32]{},scope[32]{};
+        GetPrivateProfileStringW(L"Display",L"I4IconColor",L"",color,32,argv[2]);GetPrivateProfileStringW(L"Display",L"I4IconScope",L"",scope,32,argv[2]);
+        Require(std::wstring(color)==L"Original" && std::wstring(scope)==L"Rule","external reader sees canonical I4 enums");
         Require(GetPrivateProfileIntW(L"General",L"Enabled",-999,argv[2])==1,"explicit default key on disk");
         Require(GetPrivateProfileIntW(L"Display",L"PositionXPercent",-999,argv[2])==61,"external reader sees saved position");
         wchar_t font[256]{};GetPrivateProfileStringW(L"Display",L"Font",L"",font,256,argv[2]);
@@ -85,7 +90,7 @@ int wmain(int argc,wchar_t** argv) try {
         BeginSettings();const bool defaultsSaved=SaveSettings();
         std::cout<<mode<<": result="<<defaultsSaved<<" "<<SettingsDiagnostic()<<'\n';
         Require(defaultsSaved && Bytes(path).size()>2,"Default Apply must persist actual keys even when profile API writes never reach disk");
-        BeginSettings();auto changed=Config();changed.theme="skyrim";changed.positionX=61;changed.kbMoveWhileOpen=true;changed.kbCategoryPrevKey=46;changed.kbCategoryNextKey=44;changed.font=Utf8(L"D:/字体/𠀀.ttf");EditSettings(changed);
+        BeginSettings();auto changed=Config();changed.theme="skyrim";changed.positionX=61;changed.kbMoveWhileOpen=true;changed.kbCategoryPrevKey=46;changed.kbCategoryNextKey=44;changed.font=Utf8(L"D:/字体/𠀀.ttf");changed.i4Icons=false;changed.i4IconColor="Original";changed.i4IconScope="Rule";changed.i4TextureBudgetMB=64;changed.i4Debug=true;EditSettings(changed);
         Require(SaveSettings(),"Changed Apply must not depend on profile caches");
         LoadSettings();Require(Config()==changed,"Changed settings reload from file bytes with a misleading profile cache");
         wchar_t executable[32768]{};Require(GetModuleFileNameW(nullptr,executable,32768)!=0,"find executable");
@@ -96,6 +101,11 @@ int wmain(int argc,wchar_t** argv) try {
         CloseHandle(process.hThread);CloseHandle(process.hProcess);
         Require(waited==WAIT_OBJECT_0 && code==0,"independent process and Windows INI API read the complete document");
     }
+    const auto i4Invalid=root/"i4-invalid.ini";
+    {std::ofstream file(i4Invalid);file<<"; preserved\n[Display]\nI4Icons=bad\nI4IconColor=bad\nI4IconScope=bad\nI4TextureBudgetMB=999\n[General]\nI4Debug=\n";}
+    SetSettingsPath(Utf8(i4Invalid));LoadSettings();
+    Require(!Config().i4Icons && Config().i4IconColor=="Theme" && Config().i4IconScope=="All" && Config().i4TextureBudgetMB==128 && !Config().i4Debug,"invalid I4 fields normalize through file-byte reader");
+    const auto normalized=Config();BeginSettings();Require(SaveSettings(),"save normalized I4 values");LoadSettings();Require(Config()==normalized,"normalized I4 fields survive persistence with misleading profile cache");
     // Vortex normally deploys hardlinks. Updating Data must retain the link to
     // staging; replacing/renaming the destination would break that connection.
     const auto staging=root/"vortex-staging.ini",deployed=root/"vortex-data.ini";

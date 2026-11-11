@@ -64,4 +64,11 @@ namespace Wheel::I4 {
     LoadReport Load(std::span<const std::pair<std::string, std::string>> pluginJson, const LoadOptions& options);
     // Concurrent calls are safe for distinct entries, including concurrent Load publication.
     Icon Resolve(Entry& entry);
+    struct RuleMatch {
+        std::string file; // JSON filename; index is zero-based, as in Load warnings.
+        std::size_t index = 0;
+        bool info = false, icon = false;
+    };
+    // Optional diagnostics only. The original overload and matching semantics are unchanged.
+    Icon Resolve(Entry& entry, std::vector<RuleMatch>* matches);
 }

@@ -1,4 +1,6 @@
 #include "I4Game.h"
+#include "I4Diagnostics.h"
+#include "I4LoadLog.h"
 #include "I4Textures.h"
 #include <filesystem>
 #include <chrono>
@@ -85,10 +87,20 @@ LoadReport LoadFromGame() {
         // AC-8: no rule files means no SkyUI default-icon substitution either.
         dataAvailable.store(report.files!=0,std::memory_order_release);
     } catch(const std::exception& error) {dataAvailable.store(false);report.warnings.push_back(error.what());}
-    for(const auto& warning:report.warnings)SKSE::log::warn("I4 load: {}",warning);
+    const auto log=SummarizeLoadWarnings(report.warnings);
+    for(const auto& warning:log.warnings)SKSE::log::warn("I4 load: {}",warning);
+    if(log.missingPlugins)SKSE::log::info("I4 load: {} references to {} missing plugins (rules kept; these IDs never match)",
+        log.missingReferences,log.missingPlugins);
     SKSE::log::info("I4 load: files={} rules={} rejected={} elapsed_ms={:.3f}",report.files,report.rules,report.rejected,
         std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count());
     return report;
+}
+Icon ResolveItem(Entry& entry,std::uint32_t formId,std::string_view name) {
+    if(!Runtime().debug)return Resolve(entry);
+    std::vector<RuleMatch> matches;
+    auto icon=Resolve(entry,&matches);
+    SKSE::log::info("{}",FormatResolveDebug(formId,name,icon,matches));
+    return icon;
 }
 RawFields Collect(const RE::TESForm* form,const RE::InventoryEntryData* entry) {
     RawFields raw;if(!form)return raw;

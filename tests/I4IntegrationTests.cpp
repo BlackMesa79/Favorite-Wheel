@@ -1,5 +1,7 @@
 #include "I4Textures.h"
 #include "I4Entry.h"
+#include "I4Diagnostics.h"
+#include "I4LoadLog.h"
 #include "IconLibrary.h"
 #include "SwfRasterFixtures.h"
 #include <d3d11.h>
@@ -21,6 +23,57 @@ void PNG(IWICImagingFactory* factory,const std::filesystem::path& path,unsigned 
     HR(frame->Initialize(options.Get()));HR(frame->SetSize(1,1));GUID format=GUID_WICPixelFormat32bppBGRA;HR(frame->SetPixelFormat(&format));
     BYTE pixel[]{0,0,red,255};HR(frame->WritePixels(1,4,4,pixel));HR(frame->Commit());HR(encoder->Commit());
 }
+void LoadLogging() {
+    using namespace I4;
+    const std::string unresolved="I4 unresolved/unloaded plugin (possibly merged; no remapping): ";
+    const std::vector<std::string> warnings{
+        "Z.esp: invalid iconSource", "RotolsMoreIcons.esp: Plugin file not found: LostGrimoire.esp",
+        "A.esp: Plugin file not found: Other.esl", "Z.esp: invalid iconSource",
+        "RotolsMoreIcons.esp: Plugin file not found: LostGrimoire.esp",
+        "B.esp: Plugin file not found: lostgrimoire.ESP", "A.esp: another warning",
+        unresolved+"LOSTGRIMOIRE.esp", unresolved+"Other.esl"};
+    const auto original=warnings;
+    const auto counted=CountLoadWarnings(warnings);
+    Check(counted.size()==7 && counted[0].text==warnings[0] && counted[0].count==2 &&
+        counted[1].text==warnings[1] && counted[1].count==2 && counted[2].text==warnings[2] && counted[2].count==1,
+        "exact duplicate warnings counted in first occurrence order");
+    const auto summary=SummarizeLoadWarnings(warnings);
+    Check(summary.missingReferences==4 && summary.missingPlugins==2,
+        "references aggregated across files and plugin case without counting unresolved diagnostics twice");
+    Check(summary.warnings==std::vector<std::string>{
+        "Z.esp: invalid iconSource (x2)",
+        "missing/unloaded plugin: LostGrimoire.esp; references=3 (possibly merged; no remapping)",
+        "missing/unloaded plugin: Other.esl; references=1 (possibly merged; no remapping)",
+        "A.esp: another warning"},
+        "one line per missing plugin retains first occurrence order and unrelated warnings");
+    Check(warnings==original,"presentation leaves original warnings unchanged");
+    const std::vector<std::string> diagnosticFirst{unresolved+"B.esp",unresolved+"Orphan.esp",
+        "A.esp: Plugin file not found: B.esp",unresolved+"B.esp"};
+    const auto early=SummarizeLoadWarnings(diagnosticFirst);
+    Check(early.missingReferences==1 && early.missingPlugins==2 && early.warnings.size()==2 &&
+        early.warnings[0]=="missing/unloaded plugin: B.esp; references=1 (possibly merged; no remapping)" &&
+        early.warnings[1]=="missing/unloaded plugin: Orphan.esp; references=0 (possibly merged; no remapping)",
+        "diagnostic-first and diagnostic-only cases do not invent references");
+    const auto empty=SummarizeLoadWarnings({});
+    Check(empty.warnings.empty() && empty.missingReferences==0 && empty.missingPlugins==0,"empty report stays empty");
+    const std::vector<std::string> malformed{"A.esp: Plugin file not found: ",unresolved};
+    const auto unchanged=SummarizeLoadWarnings(malformed);
+    Check(unchanged.warnings==malformed && unchanged.missingPlugins==0,"empty plugin names remain ordinary warnings");
+    const std::pair<std::string,std::string> file{"Fixture.esp",R"({"rules":[
+        {"match":{"formId":"Missing.esp|123"},"assign":{"iconLabel":"first"}},
+        {"match":{"formId":"Missing.esp|456"},"assign":{"iconLabel":"second"}}]})"};
+    LoadOptions options;options.sourceExists=[](auto){return true;};
+    options.pluginPrefix=[](auto)->std::optional<std::uint32_t>{return {};};
+    const auto report=Load(std::span(&file,1),options);const auto before=report;
+    const auto loaded=SummarizeLoadWarnings(report.warnings);
+    Check(report.files==1 && report.rules==2 && report.rejected==0 && report.warnings.size()==2 &&
+        loaded.missingReferences==2 && loaded.missingPlugins==1 && loaded.warnings.size()==1,
+        "real LoadReport retains two rules and raw warnings while log contains one missing plugin");
+    Check(report.files==before.files && report.rules==before.rules && report.rejected==before.rejected && report.warnings==before.warnings,
+        "log summary does not mutate LoadReport contents or counters");
+    std::cout<<"load logging: 9 raw warnings -> "<<summary.warnings.size()<<" lines, "
+        <<summary.missingReferences<<" references to "<<summary.missingPlugins<<" missing plugins\n";
+}
 void Policy() {
     using namespace I4;
     Check(TextureEdge(32)==64 && TextureEdge(32.1f)==128 && TextureEdge(64)==128 && TextureEdge(65)==256 && TextureEdge(1000)==256,"edge tiers");
@@ -38,6 +91,10 @@ void Policy() {
     policy.Pin({{d.source,d.label}},64);evicted.clear();
     Check(policy.Admit(a,MipBytes(64),evicted) && !policy.Contains(d),"old resolution is unpinned after size change");
     policy.Clear();Check(policy.Used()==0,"device reset budget clear");
+    policy.Admit(a,limit*2,evicted);policy.Admit(b,limit*2,evicted);policy.Admit(c,limit*2,evicted);policy.Touch(b);evicted.clear();
+    Check(policy.Trim(limit,evicted) && evicted==std::vector<TextureKey>{a} && policy.Contains(b) && policy.Contains(c),"budget shrink evicts least recently used entry without admitting a new one");
+    policy.Pin({{b.source,b.label}});evicted.clear();
+    Check(!policy.Trim(0,evicted) && policy.Contains(b) && !policy.Contains(c),"trim evicts all idle entries but preserves snapshot pins above budget");
     auto config=RuntimeConfig{};dataAvailable=true;Icon icon{"a","b",{},IconOrigin::Default};
     Check(Eligible(icon) && !Eligible(icon,true),"Auto and theme Off");
     config.icons=false;Check(!Eligible(icon,false,config),"global Off");config.icons=true;config.scope=IconScope::Rule;
@@ -47,6 +104,44 @@ void Policy() {
     Check(IconLibrary::ImageColor(image,ink)==ink,"Theme retains exact hover/selection ink");
     image.color=0x112233;Check(IconLibrary::ImageColor(image,ink)==0x7F332211,"I4 RGB conversion preserves UI alpha");
     image.color.reset();image.tint=false;Check(IconLibrary::ImageColor(image,ink)==0x7FFFFFFF,"Original only multiplies UI alpha");
+}
+void RuntimeSettings() {
+    const auto root=std::filesystem::path("build/i4-phase3/t5/runtime-settings");std::filesystem::create_directories(root);
+    const auto file=root/"FavoriteWheel.ini";SetSettingsPath(file.string());
+    {std::ofstream f(file);f<<"[Display]\nI4Icons=0\nI4IconColor=i4\nI4IconScope=rule\nI4TextureBudgetMB=64\n[General]\nI4Debug=1\n";}
+    LoadSettings();auto runtime=I4::Runtime();
+    Check(!runtime.icons && runtime.color==I4::ColorMode::I4 && runtime.scope==I4::IconScope::Rule && runtime.textureBudgetMB==64 && runtime.debug,"Load publishes every I4 runtime field");
+    BeginSettings();DefaultSettings();Check(!I4::Runtime().icons && I4::Runtime().debug,"Defaults draft is not applied early");RevertSettings();
+    BeginSettings();auto draft=Config();draft.i4Icons=true;draft.i4IconColor="Original";draft.i4IconScope="All";draft.i4TextureBudgetMB=8;draft.i4Debug=false;EditSettings(draft);
+    Check(!I4::Runtime().icons && I4::Runtime().textureBudgetMB==64,"Edit does not publish runtime config");
+    SetSettingsPath(root.string());Check(!SaveSettings() && !I4::Runtime().icons && I4::Runtime().debug,"Failed Apply preserves runtime config");
+    SetSettingsPath(file.string());Check(SaveSettings(),"Apply runtime settings");runtime=I4::Runtime();
+    Check(runtime.icons && runtime.color==I4::ColorMode::Original && runtime.scope==I4::IconScope::All && runtime.textureBudgetMB==8 && !runtime.debug,"Successful Apply publishes all fields atomically");
+    auto baseline=Config(),external=baseline;external.i4Icons=false;external.i4Debug=true;external.i4TextureBudgetMB=128;
+    Check(SaveExternalSettings(baseline,external) && !I4::Runtime().icons && I4::Runtime().debug && I4::Runtime().textureBudgetMB==128,"Framework Apply shares runtime publication");
+    external.i4Icons=true;external.theme="invalid\nvalue";
+    Check(!SaveExternalSettings(Config(),external) && !I4::Runtime().icons,"Failed Framework Apply retains active I4 config");
+    BeginSettings();DefaultSettings();Check(SaveSettings(),"Restore default runtime settings");
+}
+void Diagnostics() {
+    using namespace I4;
+    const std::vector<std::pair<std::string,std::string>> files{
+        {"First.esp",R"({"rules":[{"match":{"formType":"Weapon"},"assign":{"subType":2}},{"match":{},"assign":{}},{"match":{"subType":2},"assign":{"iconLabel":"first","iconColor":"0x123456"}}]})"},
+        {"Last.esl",R"({"rules":[{"match":{"subType":2},"assign":{"iconSource":"test.swf","iconLabel":"last"}}]})"}};
+    LoadOptions options;options.sourceExists=[](auto){return true;};
+    Check(Load(files,options).rules==3,"diagnostic fixture preserves rejected-rule indices");
+    Entry a;a.Set("formType",41);a.Set("formId",0xFE123456);a.Set("subType",1);auto b=a;
+    const auto plain=Resolve(a);std::vector<RuleMatch> matches;
+    const auto traced=Resolve(b,&matches);
+    Check(a.fields==b.fields && plain.source==traced.source && plain.label==traced.label && plain.color==traced.color && plain.origin==traced.origin,"optional trace does not change Resolve results or mutations");
+    Check(matches.size()==3 && matches[0].file=="First.json" && matches[0].index==0 && matches[0].info && matches[1].index==2 && matches[2].file=="Last.json","trace identifies contributing files and original zero-based rule indices");
+    Check(traced.source=="test.swf" && traced.label=="last" && traced.origin==IconOrigin::Rule,"later rule still overrides earlier icon assignment");
+    const auto line=FormatResolveDebug(0xFE123456,"Sword\nName",traced,matches);
+    Check(line.find("formId=FE123456")!=line.npos && line.find("Sword\\nName")!=line.npos && line.find("source=\"test.swf\"")!=line.npos && line.find("label=\"last\"")!=line.npos && line.find("color=")!=line.npos && line.find("origin=Rule")!=line.npos && line.find("First.json#2")!=line.npos && line.find("Last.json#0")!=line.npos && line.find('\n')==line.npos,"debug result contains requested fields on exactly one line");
+    Entry empty;const auto none=Resolve(empty,&matches);Check(matches.empty() && none.origin==IconOrigin::None,"each trace clears previous matches");
+    Entry weapon;weapon.Set("formType",41);weapon.Set("subType",1);Load({});
+    const auto fallback=Resolve(weapon,&matches);
+    Check(fallback.origin==IconOrigin::Default && matches.empty() && FormatResolveDebug(1,"Default",fallback,matches).find("origin=Default rules=[]")!=std::string::npos,"default icon with no matched rule is explicit in diagnostics");
 }
 void Integration() {
     HR(CoInitializeEx(nullptr,COINIT_MULTITHREADED));
@@ -60,7 +155,7 @@ void Integration() {
     LoadResources(root.string());
     Check(std::ranges::any_of(Themes(),[](const Theme& t){return t.id=="off" && t.i4IconsOff;}),"theme INI Off parsed");
     Check(std::ranges::any_of(Themes(),[](const Theme& t){return t.id=="auto" && !t.i4IconsOff;}),"omitted theme token is Auto");
-    {std::ofstream f(root/"icons.ini");f<<"[Icons]\nform=form.png|original\nmap=map.png|original\nsword=category.png|tint\nmagic=category.png|tint\n[Forms]\nSkyrim.esm|1=form\n[I4]\nA.SWF|icon=map\na.swf|icon =form\n";}
+    {std::ofstream f(root/"icons.ini");f<<"[Icons]\nform=form.png|original\nmap=map.png|original\nsword=category.png|tint\nmagic=category.png|tint\n[Forms]\nSkyrim.esm|1=form\n[I4]\nA.SWF|icon=map\na.swf|icon =form\na.swf|tinted=sword\n";}
     Theme theme;theme.iconPack=(root/"icons.ini").string();std::array themes{theme};
     Check(IconLibrary::Initialize(device.Get(),context.Get(),themes).textures==3,"three independent pack textures");
     std::deque<std::function<void()>> tasks;std::vector<std::string> warnings;unsigned reads=0;const auto mainThread=std::this_thread::get_id();
@@ -132,7 +227,28 @@ void Integration() {
     Check(!IconLibrary::Find(plain,item).tint && IconLibrary::Find(plain,item).view!=rule.view,"Original selects distinct original texture");
     Check(sample(IconLibrary::Find(plain,item).view)==std::array<unsigned,4>{240,40,20,255},"worker original retains authored RGB");
     item.i4=icons[0];Check(!IconLibrary::Find(theme,item).tint && !IconLibrary::Find(theme,item).color,"pack replacement retains own color policy");
-    I4::runtimeConfig=I4::RuntimeConfig{};
+    // AC-6: every color mode retains all six priority levels and pack tint policy.
+    const auto renderCount=I4Textures::Stats().renders;
+    const auto ink=0x7F123456u,hover=0xCC987654u;
+    for(const auto mode:{I4::ColorMode::Theme,I4::ColorMode::I4,I4::ColorMode::Original}) {
+        config.color=mode;config.scope=I4::IconScope::All;I4::runtimeConfig=config;
+        item.i4=icons[0];item.iconForm=IconLibrary::FormKey("Skyrim.esm",1);
+        Check(IconLibrary::Find(theme,item).view==form.view,"AC-6 Forms priority in every color mode");
+        item.iconForm.clear();auto replacement=IconLibrary::Find(theme,item);
+        Check(replacement.view==mapped.view && !replacement.tint && !replacement.color,"AC-6 I4 map authored color overrides every mode");
+        item.i4.label="tinted";replacement=IconLibrary::Find(theme,item);
+        Check(replacement.view==category.view && replacement.tint && !replacement.color && IconLibrary::ImageColor(replacement,hover)==hover,"AC-6 tinted I4 pack replacement follows theme ink in every mode");
+        item.i4=icons[1];auto image=IconLibrary::Find(theme,item);
+        const auto expected=mode==I4::ColorMode::Theme?ink:mode==I4::ColorMode::I4?0x7F332211u:0x7FFFFFFFu;
+        Check(image.view!=category.view && IconLibrary::ImageColor(image,ink)==expected,"AC-6 Rule priority and exact RGB/alpha per mode");
+        Check(IconLibrary::ImageColor(image,hover)==(mode==I4::ColorMode::Theme?hover:mode==I4::ColorMode::I4?0xCC332211u:0xCCFFFFFFu),"AC-6 selected and hovered theme ink vs fixed color");
+        item.i4.origin=I4::IconOrigin::Default;
+        Check(IconLibrary::Find(theme,item).view==category.view && IconLibrary::ImageColor(IconLibrary::Find(theme,item),hover)==hover,"AC-6 tinted category precedes Default and follows theme ink");
+        Check(IconLibrary::Find(plain,item).view==image.view,"AC-6 Default used without pack in every mode");
+        item.i4={};Check(!IconLibrary::Find(plain,item).view,"AC-6 built-in fallback in every mode");
+    }
+    Check(I4Textures::Stats().renders==renderCount,"color changes reuse prepared variants without clearing or rasterizing");
+    I4::runtimeConfig=I4::RuntimeConfig{};I4Textures::RequestSnapshot(icons);
     I4Textures::Reset();Check(I4Textures::Stats().textures==0 && I4Textures::Stats().gpuBytes==0,"reset clears GPU cache and mip accounting");
     I4Textures::Initialize(device.Get(),context.Get());wait([&]{return I4Textures::Stats().textures>=12;});
     Check(reads==6,"device recreation reuses source bytes and requests pinned icons");
@@ -151,6 +267,15 @@ void Integration() {
     Check(IconLibrary::Find(theme,item).view!=nullptr,"entry 512 accepted");item.i4.label="overflow";
     Check(!IconLibrary::Find(theme,item).view,"entry 513 rejected");
     std::cout<<"pipeline reads="<<reads<<" warnings="<<warnings.size()<<" gpu_bytes="<<I4Textures::Stats().gpuBytes<<'\n';
+    // Scope changes request previously excluded defaults from the retained snapshot.
+    auto scoped=icons;scoped.push_back({"scope-default.swf","icon",{},I4::IconOrigin::Default});
+    config.scope=I4::IconScope::Rule;config.color=I4::ColorMode::Theme;I4::runtimeConfig=config;
+    I4Textures::RequestSnapshot(scoped);step();Check(!I4Textures::Find(scoped.back()).view,"Rule scope excludes default textures");
+    const auto scopeReads=reads;config.scope=I4::IconScope::All;I4::runtimeConfig=config;
+    wait([&]{return I4Textures::Find(scoped.back()).view!=nullptr;});
+    Check(reads==scopeReads+1,"All scope requests excluded defaults without a new snapshot");
+    config.scope=I4::IconScope::Rule;I4::runtimeConfig=config;step();
+    Check(!I4Textures::Find(scoped.back()).view && I4Textures::Find(scoped.front()).view,"scope applies on next frame while Rule stays ready");
     // A small real GPU budget exercises the production admission/upload path.
     const std::vector<I4::Icon> pressure(icons.begin(),icons.begin()+6);
     const auto victim=pressure.back();
@@ -194,6 +319,27 @@ void Integration() {
         const auto message="I4 texture upload/budget failed: "+icon.source+" | "+icon.label;
         Check(std::ranges::count(warnings,message)<=1,"upload warning is emitted once per identity across retry epochs");
     }
+    // Budget-only changes through real Settings Apply (8..128 MiB), without Reset.
+    std::vector<I4::Icon> budgetIcons;
+    for(int i=0;i<16;++i)budgetIcons.push_back({"budget-"+std::to_string(i)+".swf","icon",{},I4::IconOrigin::Rule});
+    auto applyBudget=[&](int mb) {
+        const auto before=Config();auto after=before;after.i4TextureBudgetMB=mb;
+        Check(SaveExternalSettings(before,after),"apply texture budget through settings");
+    };
+    maximumIconPixels=128;applyBudget(8);
+    const auto beforeBudgetRenders=I4Textures::Stats().renders;
+    I4Textures::RequestSnapshot(budgetIcons);
+    wait([&]{return I4Textures::Stats().renders>=beforeBudgetRenders+32 && I4Textures::Stats().pending==0 && I4Textures::Stats().ready==0;});
+    Check(!std::ranges::all_of(budgetIcons,bothVariants),"8 MiB pressure blocks some variants");
+    applyBudget(32);
+    wait([&]{return std::ranges::all_of(budgetIcons,bothVariants);});
+    const auto largeBytes=I4Textures::Stats().gpuBytes;
+    Check(largeBytes>8*1024*1024,"larger budget retries previously blocked textures with unchanged snapshot and edge");
+    applyBudget(8);step();
+    Check(std::ranges::all_of(budgetIcons,bothVariants) && I4Textures::Stats().gpuBytes>=32*I4::MipBytes(256),"current snapshot pins survive a budget decrease even above limit");
+    const auto budgetVictim=budgetIcons.back();I4Textures::RequestSnapshot(std::span(&budgetVictim,1));step();
+    Check(I4Textures::Stats().gpuBytes<=8*1024*1024 && bothVariants(budgetVictim),"reduced budget trims unpinned GPU textures even without pending uploads");
+    applyBudget(32);
     I4::runtimeConfig=I4::RuntimeConfig{};
     I4Textures::Shutdown();IconLibrary::Reset();factory.Reset();CoUninitialize();
 }
@@ -248,6 +394,6 @@ void Timing() {
 }
 }
 int main() {
-    try {Policy();Integration();ShutdownReads();Timing();std::cout<<"I4IntegrationTests passed: "<<checks<<" checks\n";return 0;}
+    try {RuntimeSettings();Diagnostics();LoadLogging();Policy();Integration();ShutdownReads();Timing();std::cout<<"I4IntegrationTests passed: "<<checks<<" checks\n";return 0;}
     catch(const std::exception& e) {I4Textures::Shutdown();std::cerr<<"I4IntegrationTests failed: "<<e.what()<<'\n';return 1;}
 }

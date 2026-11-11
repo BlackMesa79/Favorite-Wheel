@@ -249,7 +249,7 @@ namespace Wheel {
                 if(hotkey){const int assigned=static_cast<int>(hotkey->hotkey.underlying());item.quickSlot=ValidQuickSlot(assigned)?assigned:-1;}
                 if(I4::Runtime().icons && I4::dataAvailable.load()) {
                     const auto i4Started=std::chrono::steady_clock::now();
-                    auto fields=I4::Derive(I4::Collect(object,entry));item.i4=I4::Resolve(fields);
+                    auto fields=I4::Derive(I4::Collect(object,entry));item.i4=I4::ResolveItem(fields,item.key.form,item.name);
                     if(i4Milliseconds)*i4Milliseconds+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-i4Started).count();
                 }
             };
@@ -406,7 +406,7 @@ namespace Wheel {
                 result.back().inventoryWide=allInventory;result.back().iconForm=IconForm(form);
                 if(I4::Runtime().icons && I4::dataAvailable.load()) {
                     const auto i4Started=std::chrono::steady_clock::now();
-                    auto fields=I4::Derive(I4::Collect(form,nullptr));result.back().i4=I4::Resolve(fields);
+                    auto fields=I4::Derive(I4::Collect(form,nullptr));result.back().i4=I4::ResolveItem(fields,result.back().key.form,result.back().name);
                     i4Milliseconds+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-i4Started).count();
                 }
                 if(spell) {

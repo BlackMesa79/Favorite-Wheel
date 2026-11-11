@@ -129,6 +129,8 @@ struct Predicate {
     }
 };
 struct Rule {
+    std::string file;
+    std::size_t index=0;
     std::map<std::string, Predicate, std::less<>> match;
     Entry assign;
     bool hasInfo = false;
@@ -479,6 +481,7 @@ LoadReport Load(std::span<const std::pair<std::string, std::string>> pluginJson,
                 try {
                     auto rule = parser.Parse((*array)[i]);
                     if (rule.match.empty() || rule.assign.fields.empty()) { ++report.rejected; report.warnings.push_back(name+": rule "+std::to_string(i)+" has empty match/assign"); continue; }
+                    rule.file=name.substr(0,name.find_last_of('.'))+".json";rule.index=i;
                     rules->rules.push_back(std::move(rule)); ++report.rules;
                 } catch (const std::exception& ex) { ++report.rejected; report.warnings.push_back(name+": rule "+std::to_string(i)+": "+ex.what()); }
             }
@@ -498,7 +501,9 @@ LoadReport Load(std::span<const std::pair<std::string, std::string>> pluginJson,
     rules->Index(); current.store(std::move(rules));
     return report;
 }
-Icon Resolve(Entry& entry) {
+Icon Resolve(Entry& entry) { return Resolve(entry,nullptr); }
+Icon Resolve(Entry& entry, std::vector<RuleMatch>* matches) {
+    if(matches)matches->clear();
     const auto rules = current.load();
     // SkyUI supplies initial icons before ProcessEntry. Seed absent icons for offline entries.
     if (!entry.Get("iconLabel")) {
@@ -515,6 +520,7 @@ Icon Resolve(Entry& entry) {
     for (auto index : candidates) {
         const auto& rule = rules->rules[index];
         if (!rule.hasInfo || !rule.Matches(entry)) continue;
+        if(matches)matches->push_back({rule.file,rule.index,true,false});
         update = true;
         for (const auto& [name, value] : rule.assign.fields) if (!name.starts_with("icon")) entry.Set(name, value);
     }
@@ -522,6 +528,11 @@ Icon Resolve(Entry& entry) {
     for (auto index : candidates) {
         const auto& rule = rules->rules[index];
         if (!rule.Matches(entry)) continue;
+        if(matches) {
+            const auto found=std::ranges::find_if(*matches,[&](const RuleMatch& m){return m.file==rule.file && m.index==rule.index;});
+            if(found!=matches->end())found->icon=true;
+            else matches->push_back({rule.file,rule.index,false,true});
+        }
         for (const auto& [name, value] : rule.assign.fields) if (name.starts_with("icon")) {
             entry.Set(name, value);
             explicitIcon |= name == "iconSource" || name == "iconLabel" || name == "iconColor";

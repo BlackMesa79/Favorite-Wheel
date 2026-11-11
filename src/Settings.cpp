@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include "I4Runtime.h"
 #include "TimePolicy.h"
 #include "SettingsIni.h"
 #include <Windows.h>
@@ -59,7 +60,21 @@ namespace Wheel {
             std::string result;
             return value && !value->empty() && SettingsIni::Utf8(*value,result)?result:fallback;
         }
+        std::string CanonicalI4(std::string value, bool color) {
+            for(auto& c:value)if(c>='A' && c<='Z')c+='a'-'A';
+            if(color)return value=="i4"?"I4":value=="original"?"Original":"Theme";
+            return value=="rule"?"Rule":"All";
+        }
+        void ApplyI4(const Settings& v) {
+            I4::runtimeConfig.store({v.i4Icons,
+                v.i4IconColor=="I4"?I4::ColorMode::I4:v.i4IconColor=="Original"?I4::ColorMode::Original:I4::ColorMode::Theme,
+                v.i4IconScope=="Rule"?I4::IconScope::Rule:I4::IconScope::All,
+                static_cast<unsigned>(v.i4TextureBudgetMB),v.i4Debug},std::memory_order_relaxed);
+        }
         void Clamp(Settings& v) {
+            v.i4IconColor=CanonicalI4(std::move(v.i4IconColor),true);
+            v.i4IconScope=CanonicalI4(std::move(v.i4IconScope),false);
+            v.i4TextureBudgetMB=std::clamp(v.i4TextureBudgetMB,8,128);
             v.gamepadCategoryButtons=std::clamp(v.gamepadCategoryButtons,0,1);
             v.timeMode=std::clamp(v.timeMode,0,2);
             v.slowPercent=ClampWheelSlowPercent(v.slowPercent);
@@ -83,6 +98,7 @@ namespace Wheel {
     }
     Settings Config() { std::lock_guard lock(settingsMutex); return settings; }
     bool AppliedGamepadMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).gamepadMoveWhileOpen;}
+    bool AppliedI4Icons() {return I4::Runtime().icons;}
     bool AppliedKbMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbMoveWhileOpen;}
     int AppliedKbCategoryPrevKey() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbCategoryPrevKey;}
     int AppliedKbCategoryNextKey() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbCategoryNextKey;}
@@ -112,6 +128,11 @@ namespace Wheel {
             const auto legacyLanguage = Read(file,L"General",L"Chinese","");
             settings.language = Read(file,L"General",L"Language",legacyLanguage.empty() ? settings.language :
                 (number(L"General",L"Chinese",1) ? "zh_CN" : "en"));
+            settings.i4Icons=number(L"Display",L"I4Icons",settings.i4Icons)!=0;
+            settings.i4IconColor=Read(file,L"Display",L"I4IconColor",settings.i4IconColor);
+            settings.i4IconScope=Read(file,L"Display",L"I4IconScope",settings.i4IconScope);
+            settings.i4TextureBudgetMB=number(L"Display",L"I4TextureBudgetMB",settings.i4TextureBudgetMB);
+            settings.i4Debug=number(L"General",L"I4Debug",settings.i4Debug)!=0;
             settings.theme = Read(file,L"Display",L"Theme",settings.theme);
             settings.showHints = number(L"Display",L"ShowHints",settings.showHints) != 0;
             settings.showActionNotifications=number(L"Display",L"ShowActionNotifications",settings.showActionNotifications)!=0;
@@ -168,7 +189,7 @@ namespace Wheel {
                 }
             }
         }
-        saved=settings;editing=false;
+        saved=settings;editing=false;ApplyI4(settings);
     }
 
     void BeginSettings() { std::lock_guard lock(settingsMutex); if (!editing) { saved=settings; editing=true; } }
@@ -213,6 +234,11 @@ namespace Wheel {
             write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&
             write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&
             write(L"General",L"SlowTimePercent",std::to_string(settings.slowPercent)) &&
+            write(L"Display",L"I4Icons",settings.i4Icons?"1":"0") &&
+            write(L"Display",L"I4IconColor",settings.i4IconColor) &&
+            write(L"Display",L"I4IconScope",settings.i4IconScope) &&
+            write(L"Display",L"I4TextureBudgetMB",std::to_string(settings.i4TextureBudgetMB)) &&
+            write(L"General",L"I4Debug",settings.i4Debug?"1":"0") &&
             write(L"Display",L"Theme",settings.theme) &&
             write(L"Display",L"ShowHints",settings.showHints?"1":"0") &&
             write(L"Display",L"ShowActionNotifications",settings.showActionNotifications?"1":"0") &&
@@ -277,7 +303,7 @@ namespace Wheel {
             Report("verify-reopened-target",ERROR_INVALID_DATA);
             diagnostic+=" expected_bytes="+std::to_string(bytes.size())+" actual_bytes="+std::to_string(reopened.size());return false;
         }
-        settings=persisted;saved=settings;editing=false;
+        settings=persisted;saved=settings;editing=false;ApplyI4(settings);
         Report("saved-verified");diagnostic+=" bytes="+std::to_string(bytes.size());return true;
     }
     bool SaveSettings() {

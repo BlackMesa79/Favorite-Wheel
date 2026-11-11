@@ -43,17 +43,19 @@ namespace Wheel {
     inline constexpr Rect outfitExportButton{-270,-30,540,44};
     inline constexpr Rect combatRightButton{-270,-30,170,44},combatLeftButton{-85,-30,170,44},combatVoiceButton{100,-30,170,44};
     inline constexpr Rect generalTab{-300,-210,144,28}, controlsTab{-148,-210,144,28}, gamepadTab{4,-210,144,28}, gameplayTab{156,-210,144,28};
-    inline constexpr int GeneralRows[]{0,1,2,3,4,6,7,8,9,10,28};
+    inline constexpr int GeneralRows[]{0,1,2,3,4,6,7,8,9,10,28,32,33,34};
     inline constexpr int ControlRows[]{5,12,13,14,11,25};
     inline constexpr int GamepadRows[]{15,16,17,21,23};
     inline constexpr int GameplayRows[]{18,19,20,22,24,26,27,29,30,31};
     inline int SettingRow(int tab,int slot){return tab==2?GameplayRows[slot]:tab==3?GamepadRows[slot]:tab==1?ControlRows[slot]:GeneralRows[slot];}
-    inline int SettingCount(int tab){return tab==2?10:tab==1?6:tab==3?5:11;}
+    inline int SettingCount(int tab){return tab==2?10:tab==1?6:tab==3?5:14;}
     inline constexpr int settingsTabOrder[]{0,1,3,2};
     inline int NextSettingsTab(int tab,int direction){for(int i=0;i<4;++i)if(settingsTabOrder[i]==tab)return settingsTabOrder[Wrap(i+direction,4)];return 0;}
     inline bool BindingRow(int row){return row==5 || row==11 || row==13 || row==15 || row==30 || row==31;}
-    inline Rect MinusButton(int row,int tab=0){return {40,-173.f+row*(tab==2?28:31),34,28};}
-    inline Rect PlusButton(int row,int tab=0){return {252,-173.f+row*(tab==2?28:31),34,28};}
-    inline Rect ValueButton(int row,int tab=0){return {80,-173.f+row*(tab==2?28:31),166,28};}
+    inline constexpr int SettingStride(int tab){return tab==0?24:tab==2?28:31;}
+    inline constexpr int SettingHeight(int tab){return tab==0?22:28;}
+    inline Rect MinusButton(int row,int tab=0){return {40,-173.f+row*SettingStride(tab),34,float(SettingHeight(tab))};}
+    inline Rect PlusButton(int row,int tab=0){return {252,-173.f+row*SettingStride(tab),34,float(SettingHeight(tab))};}
+    inline Rect ValueButton(int row,int tab=0){return {80,-173.f+row*SettingStride(tab),166,float(SettingHeight(tab))};}
     inline int WheelSlot(float x,float y,const LayoutSkin& skin={}) {return SkinWheelSlot(x,y,skin);}
 }

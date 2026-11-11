@@ -16,8 +16,9 @@ namespace Wheel::I4 {
         ColorMode color = ColorMode::Theme;
         IconScope scope = IconScope::All;
         unsigned textureBudgetMB = 32;
+        bool debug = false;
     };
-    // T-5 will connect these defaults to the settings snapshot.
+    // Published on load and successful Apply; drafts never change the active configuration.
     inline std::atomic<RuntimeConfig> runtimeConfig{RuntimeConfig{}};
     inline RuntimeConfig Runtime() { return runtimeConfig.load(std::memory_order_relaxed); }
     inline std::atomic<bool> dataAvailable{false};
@@ -66,7 +67,11 @@ namespace Wheel::I4 {
             if(entries.contains(key)) { Touch(key); return true; }
             const auto bytes=MipBytes(key.edge);
             if(bytes>limit) return false;
-            while(used>limit-bytes) {
+            if(!Trim(limit-bytes,evicted))return false;
+            entries.emplace(key,Record{bytes,++clock});used+=bytes;return true;
+        }
+        bool Trim(std::size_t limit, std::vector<TextureKey>& evicted) {
+            while(used>limit) {
                 auto oldest=entries.end();
                 for(auto it=entries.begin();it!=entries.end();++it)
                     if((!pinned.contains({it->first.source,it->first.label}) || (pinnedEdge && it->first.edge!=pinnedEdge)) &&
@@ -74,7 +79,7 @@ namespace Wheel::I4 {
                 if(oldest==entries.end()) return false;
                 used-=oldest->second.bytes;evicted.push_back(oldest->first);entries.erase(oldest);
             }
-            entries.emplace(key,Record{bytes,++clock});used+=bytes;return true;
+            return true;
         }
         void Erase(const TextureKey& key) {
             if(auto it=entries.find(key);it!=entries.end()) {used-=it->second.bytes;entries.erase(it);}

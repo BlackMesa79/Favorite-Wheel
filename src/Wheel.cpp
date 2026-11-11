@@ -982,6 +982,7 @@ namespace Wheel {
             SyncWheelTime();
         }
         void LeaveSettings(bool save) {
+            const bool i4WasEnabled=AppliedI4Icons();
             if (save && !SaveSettings()) {
                 SKSE::log::error("Settings save failed: {}",SettingsDiagnostic());
                 std::lock_guard lock(viewMutex);view.saveError=true;return;
@@ -996,7 +997,7 @@ namespace Wheel {
             {std::lock_guard lock(viewMutex);
                 view.settingsOpen=view.capturingKey=view.saveError=false;view.x=view.y=0;
                 padX=padY=0;
-                if(save && Config().allInventory!=inventoryScope) {
+                if(save && (Config().allInventory!=inventoryScope || (!i4WasEnabled && Config().i4Icons))) {
                     inventoryLoaded=false;++directoryRevision;reload=!view.functions;
                 }
                 if(!reload && inventoryLoaded && !view.functions)FilterItems();
@@ -1039,6 +1040,12 @@ namespace Wheel {
             case 29: config.kbMoveWhileOpen=!config.kbMoveWhileOpen; break;
             case 30: config.kbCategoryPrevKey=-1; break;
             case 31: config.kbCategoryNextKey=-1; break;
+            case 32: config.i4Icons=!config.i4Icons; break;
+            case 33: {
+                const int mode=config.i4IconColor=="I4"?1:config.i4IconColor=="Original"?2:0;
+                config.i4IconColor=std::array{"Theme","I4","Original"}[Wrap(mode+direction,3)];break;
+            }
+            case 34: config.i4IconScope=config.i4IconScope=="Rule"?"All":"Rule"; break;
             }
             EditSettings(config);
             std::lock_guard lock(viewMutex); view.saveError=false;

@@ -109,7 +109,8 @@ namespace Wheel::FrameworkSettings {
                 draft.wheelScale=defaults.wheelScale;draft.positionX=defaults.positionX;draft.positionY=defaults.positionY;
                 draft.overlayOpacity=defaults.overlayOpacity;draft.showHints=defaults.showHints;
                 draft.showActionNotifications=defaults.showActionNotifications;
-                draft.sounds=defaults.sounds;draft.animations=defaults.animations;break;
+                draft.sounds=defaults.sounds;draft.animations=defaults.animations;
+                draft.i4Icons=defaults.i4Icons;draft.i4IconColor=defaults.i4IconColor;draft.i4IconScope=defaults.i4IconScope;break;
             case Page::Gameplay:
                 draft.allInventory=defaults.allInventory;draft.hideEmptyCategories=defaults.hideEmptyCategories;
                 draft.rememberLastWheel=defaults.rememberLastWheel;draft.keepOpen=defaults.keepOpen;
@@ -172,6 +173,13 @@ namespace Wheel::FrameworkSettings {
                 Slider("dim",draft.overlayOpacity,0,80);
                 Check("hints",draft.showHints);Check("actionNotifications",draft.showActionNotifications);
                 Check("sounds",draft.sounds);Check("animations",draft.animations);
+                Check("i4Icons",draft.i4Icons);
+                int color=draft.i4IconColor=="I4"?1:draft.i4IconColor=="Original"?2:0;
+                Choice("i4IconColor",color,0,2,[](int i){return Tr(draft,std::array{"i4ColorTheme","i4ColorI4","i4ColorOriginal"}[i]);});
+                draft.i4IconColor=std::array{"Theme","I4","Original"}[color];
+                int scope=draft.i4IconScope=="Rule";
+                Choice("i4IconScope",scope,0,1,[](int i){return Tr(draft,i?"i4ScopeRule":"i4ScopeAll");});
+                draft.i4IconScope=scope?"Rule":"All";
                 break;
             }
             case Page::Gameplay: {

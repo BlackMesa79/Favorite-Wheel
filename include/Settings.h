@@ -12,6 +12,11 @@ namespace Wheel {
         int slowPercent = 50; // Relative slowdown, with an absolute 50% physics floor.
         std::string language = "auto"; // Windows display language, or an explicit language-file ID.
         std::string theme = "classic";
+        bool i4Icons = true;
+        std::string i4IconColor = "Theme"; // Theme / I4 / Original, canonical INI spelling.
+        std::string i4IconScope = "All"; // All / Rule.
+        int i4TextureBudgetMB = 32;
+        bool i4Debug = false;
         bool showHints = true;
         bool showActionNotifications = true;
         float scale = 1.0f;
@@ -40,6 +45,7 @@ namespace Wheel {
     Settings Config();
     bool AppliedGamepadMoveWhileOpen(); // Input scheme changes only after successful Apply.
     bool AppliedKbMoveWhileOpen();
+    bool AppliedI4Icons();
     int AppliedKbCategoryPrevKey();
     int AppliedKbCategoryNextKey();
     void LoadSettings();

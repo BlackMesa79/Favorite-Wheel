@@ -702,7 +702,7 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications","kbMoveWhileOpen","kbCategoryPrevKey","kbCategoryNextKey"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications","kbMoveWhileOpen","kbCategoryPrevKey","kbCategoryNextKey","i4Icons","i4IconColor","i4IconScope"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -721,16 +721,19 @@ namespace Wheel
                                           PadLabel(config,config.gamepadHotkey,true),PadLabel(config,config.gamepadModifier),PadLabel(config,config.gamepadActionModifier),
                                           tr(config.allInventory?"scopeAll":"scopeFavorites"),
                                           tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
-                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off"),tr(config.keepOpenConsumables?"on":"off"),tr(config.showActionNotifications?"on":"off"),tr(config.kbMoveWhileOpen?"on":"off"),config.kbCategoryPrevKey<0?tr("off"):key(config.kbCategoryPrevKey),config.kbCategoryNextKey<0?tr("off"):key(config.kbCategoryNextKey)};
+                                          config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off"),tr(config.keepOpenConsumables?"on":"off"),tr(config.showActionNotifications?"on":"off"),tr(config.kbMoveWhileOpen?"on":"off"),config.kbCategoryPrevKey<0?tr("off"):key(config.kbCategoryPrevKey),config.kbCategoryNextKey<0?tr("off"):key(config.kbCategoryNextKey),
+                                          tr(config.i4Icons?"on":"off"),tr(config.i4IconColor=="I4"?"i4ColorI4":config.i4IconColor=="Original"?"i4ColorOriginal":"i4ColorTheme"),
+                                          tr(config.i4IconScope=="Rule"?"i4ScopeRule":"i4ScopeAll")};
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);
                 const float top = ValueButton(slot,v.settingsTab).y;
                 const float size = 16 * s * t.labelScale;
+                const float rowHeight = float(SettingHeight(v.settingsTab));
                 if (slot % 2 == 0)
-                    d->AddRectFilled({c.x - 300 * s, c.y + top * s}, {c.x + 300 * s, c.y + (top + 28) * s},
+                    d->AddRectFilled({c.x - 300 * s, c.y + top * s}, {c.x + 300 * s, c.y + (top + rowHeight) * s},
                                      Alpha(t.border, .07f), Skyrim(t) ? 0 : 3 * s);
-                LeftText(d, {c.x - 281 * s, c.y + (top + 14) * s - std::round(size) / 2},
+                LeftText(d, {c.x - 281 * s, c.y + (top + rowHeight / 2) * s - std::round(size) / 2},
                          Fit(tr(keys[row]), size, 300 * s), size, t.text);
                 if (!BindingRow(row))
                 {
@@ -741,6 +744,8 @@ namespace Wheel
             }
             Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsPhysicsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
+            if(v.settingsTab==0)
+                Text(d,{c.x,c.y+201*s},Fit(tr("i4ApplyHint"),13*s,610*s),13*s,t.muted,0,t.textShadow);
             if(v.settingsTab==1) {
                 const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
                 Text(d,{c.x,c.y+145*s},Fit(tr(conflict?"bindingConflict":"controlsBindHint"),14*s,610*s),14*s,conflict?t.accent:t.muted);

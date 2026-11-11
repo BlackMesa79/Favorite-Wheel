@@ -76,6 +76,33 @@ int wmain(int argc,wchar_t** argv) {
     BeginSettings();Check(SaveSettings(),"Apply explicitly persists the clamped speed");LoadSettings();
     Check(Config().slowPercent==50 && bytes(lowTimePath).find("SlowTimePercent=50")!=std::string::npos,
         "Applied effective speed survives a reload");
+    // I4 uses the same decimal/empty-field rules as existing Display settings.
+    const auto i4Path=root/"I4.ini";
+    SetSettingsPath(i4Path.string());
+    for(const auto& color:{"Theme","I4","Original"})for(const auto& scope:{"All","Rule"}) {
+        LoadSettings();BeginSettings();auto value=Config();
+        value.i4Icons=false;value.i4IconColor=color;value.i4IconScope=scope;value.i4TextureBudgetMB=128;value.i4Debug=true;
+        EditSettings(value);Check(SaveSettings(),"I4 settings save");LoadSettings();
+        Check(Config()==value,"All I4 fields round trip together");
+    }
+    for(const auto& [text,budget]:{std::pair{"-20",8},std::pair{"999",128},std::pair{"bogus",8},std::pair{"",32}}) {
+        {std::ofstream file(i4Path);file<<"[Display]\nI4Icons=bogus\nI4IconColor=invalid\nI4IconScope=invalid\nI4TextureBudgetMB="<<text<<"\n[General]\nI4Debug=bogus\n";}
+        const auto before=bytes(i4Path);LoadSettings();const auto v=Config();
+        Check(!v.i4Icons && !v.i4Debug && v.i4IconColor=="Theme" && v.i4IconScope=="All" && v.i4TextureBudgetMB==budget,"I4 invalid enums default; malformed numbers read zero then clamp");
+        Check(bytes(i4Path)==before,"I4 load never rewrites invalid player values");
+    }
+    {std::ofstream file(i4Path);file<<"[Display]\nI4Icons=\nI4IconColor=\nI4IconScope=\nI4TextureBudgetMB=\n[General]\nI4Debug=\n";}
+    LoadSettings();Check(Config()==Settings{},"Empty I4 values use struct defaults");
+    {std::ofstream file(i4Path);file<<"[Display]\nI4Icons=-1\nI4IconColor=oRiGiNaL\nI4IconScope=rUlE\n[General]\nI4Debug=2\n";}
+    LoadSettings();Check(Config().i4Icons && Config().i4Debug && Config().i4IconColor=="Original" && Config().i4IconScope=="Rule","I4 enums ignore case and nonzero booleans follow existing policy");
+    BeginSettings();auto invalidI4=Config();invalidI4.i4IconColor="bad";invalidI4.i4IconScope="bad";invalidI4.i4TextureBudgetMB=0;EditSettings(invalidI4);
+    Check(Config().i4IconColor=="Theme" && Config().i4IconScope=="All" && Config().i4TextureBudgetMB==8,"I4 draft values are normalized");RevertSettings();
+    for(int slot=0;slot<SettingCount(0);++slot) {
+        const auto row=ValueButton(slot);
+        Check(row.y+row.h<174,"Appearance settings stay above the hint");
+        if(slot)Check(ValueButton(slot-1).y+ValueButton(slot-1).h<row.y,"Appearance setting buttons do not overlap");
+    }
+    Check(SettingCount(0)==14 && SettingRow(0,11)==32 && SettingRow(0,13)==34,"I4 settings are reachable on the appearance page");
     const auto newPath=root/"Fresh.ini";
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
@@ -373,7 +400,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
     Check(SettingCount(2)==10 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay tab includes continuous use, empty categories and wheel memory");
-    Check(SettingCount(0)==11 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
+    Check(SettingCount(0)==14 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
     Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
