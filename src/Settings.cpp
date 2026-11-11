@@ -69,12 +69,13 @@ namespace Wheel {
             I4::runtimeConfig.store({v.i4Icons,
                 v.i4IconColor=="I4"?I4::ColorMode::I4:v.i4IconColor=="Original"?I4::ColorMode::Original:I4::ColorMode::Theme,
                 v.i4IconScope=="Rule"?I4::IconScope::Rule:I4::IconScope::All,
-                static_cast<unsigned>(v.i4TextureBudgetMB),v.i4Debug},std::memory_order_relaxed);
+                static_cast<unsigned>(v.i4TextureBudgetMB),v.i4Debug,v.i4IconCache,static_cast<unsigned>(v.i4IconCacheMB)},std::memory_order_relaxed);
         }
         void Clamp(Settings& v) {
             v.i4IconColor=CanonicalI4(std::move(v.i4IconColor),true);
             v.i4IconScope=CanonicalI4(std::move(v.i4IconScope),false);
             v.i4TextureBudgetMB=std::clamp(v.i4TextureBudgetMB,8,128);
+            v.i4IconCacheMB=std::clamp(v.i4IconCacheMB,8,512);
             v.gamepadCategoryButtons=std::clamp(v.gamepadCategoryButtons,0,1);
             v.timeMode=std::clamp(v.timeMode,0,2);
             v.slowPercent=ClampWheelSlowPercent(v.slowPercent);
@@ -133,6 +134,8 @@ namespace Wheel {
             settings.i4IconScope=Read(file,L"Display",L"I4IconScope",settings.i4IconScope);
             settings.i4TextureBudgetMB=number(L"Display",L"I4TextureBudgetMB",settings.i4TextureBudgetMB);
             settings.i4Debug=number(L"General",L"I4Debug",settings.i4Debug)!=0;
+            settings.i4IconCache=number(L"Display",L"I4IconCache",settings.i4IconCache)!=0;
+            settings.i4IconCacheMB=number(L"Display",L"I4IconCacheMB",settings.i4IconCacheMB);
             settings.theme = Read(file,L"Display",L"Theme",settings.theme);
             settings.showHints = number(L"Display",L"ShowHints",settings.showHints) != 0;
             settings.showActionNotifications=number(L"Display",L"ShowActionNotifications",settings.showActionNotifications)!=0;
@@ -239,6 +242,8 @@ namespace Wheel {
             write(L"Display",L"I4IconScope",settings.i4IconScope) &&
             write(L"Display",L"I4TextureBudgetMB",std::to_string(settings.i4TextureBudgetMB)) &&
             write(L"General",L"I4Debug",settings.i4Debug?"1":"0") &&
+            write(L"Display",L"I4IconCache",settings.i4IconCache?"1":"0") &&
+            write(L"Display",L"I4IconCacheMB",std::to_string(settings.i4IconCacheMB)) &&
             write(L"Display",L"Theme",settings.theme) &&
             write(L"Display",L"ShowHints",settings.showHints?"1":"0") &&
             write(L"Display",L"ShowActionNotifications",settings.showActionNotifications?"1":"0") &&

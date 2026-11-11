@@ -17,6 +17,8 @@ namespace Wheel::I4 {
         IconScope scope = IconScope::All;
         unsigned textureBudgetMB = 32;
         bool debug = false;
+        bool iconCache = true;
+        unsigned iconCacheMB = 64;
     };
     // Published on load and successful Apply; drafts never change the active configuration.
     inline std::atomic<RuntimeConfig> runtimeConfig{RuntimeConfig{}};

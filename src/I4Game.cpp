@@ -8,6 +8,13 @@
 
 namespace Wheel::I4 {
 namespace {
+    std::filesystem::path CacheDirectory() {
+        std::wstring executable(32768,L'\0');
+        const auto size=GetModuleFileNameW(nullptr,executable.data(),static_cast<DWORD>(executable.size()));
+        if(!size || size>=executable.size())return {};
+        executable.resize(size);
+        return std::filesystem::path(executable).parent_path()/L"Data/SKSE/Plugins/FavoriteWheel/IconCache";
+    }
     bool SafeSource(std::string_view name) {
         const auto key=SourceKey(std::string(name));
         if(key.empty() || key.front()=='/' || key.find(':')!=key.npos || key.find('\0')!=key.npos)return false;
@@ -43,7 +50,7 @@ LoadReport LoadFromGame() {
         I4Textures::Configure(ReadSource,[](std::function<void()> task) {
             if(auto tasks=SKSE::GetTaskInterface())tasks->AddTask(std::move(task));
             else throw std::runtime_error("SKSE task interface unavailable");
-        },[](const std::string& message){SKSE::log::warn("{}",message);});
+        },[](const std::string& message){SKSE::log::warn("{}",message);},CacheDirectory());
         auto handler=RE::TESDataHandler::GetSingleton();
         if(!handler)throw std::runtime_error("TESDataHandler unavailable");
         std::map<std::string,std::uint32_t> prefixes;

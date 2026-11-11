@@ -17,6 +17,8 @@ namespace Wheel {
         std::string i4IconScope = "All"; // All / Rule.
         int i4TextureBudgetMB = 32;
         bool i4Debug = false;
+        bool i4IconCache = true;
+        int i4IconCacheMB = 64;
         bool showHints = true;
         bool showActionNotifications = true;
         float scale = 1.0f;

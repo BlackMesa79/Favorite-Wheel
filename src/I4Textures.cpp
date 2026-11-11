@@ -1,10 +1,12 @@
 #include "I4Textures.h"
+#include "IconCache.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 namespace Wheel::I4Textures {
 namespace {
@@ -12,9 +14,11 @@ namespace {
     struct Source {
         std::shared_ptr<const std::vector<std::uint8_t>> bytes;
         std::shared_ptr<const Swf::Movie> movie;
+        std::string hash;
+        bool hashed=false;
         bool queued=false, failed=false;
     };
-    struct Work { I4::TextureKey key; std::uint64_t generation; };
+    struct Work { I4::TextureKey key; std::uint64_t generation, cacheEpoch; };
     struct Ready { Work work; Swf::Bitmap bitmap; };
     struct State {
         std::mutex mutex;
@@ -32,7 +36,11 @@ namespace {
         std::deque<Work> work;
         std::deque<Ready> ready;
         std::uint64_t generation=0;
-        std::size_t parses=0, renders=0;
+        std::size_t parses=0, renders=0, cacheHits=0;
+        std::filesystem::path cacheDirectory;
+        std::uint64_t cacheEpoch=0, session=0;
+        bool cacheMaintenance=true;
+        ClearStatus clearStatus=ClearStatus::Idle;
         std::uint32_t edge=128;
         bool scheduled=false, stop=false;
         std::thread worker;
@@ -40,6 +48,7 @@ namespace {
     // Intentionally process-lifetime: static destruction must not join under the
     // Windows loader lock. Queued/in-flight SKSE reads retain valid shared state.
     // Offline tests stop/join explicitly via Shutdown(), outside DLL teardown.
+    // 待落盘条目在进程退出时允许丢失；静态析构/DLL 卸载既不刷新也不 join。
     static State& state = *new State;
     // All COM objects and policy below belong exclusively to the render thread.
     ComPtr<ID3D11Device> device;
@@ -73,7 +82,7 @@ namespace {
             for(auto variant:{Swf::Variant::Mask,Swf::Variant::Original}) {
                 I4::TextureKey key{id.first,id.second,variant,state.edge};
                 if(state.uploadFailed.contains(key))continue;
-                if(state.requested.insert(key).second)state.work.push_back({std::move(key),state.generation});
+                if(state.requested.insert(key).second)state.work.push_back({std::move(key),state.generation,state.cacheEpoch});
             }
         }
         state.changed.notify_all();
@@ -82,41 +91,86 @@ namespace {
         if(state.failed.insert(id).second)state.warnings.push_back("I4 icon failed: "+id.first+" | "+id.second+": "+reason);
     }
     void Worker() {
+        std::filesystem::path directory;
+        {std::lock_guard lock(state.mutex);directory=state.cacheDirectory;}
+        IconCache::Store cache(directory,[](const std::string& message){
+            std::lock_guard lock(state.mutex);state.warnings.push_back(message);
+        });
+        auto configure=[&] {
+            const auto config=I4::Runtime();cache.Configure(config.iconCache && !directory.empty(),config.iconCacheMB);
+        };
+        auto flushIdle=[&] {
+            bool idle;
+            {std::lock_guard lock(state.mutex);idle=state.work.empty() && !state.stop && state.clearStatus!=ClearStatus::Queued;}
+            // 与原子写入一样，检查后新到的 clear 会在这次 IO 结束后执行；Clear 丢弃未刷新的旧批次。
+            if(idle){configure();cache.Flush();}
+        };
         for(;;) {
+            flushIdle();
             Work work;
             std::shared_ptr<const std::vector<std::uint8_t>> bytes;
             std::shared_ptr<const Swf::Movie> movie;
+            std::string hash;bool hashed=false,maintenance=false,clear=false;
+            std::uint64_t clearEpoch=0;
             {
                 std::unique_lock lock(state.mutex);
-                state.changed.wait(lock,[]{return state.stop || (!state.work.empty() && state.ready.size()<8);});
-                if(state.stop)return;
-                work=std::move(state.work.front());state.work.pop_front();
-                const I4::IconKey id{work.key.source,work.key.label};
-                if(work.generation!=state.generation || work.key.edge!=state.edge || !state.pins.contains(id)) {state.requested.erase(work.key);continue;}
-                auto& source=state.sources[work.key.source];
-                if(source.failed || state.failed.contains(id))continue;
-                bytes=source.bytes;movie=source.movie;if(!movie)++state.parses;
-            }
-            try {
-                if(!movie) {
-                    std::vector<std::string> warnings;
-                    movie=Swf::Parse(*bytes,warnings);
-                    std::lock_guard lock(state.mutex);
-                    auto& source=state.sources[work.key.source];source.movie=movie;
-                    // Parse diagnostics include unsupported tag counts; one summary per source.
-                    if(!warnings.empty()) {
-                        std::string message="I4 SWF diagnostics: "+work.key.source;
-                        for(const auto& warning:warnings)message+="; "+warning;
-                        state.warnings.push_back(std::move(message));
-                    }
-                    if(!movie) {
-                        source.failed=true;
-                        if(warnings.empty())state.warnings.push_back("I4 SWF parse failed: "+work.key.source);
-                        continue;
-                    }
+                state.changed.wait(lock,[]{return state.stop || state.cacheMaintenance || state.clearStatus==ClearStatus::Queued ||
+                    (!state.work.empty() && state.ready.size()<8);});
+                if(state.stop)return; // 停止时直接丢弃工作线程局部 Store 的待写批次，析构没有 IO。
+                maintenance=std::exchange(state.cacheMaintenance,false);
+                clear=state.clearStatus==ClearStatus::Queued;clearEpoch=state.cacheEpoch;
+                if(!maintenance && !clear) {
+                    work=std::move(state.work.front());state.work.pop_front();
+                    const I4::IconKey id{work.key.source,work.key.label};
+                    if(work.generation!=state.generation || work.key.edge!=state.edge || !state.pins.contains(id)) {state.requested.erase(work.key);continue;}
+                    auto& source=state.sources[work.key.source];
+                    if(source.failed || state.failed.contains(id))continue;
+                    bytes=source.bytes;movie=source.movie;hash=source.hash;hashed=source.hashed;
                 }
-                {std::lock_guard lock(state.mutex);++state.renders;}
-                auto rendered=Swf::Render(*movie,work.key.label,work.key.variant,work.key.edge);
+            }
+            // 缓存方法绝不持有 state.mutex，IO 不阻塞游戏/渲染线程取锁。
+            configure();
+            if(clear) {
+                const bool ok=cache.Clear();
+                std::lock_guard lock(state.mutex);
+                if(clearEpoch==state.cacheEpoch)state.clearStatus=ok?ClearStatus::Done:ClearStatus::Unavailable;
+            }
+            if(maintenance || clear)continue;
+            try {
+                if(!hashed) {
+                    hash=IconCache::Hash(*bytes);
+                    std::lock_guard lock(state.mutex);
+                    auto& source=state.sources[work.key.source];source.hash=hash;source.hashed=true;
+                    if(hash.empty())state.warnings.push_back("I4 icon cache SHA-256 unavailable: "+work.key.source);
+                }
+                const IconCache::Key key{work.key.label,work.key.variant,work.key.edge};
+                Swf::Result rendered;rendered.bitmap=cache.Get(hash,key);
+                if(rendered.bitmap) {std::lock_guard lock(state.mutex);++state.cacheHits;}
+                else {
+                    if(!movie) {
+                        std::vector<std::string> warnings;
+                        movie=Swf::Parse(*bytes,warnings);
+                        std::lock_guard lock(state.mutex);++state.parses;
+                        auto& source=state.sources[work.key.source];source.movie=movie;
+                        if(!warnings.empty()) {
+                            std::string message="I4 SWF diagnostics: "+work.key.source;
+                            for(const auto& warning:warnings)message+="; "+warning;
+                            state.warnings.push_back(std::move(message));
+                        }
+                        if(!movie) {
+                            source.failed=true;
+                            if(warnings.empty())state.warnings.push_back("I4 SWF parse failed: "+work.key.source);
+                            continue;
+                        }
+                    }
+                    {std::lock_guard lock(state.mutex);++state.renders;}
+                    rendered=Swf::Render(*movie,work.key.label,work.key.variant,work.key.edge);
+                    bool persist;
+                    {std::lock_guard lock(state.mutex);persist=!state.stop && work.cacheEpoch==state.cacheEpoch;}
+                    // 清理前排队的工作可以继续上传，但不能在清空后重新填回磁盘。
+                    if(persist && rendered.bitmap){configure();cache.Put(hash,key,*rendered.bitmap);}
+                }
+                flushIdle();
                 std::lock_guard lock(state.mutex);
                 if(work.generation!=state.generation)continue;
                 if(work.key.edge!=state.edge){state.requested.erase(work.key);continue;}
@@ -134,43 +188,55 @@ namespace {
         }
     }
     void ScheduleReads() {
-        Scheduler scheduler;
+        Scheduler scheduler;std::uint64_t session;
         {
             std::lock_guard lock(state.mutex);
             if(state.stop || state.scheduled || state.reads.empty() || !state.schedule)return;
-            state.scheduled=true;scheduler=state.schedule;
+            state.scheduled=true;scheduler=state.schedule;session=state.session;
         }
-        try { scheduler([] {
+        try { scheduler([session] {
             // SKSE game-thread task: at most two sources per dispatch. The next
             // render frame schedules the next batch, rather than recursively draining.
             for(unsigned n=0;n<2;++n) {
                 std::string name;Reader reader;
                 {
                     std::lock_guard lock(state.mutex);
-                    if(state.stop || state.reads.empty())break;
+                    if(state.stop || session!=state.session || state.reads.empty())break;
                     name=std::move(state.reads.front());state.reads.pop_front();reader=state.reader;
                 }
                 std::optional<std::vector<std::uint8_t>> bytes;
                 try { if(reader)bytes=reader(name); } catch(...) {}
                 std::lock_guard lock(state.mutex);
                 // Shutdown may have completed while the resource reader ran unlocked.
-                if(state.stop)break;
+                if(state.stop || session!=state.session)break;
                 auto& source=state.sources[name];
                 if(bytes && !bytes->empty())source.bytes=std::make_shared<const std::vector<std::uint8_t>>(std::move(*bytes));
                 else if(!source.failed) {source.failed=true;state.warnings.push_back("I4 SWF read failed: "+name);}
                 QueueLocked();
             }
-            std::lock_guard lock(state.mutex);state.scheduled=false;
+            std::lock_guard lock(state.mutex);if(session==state.session)state.scheduled=false;
         }); } catch(...) {
-            std::lock_guard lock(state.mutex);state.scheduled=false;
+            std::lock_guard lock(state.mutex);if(session==state.session)state.scheduled=false;
         }
     }
 }
-void Configure(Reader reader,Scheduler schedule,Logger logger) {
+void Configure(Reader reader,Scheduler schedule,Logger logger,std::filesystem::path cacheDirectory) {
     std::lock_guard lock(state.mutex);
     state.reader=std::move(reader);state.schedule=std::move(schedule);state.logger=std::move(logger);
-    state.stop=false;if(!state.worker.joinable())state.worker=std::thread(Worker);
+    if(!state.worker.joinable()) {
+        ++state.session;state.sources.clear();state.snapshot.clear();state.pins.clear();state.failed.clear();
+        state.uploadWarned.clear();state.reads.clear();state.warnings.clear();state.scheduled=false;
+        state.parses=state.renders=state.cacheHits=0;state.cacheDirectory=std::move(cacheDirectory);
+        state.clearStatus=ClearStatus::Idle;state.cacheMaintenance=true;state.config=I4::Runtime();
+        state.stop=false;state.worker=std::thread(Worker);
+    }
 }
+void ClearCache() {
+    std::lock_guard lock(state.mutex);
+    if(state.stop || !state.worker.joinable()) {state.clearStatus=ClearStatus::Unavailable;return;}
+    ++state.cacheEpoch;state.clearStatus=ClearStatus::Queued;state.changed.notify_one();
+}
+ClearStatus CacheClearStatus() {std::lock_guard lock(state.mutex);return state.clearStatus;}
 void RequestSnapshot(std::span<const I4::Icon> icons) {
     {
         std::lock_guard lock(state.mutex);
@@ -204,6 +270,9 @@ void BeginFrame(float maximumIconPixels) {
         if(state.edge!=edge || config.textureBudgetMB>state.config.textureBudgetMB)RetryUploadsLocked();
         state.edge=edge;
         if(changed){UpdatePinsLocked(config);QueueLocked();}
+        if(state.config.iconCache!=config.iconCache || state.config.iconCacheMB!=config.iconCacheMB) {
+            state.cacheMaintenance=true;state.changed.notify_one();
+        }
         state.config=config;
         budget.Pin(state.pins,state.edge);failedForFrame=state.failed;
         warnings.swap(state.warnings);logger=state.logger;
@@ -267,7 +336,7 @@ Image Find(const I4::Icon& icon) {
 }
 Statistics Stats() {
     std::lock_guard lock(state.mutex);
-    return {budget.Used(),textures.size(),state.work.size(),state.ready.size(),uploaded,state.parses,state.renders};
+    return {budget.Used(),textures.size(),state.work.size(),state.ready.size(),uploaded,state.parses,state.renders,state.cacheHits};
 }
 void Shutdown() {
     {std::lock_guard lock(state.mutex);state.stop=true;}

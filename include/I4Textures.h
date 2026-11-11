@@ -1,6 +1,7 @@
 #pragma once
 #include "I4Runtime.h"
 #include "ImageSampler.h"
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <span>
@@ -12,7 +13,10 @@ namespace Wheel::I4Textures {
     using Scheduler = std::function<void(std::function<void()>)>;
     using Logger = std::function<void(const std::string&)>;
     // Startup only. Scheduler dispatches to the game thread; Reader is never called elsewhere.
-    void Configure(Reader, Scheduler, Logger);
+    void Configure(Reader, Scheduler, Logger, std::filesystem::path cacheDirectory = {});
+    enum class ClearStatus { Idle, Queued, Done, Unavailable };
+    void ClearCache(); // 仅入队；后台清理，不触碰 GPU 纹理。禁用磁盘缓存时不执行 IO。
+    ClearStatus CacheClearStatus();
     // Game thread: only copy identities and schedule work, never read resources here.
     void RequestSnapshot(std::span<const I4::Icon>);
     // Render thread. Reset invalidates GPU work; parsed movies and failures survive device loss.
@@ -21,7 +25,7 @@ namespace Wheel::I4Textures {
     void BeginFrame(float maximumIconPixels);
     struct Image { ID3D11ShaderResourceView* view=nullptr; const ImageSampler* sampler=nullptr; };
     Image Find(const I4::Icon&);
-    struct Statistics { std::size_t gpuBytes=0, textures=0, pending=0, ready=0; unsigned uploaded=0; std::size_t parses=0, renders=0; };
+    struct Statistics { std::size_t gpuBytes=0, textures=0, pending=0, ready=0; unsigned uploaded=0; std::size_t parses=0, renders=0, cacheHits=0; };
     Statistics Stats();
     void Shutdown(); // Offline tests: stop/join outside loader lock; shared state is never destroyed.
 }

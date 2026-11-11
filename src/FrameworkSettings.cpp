@@ -1,3 +1,5 @@
+#include "I4Textures.h"
+#include "I4Runtime.h"
 #include "FrameworkSettings.h"
 #include "Settings.h"
 #include "UIResources.h"
@@ -110,7 +112,8 @@ namespace Wheel::FrameworkSettings {
                 draft.overlayOpacity=defaults.overlayOpacity;draft.showHints=defaults.showHints;
                 draft.showActionNotifications=defaults.showActionNotifications;
                 draft.sounds=defaults.sounds;draft.animations=defaults.animations;
-                draft.i4Icons=defaults.i4Icons;draft.i4IconColor=defaults.i4IconColor;draft.i4IconScope=defaults.i4IconScope;break;
+                draft.i4Icons=defaults.i4Icons;draft.i4IconColor=defaults.i4IconColor;draft.i4IconScope=defaults.i4IconScope;
+                draft.i4IconCache=defaults.i4IconCache;draft.i4IconCacheMB=defaults.i4IconCacheMB;break;
             case Page::Gameplay:
                 draft.allInventory=defaults.allInventory;draft.hideEmptyCategories=defaults.hideEmptyCategories;
                 draft.rememberLastWheel=defaults.rememberLastWheel;draft.keepOpen=defaults.keepOpen;
@@ -180,6 +183,16 @@ namespace Wheel::FrameworkSettings {
                 int scope=draft.i4IconScope=="Rule";
                 Choice("i4IconScope",scope,0,1,[](int i){return Tr(draft,i?"i4ScopeRule":"i4ScopeAll");});
                 draft.i4IconScope=scope?"Rule":"All";
+                Check("i4IconCache",draft.i4IconCache);
+                Slider("i4IconCacheMB",draft.i4IconCacheMB,8,512);
+                const auto clear=I4Textures::CacheClearStatus();
+                Row("i4ClearCache");
+                api.beginDisabled(!I4::Runtime().iconCache || clear==I4Textures::ClearStatus::Queued);
+                if(api.button(Label("i4ClearCache").c_str(),{}))I4Textures::ClearCache();
+                api.endDisabled();
+                if(clear!=I4Textures::ClearStatus::Idle)Wrapped(Tr(draft,
+                    clear==I4Textures::ClearStatus::Queued?"i4CacheClearing":
+                    clear==I4Textures::ClearStatus::Done?"i4CacheCleared":"i4CacheUnavailable"));
                 break;
             }
             case Page::Gameplay: {

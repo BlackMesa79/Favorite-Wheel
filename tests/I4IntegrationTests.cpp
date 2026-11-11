@@ -1,4 +1,5 @@
 #include "I4Textures.h"
+#include "IconCache.h"
 #include "I4Entry.h"
 #include "I4Diagnostics.h"
 #include "I4LoadLog.h"
@@ -343,6 +344,115 @@ void Integration() {
     I4::runtimeConfig=I4::RuntimeConfig{};
     I4Textures::Shutdown();IconLibrary::Reset();factory.Reset();CoUninitialize();
 }
+void DiskCachePipeline() {
+    const auto root=std::filesystem::path("build/i4-phase3/t4b-fix1/pipeline")/std::to_string(GetCurrentProcessId());
+    const auto fixture=Simple().v;
+    const I4::Icon icon{"cache-fixture.swf","icon",{},I4::IconOrigin::Rule};
+    I4::runtimeConfig=I4::RuntimeConfig{};I4::dataAvailable=true;
+    std::array<double,2> elapsed{};
+    for(unsigned run=0;run<2;++run) {
+        std::deque<std::function<void()>> tasks;std::vector<std::string> warnings;unsigned reads=0;
+        const auto mainThread=std::this_thread::get_id();
+        I4Textures::Configure([&](const auto&)->std::optional<std::vector<std::uint8_t>> {
+            Check(std::this_thread::get_id()==mainThread,"disk cache still reads SWF on game task each startup");++reads;return fixture;
+        },[&](auto task){tasks.push_back(std::move(task));},[&](const auto& warning){warnings.push_back(warning);},root);
+        I4Textures::Initialize(nullptr,nullptr);I4Textures::BeginFrame(128);
+        const auto started=std::chrono::steady_clock::now();
+        I4Textures::RequestSnapshot(std::span(&icon,1));
+        auto wait=[&](auto predicate) {
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+            while(!predicate() && std::chrono::steady_clock::now()<deadline) {
+                auto batch=std::move(tasks);tasks.clear();for(auto& task:batch)task();
+                I4Textures::BeginFrame(128);std::this_thread::yield();
+            }
+            Check(predicate(),"cache pipeline completes before timeout");
+        };
+        wait([]{return I4Textures::Stats().ready==2;});
+        elapsed[run]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+        const auto stats=I4Textures::Stats();
+        Check(reads==1 && warnings.empty(),"independent pipeline rereads source with no warning");
+        Check(run==0?(stats.renders==2 && stats.cacheHits==0 && stats.parses==1):
+            (stats.renders==0 && stats.cacheHits==2 && stats.parses==0),"second independent pipeline hits both variants with zero Render/Parse");
+        std::cout<<"disk pipeline run="<<run+1<<" elapsed_ms="<<elapsed[run]<<" reads="<<reads
+            <<" renders="<<stats.renders<<" hits="<<stats.cacheHits<<" parses="<<stats.parses<<'\n';
+        if(run==1) {
+            const auto hash=IconCache::Hash(fixture);const auto file=root/(hash+".fwic");
+            Check(std::filesystem::exists(file),"pipeline wrote injected build directory");
+            I4Textures::ClearCache();wait([]{return I4Textures::CacheClearStatus()!=I4Textures::ClearStatus::Queued;});
+            Check(I4Textures::CacheClearStatus()==I4Textures::ClearStatus::Done && !std::filesystem::exists(file),"clear runs in background even with completed bitmaps awaiting upload");
+            Check(I4Textures::Stats().ready==2,"disk clear keeps current prepared textures");
+            auto disabled=I4::Runtime();disabled.iconCache=false;I4::runtimeConfig=disabled;
+            I4Textures::ClearCache();wait([]{return I4Textures::CacheClearStatus()!=I4Textures::ClearStatus::Queued;});
+            Check(I4Textures::CacheClearStatus()==I4Textures::ClearStatus::Unavailable,"disabled pipeline clear does no disk IO");
+        }
+        I4Textures::Shutdown();
+    }
+    I4::runtimeConfig=I4::RuntimeConfig{};
+    std::cout<<"disk pipeline first_ms="<<elapsed[0]<<" second_ms="<<elapsed[1]<<" ratio="<<elapsed[1]/elapsed[0]<<'\n';
+}
+void ManyLabelCache() {
+    const auto root=std::filesystem::path("build/i4-phase3/t4b-fix1/many-labels")/std::to_string(GetCurrentProcessId());
+    Bytes tags;Define(tags,1);Place(tags,1);
+    for(unsigned n=0;n<50;++n){tags.Label("label"+std::to_string(n));tags.Tag(1);}
+    const auto fixture=File(tags,50).v;const auto hash=IconCache::Hash(fixture);
+    std::filesystem::create_directories(root);
+    {std::ofstream f(root/"50-labels.swf",std::ios::binary);f.write(reinterpret_cast<const char*>(fixture.data()),fixture.size());}
+    for(unsigned trial=0;trial<3;++trial) {
+        const auto directory=root/std::to_string(trial);
+        for(unsigned run=0;run<2;++run) {
+            IconCache::Store cache(directory);cache.Configure(true,64);
+            std::shared_ptr<const Swf::Movie> movie;unsigned renders=0,hits=0;
+            const auto start=std::chrono::steady_clock::now();
+            for(unsigned n=0;n<50;++n)for(auto variant:{Swf::Variant::Mask,Swf::Variant::Original}) {
+                IconCache::Key key{"label"+std::to_string(n),variant,128};
+                if(cache.Get(hash,key)){++hits;continue;}
+                if(!movie){std::vector<std::string> warnings;movie=Swf::Parse(fixture,warnings);Check(bool(movie),"50-label SWF parses");}
+                auto result=Swf::Render(*movie,key.label,variant,key.edge);
+                Check(bool(result.bitmap),"50-label SWF renders both variants");++renders;cache.Put(hash,key,*result.bitmap);
+            }
+            cache.Flush();
+            const auto elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+            Check(run==0?(cache.WriteCount()<=4 && cache.WriteCount()>0):(cache.WriteCount()==0),"100 entries require at most four atomic disk writes");
+            Check(cache.TrimCount()==1,"small batch writes do not rescan directory after Configure");
+            Check(run==0?(renders==100 && hits==0):(renders==0 && hits==100),"independent restart hits all 100 entries");
+            std::cout<<"many-label trial="<<trial+1<<" run="<<run+1<<" elapsed_ms="<<elapsed
+                <<" writes="<<cache.WriteCount()<<" renders="<<renders<<" hits="<<hits<<'\n';
+        }
+    }
+    // 真实工作线程：ready 背压时清空尚未达到批量阈值的数据，再排空旧 cacheEpoch 的工作。
+    ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level;
+    HR(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
+    const auto directory=root/"worker";const auto file=directory/(hash+".fwic");
+    std::vector<I4::Icon> icons;for(unsigned n=0;n<50;++n)icons.push_back({"many-labels.swf","label"+std::to_string(n),{},I4::IconOrigin::Rule});
+    for(unsigned run=0;run<3;++run) {
+        std::deque<std::function<void()>> tasks;std::vector<std::string> warnings;
+        I4::runtimeConfig=I4::RuntimeConfig{};I4::dataAvailable=true;
+        I4Textures::Configure([&](const auto&)->std::optional<std::vector<std::uint8_t>>{return fixture;},
+            [&](auto task){tasks.push_back(std::move(task));},[&](const auto& warning){warnings.push_back(warning);},directory);
+        I4Textures::Initialize(device.Get(),context.Get());I4Textures::BeginFrame(32);I4Textures::RequestSnapshot(icons);
+        auto wait=[&](auto predicate,bool pump) {
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+            while(!predicate() && std::chrono::steady_clock::now()<deadline) {
+                auto batch=std::move(tasks);tasks.clear();for(auto& task:batch)task();
+                if(pump)I4Textures::BeginFrame(32);std::this_thread::yield();
+            }
+            Check(predicate(),"50-label worker completes before timeout");
+        };
+        if(run==0) {
+            wait([]{return I4Textures::Stats().ready==8;},false);
+            Check(!std::filesystem::exists(file),"eight pending entries remain in memory under ready backpressure");
+            I4Textures::ClearCache();wait([]{return I4Textures::CacheClearStatus()!=I4Textures::ClearStatus::Queued;},false);
+            Check(I4Textures::CacheClearStatus()==I4Textures::ClearStatus::Done,"clear runs while pending batch is blocked by ready queue");
+        }
+        wait([]{const auto s=I4Textures::Stats();return s.textures==100 && s.pending==0 && s.ready==0;},true);
+        const auto stats=I4Textures::Stats();
+        Check(run==2?(stats.renders==0 && stats.cacheHits==100 && stats.parses==0):(stats.renders==100 && stats.cacheHits==0),"real worker restart hits all labels without Parse/Render");
+        I4Textures::Shutdown();
+        Check(run==0?!std::filesystem::exists(file):std::filesystem::exists(file),"old cacheEpoch never writes back; next session flushes idle batch");
+        Check(warnings.empty(),"50-label real worker has no warnings");
+        std::cout<<"many-label worker run="<<run+1<<" renders="<<stats.renders<<" hits="<<stats.cacheHits<<" textures="<<stats.textures<<'\n';
+    }
+}
 void ShutdownReads() {
     std::deque<std::function<void()>> tasks;
     std::vector<std::string> warnings;
@@ -394,6 +504,6 @@ void Timing() {
 }
 }
 int main() {
-    try {RuntimeSettings();Diagnostics();LoadLogging();Policy();Integration();ShutdownReads();Timing();std::cout<<"I4IntegrationTests passed: "<<checks<<" checks\n";return 0;}
+    try {RuntimeSettings();Diagnostics();LoadLogging();Policy();Integration();DiskCachePipeline();ManyLabelCache();ShutdownReads();Timing();std::cout<<"I4IntegrationTests passed: "<<checks<<" checks\n";return 0;}
     catch(const std::exception& e) {I4Textures::Shutdown();std::cerr<<"I4IntegrationTests failed: "<<e.what()<<'\n';return 1;}
 }
