@@ -45,6 +45,7 @@ namespace Wheel {
         std::optional<float> sortNumber; // Active numeric sort only; refreshed with the directory.
         int sortType=999,sortSlot=999; // Lightweight game-thread classification; not persisted identity.
         bool scriptedInstrument=false; // Native use request after closing; no synthetic script events.
+        bool miscFallback = false; // Favorited MISC without usable flag: route to EquipObject fallback matching vanilla ToggleEquipItem.
         bool book=false; // Reading opens native UI; never retain the wheel.
         std::string iconForm; // Stable plugin|local FormID snapshot for icon mappings.
         bool miscDisplayStack=false; // Display-only aggregate; native bindings remain per instance.

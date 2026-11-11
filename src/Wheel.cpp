@@ -626,7 +626,7 @@ namespace Wheel {
             if((selected.action==ActionKind::Cycle || selected.action==ActionKind::CycleMember) && left) {
                 CycleDialog(3,selected.actionId,selected.name,selected.action==ActionKind::CycleMember?selected.actionIndex:0);return;
             }
-            if (!selected.usable) {
+            if (!selected.usable && !selected.miscFallback) {
                 RE::SendHUDMessage::ShowHUDMessage((selected.action==ActionKind::Cycle?Tr(Config(),"cycleEmpty"):selected.action==ActionKind::FaceLightCommand || selected.action==ActionKind::Combat || selected.action==ActionKind::CycleMember?selected.detail:Tr(Config(),selected.action==ActionKind::Outfit?"outfitMissing":"unsupported")).c_str());
                 return;
             }

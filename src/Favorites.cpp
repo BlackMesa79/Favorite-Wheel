@@ -240,6 +240,7 @@ namespace Wheel {
                     extra && (extra->HasType<RE::ExtraWorn>() || extra->HasType<RE::ExtraWornLeft>()),
                     false,usable,ActionKind::Favorite,0,icon});
                 auto& item=result.back();item.iconForm=IconForm(object);item.scriptedInstrument=instrument;item.book=object->As<RE::TESObjectBOOK>()!=nullptr;SetSortClassification(item,object);item.favorited=favorite;item.inventoryWide=allInventory;
+                item.miscFallback = !usable && object->As<RE::TESObjectMISC>() != nullptr && favorite;
                 item.handEquip=InventoryHand(object,extra && extra->HasType<RE::ExtraWorn>(),extra && extra->HasType<RE::ExtraWornLeft>());
                 if(stack) {
                     item.weaponStack=true;item.weaponStackHotkey=stack->hotkey;item.equipped=stack->right || stack->left;
@@ -554,7 +555,22 @@ namespace Wheel {
                 requested.key.form,requested.key.extra,requested.weaponStack,requested.weaponStackHotkey);
             return;
         }
-        if (!found->usable) { Notify("unsupported"); return; }
+        if (!found->usable) {
+            // MISC items: attempt native equip matching vanilla ToggleEquipItem so that
+            // scripts such as SGT OnEquipped still fire, even if the equip visually fails.
+            const auto fallbackForm = RE::TESForm::LookupByID(requested.key.form);
+            const auto fallbackObj = fallbackForm ? fallbackForm->As<RE::TESBoundObject>() : nullptr;
+            if (fallbackObj && fallbackObj->As<RE::TESObjectMISC>()) {
+                auto fallbackExtra = reinterpret_cast<RE::ExtraDataList*>(found->key.extra);
+                if (player->IsWeaponDrawn()) player->DrawWeaponMagicHands(false);
+                manager->EquipObject(player, fallbackObj, fallbackExtra, 1, nullptr, false, false, true, false);
+                SKSE::log::info("MISC fallback equip: form={:08X} extra={:X}",
+                    fallbackObj->GetFormID(), found->key.extra);
+                return;
+            }
+            Notify("unsupported");
+            return;
+        }
         const auto form = RE::TESForm::LookupByID(requested.key.form);
         if (!form) return;
         if (auto shout = form->As<RE::TESShout>()) { manager->EquipShout(player, shout); return; }
@@ -596,6 +612,8 @@ namespace Wheel {
         // This address was matched against a fresh inventory walk above, on this same game-thread task.
         auto extra = reinterpret_cast<RE::ExtraDataList*>(found->key.extra);
         if(TalentInstrument(object)) {
+            if(player->IsWeaponDrawn())
+                player->DrawWeaponMagicHands(false);
             // Match inventory ToggleEquipItem: the queued Actor path drops MISC
             // before its native TESEquipEvent can be sent.
             manager->EquipObject(player,object,extra,1,nullptr,false,false,true,false);
