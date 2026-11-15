@@ -223,7 +223,9 @@ void Integration() {
     item.action=ActionKind::SaveOutfit;Check(!IconLibrary::Find(plain,item).view,"function buttons ignore I4");item.action=ActionKind::Favorite;
     item.i4=icons[1];config.color=I4::ColorMode::I4;I4::runtimeConfig=config;
     Check(IconLibrary::Find(plain,item).color==0x112233,"I4 color propagated");
-    item.i4.color.reset();Check(!IconLibrary::Find(plain,item).color && IconLibrary::Find(plain,item).tint,"I4 no color uses theme ink");
+    item.i4.color.reset();
+    Check(IconLibrary::ImageColor(IconLibrary::Find(plain,item),0x7FFFFFFFu)==((plain.accent&0x00FFFFFFu)|0x7F000000u),
+        "I4 no color uses theme accent with caller alpha");
     config.color=I4::ColorMode::Original;I4::runtimeConfig=config;
     Check(!IconLibrary::Find(plain,item).tint && IconLibrary::Find(plain,item).view!=rule.view,"Original selects distinct original texture");
     Check(sample(IconLibrary::Find(plain,item).view)==std::array<unsigned,4>{240,40,20,255},"worker original retains authored RGB");
@@ -240,13 +242,27 @@ void Integration() {
         item.i4.label="tinted";replacement=IconLibrary::Find(theme,item);
         Check(replacement.view==category.view && replacement.tint && !replacement.color && IconLibrary::ImageColor(replacement,hover)==hover,"AC-6 tinted I4 pack replacement follows theme ink in every mode");
         item.i4=icons[1];auto image=IconLibrary::Find(theme,item);
-        const auto expected=mode==I4::ColorMode::Theme?ink:mode==I4::ColorMode::I4?0x7F332211u:0x7FFFFFFFu;
+        const auto expected=mode==I4::ColorMode::Theme?((theme.accent&0x00FFFFFFu)|(ink&0xFF000000u)):mode==I4::ColorMode::I4?0x7F332211u:0x7FFFFFFFu;
         Check(image.view!=category.view && IconLibrary::ImageColor(image,ink)==expected,"AC-6 Rule priority and exact RGB/alpha per mode");
-        Check(IconLibrary::ImageColor(image,hover)==(mode==I4::ColorMode::Theme?hover:mode==I4::ColorMode::I4?0xCC332211u:0xCCFFFFFFu),"AC-6 selected and hovered theme ink vs fixed color");
+        Check(IconLibrary::ImageColor(image,hover)==(mode==I4::ColorMode::Theme?((theme.accent&0x00FFFFFFu)|(hover&0xFF000000u)):mode==I4::ColorMode::I4?0xCC332211u:0xCCFFFFFFu),"AC-6 theme accent stays fixed across hover with caller alpha");
         item.i4.origin=I4::IconOrigin::Default;
         Check(IconLibrary::Find(theme,item).view==category.view && IconLibrary::ImageColor(IconLibrary::Find(theme,item),hover)==hover,"AC-6 tinted category precedes Default and follows theme ink");
         Check(IconLibrary::Find(plain,item).view==image.view,"AC-6 Default used without pack in every mode");
         item.i4={};Check(!IconLibrary::Find(plain,item).view,"AC-6 built-in fallback in every mode");
+    }
+    // Uncolored books/spells must not inherit white sector text or hover RGB.
+    item.i4=icons[1];item.i4.color.reset();
+    for(const auto mode:{I4::ColorMode::Theme,I4::ColorMode::I4}) {
+        config.color=mode;I4::runtimeConfig=config;
+        for(const auto accent:{0xFF47A2E9u,0xFFDB8031u}) {
+            plain.accent=accent;
+            for(const auto origin:{I4::IconOrigin::Default,I4::IconOrigin::Rule}) {
+                item.i4.origin=origin;const auto image=IconLibrary::Find(plain,item);
+                for(const auto callerInk:{0x7FFFFFFFu,0xCC987654u,accent})
+                    Check(IconLibrary::ImageColor(image,callerInk)==((accent&0x00FFFFFFu)|(callerInk&0xFF000000u)),
+                        "uncolored I4 sector/hover/detail share current accent and retain opacity");
+            }
+        }
     }
     Check(I4Textures::Stats().renders==renderCount,"color changes reuse prepared variants without clearing or rasterizing");
     I4::runtimeConfig=I4::RuntimeConfig{};I4Textures::RequestSnapshot(icons);

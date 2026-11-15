@@ -154,7 +154,14 @@ Image Find(const Theme& theme,const Item& item) {
         if(!eligible)return {};
         const auto texture=I4Textures::Find(item.i4);if(!texture.view)return {};
         Image image{texture.view,1,I4::Runtime().color!=I4::ColorMode::Original,texture.sampler};
-        if(I4::Runtime().color==I4::ColorMode::I4)image.color=item.i4.color;
+        // Use one theme color across sectors and detail panels; ink also carries animation alpha.
+        const auto accent=theme.accent;
+        const auto themeColor=((accent&255)<<16)|(accent&0xFF00)|((accent>>16)&255);
+        switch(I4::Runtime().color) {
+        case I4::ColorMode::Theme: image.color=themeColor; break;
+        case I4::ColorMode::I4: image.color=item.i4.color.value_or(themeColor); break;
+        case I4::ColorMode::Original: break;
+        }
         return image;
     };
     if(pack && item.action==ActionKind::Favorite)if(const auto mapping=pack->forms.find(item.iconForm);mapping!=pack->forms.end())
