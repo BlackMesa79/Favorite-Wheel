@@ -1,5 +1,5 @@
 0.11.0
-- Added I4 icon support with Theme / I4 / Original colors, background rendering and disk caching.
-- Reorganized settings into Appearance, Icons, Keyboard, Controller and Gameplay tabs; improved outfit editor spacing.
-- Added an optional per-outfit Skip missing items setting for dynamically managed equipment, including the reported TNG slot 52 case. Off by default; reporter confirmation is still pending.
-- Fixed inconsistent I4 colors, small-icon sampling and favorited SGT / MISC instrument use.
+- Added I4 icons with Theme / I4 / Original colors and disk caching.
+- Reorganized settings tabs and improved outfit editor spacing.
+- Added per-outfit "Skip missing items" (off by default). TNG slot 52 compatibility is awaiting reporter confirmation.
+- Fixed inconsistent icon colors, small-icon sampling and favorited SGT / MISC instrument use.

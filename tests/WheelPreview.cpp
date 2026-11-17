@@ -28,6 +28,7 @@
 #include <iomanip>
 #include <sstream>
 #include <iterator>
+#include <map>
 #include <source_location>
 namespace Wheel {
     View preview;
@@ -624,6 +625,21 @@ int main(int argc, char** argv) {
     // Optional frame count settles hover feedback without sleeping or touching game state.
     const std::string dragMode=argc>4?argv[4]:"";
     const int frames=argc>12?std::clamp(std::atoi(argv[12]),1,30):dragMode=="drag-drop"?15:dragMode=="drag-settled"?30:dragMode=="drag-sort"?20:1;
+    std::map<int,ImFont*> presentationFonts;
+    if(std::getenv("FW_PREVIEW_I4_MANIFEST")) {
+        const float unit=float(width)/1920.f;
+        for(const float size:{17.f,21.f,22.f,23.f,58.f}) {
+            const int pixels=static_cast<int>(std::round(size*unit));
+            ImFontConfig fontConfig;fontConfig.OversampleH=2;fontConfig.OversampleV=2;
+            auto* font=io.Fonts->AddFontFromFileTTF(Wheel::PreparedFontPath().c_str(),float(pixels),&fontConfig);
+            require(font!=nullptr);presentationFonts.emplace(pixels,font);
+        }
+        require(io.Fonts->Build());
+        ImGui_ImplDX11_InvalidateDeviceObjects();
+        require(ImGui_ImplDX11_CreateDeviceObjects());
+        for(const auto& [pixels,font]:presentationFonts)require(font->FontSize==float(pixels));
+        std::cout<<"Presentation fonts baked at final pixel sizes; no glyph enlargement\n";
+    }
     for(int frame=0;frame<frames;++frame) {
         if(frame==12 && (dragMode=="drag-drop" || dragMode=="drag-settled")) {
             Wheel::preview.sortDrag.Cancel();Wheel::preview.dragItem.reset();Wheel::preview.sortingSelectedSlot=3;
@@ -669,7 +685,8 @@ int main(int argc, char** argv) {
     if(std::getenv("FW_PREVIEW_I4_MANIFEST")) {
         auto* draw=ImGui::GetForegroundDrawList();const float unit=float(width)/1920.f;
         const auto text=[&](float y,float size,ImU32 color,const char* label) {
-            draw->AddText(ImGui::GetFont(),size*unit,{90*unit,y*unit},color,label);
+            const int pixels=static_cast<int>(std::round(size*unit));
+            draw->AddText(presentationFonts.at(pixels),float(pixels),{90*unit,y*unit},color,label);
         };
         text(90,22,IM_COL32(183,159,116,255),"FAVORITE WHEEL / 0.11.0");
         text(285,58,IM_COL32(240,236,225,255),"I4 ICONS");
