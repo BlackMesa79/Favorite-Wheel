@@ -1,12 +1,12 @@
 # FavoriteWheel 当前项目交接
 
-更新日期：2026-11-15（Asia/Hong_Kong）。第 1、2A 节为当前状态；第 3–7 节及旧 `HANDOFF.md` 是历史交接记录，`docs/RELEASE_0.9.0.md` 只描述 0.9.0 发布。不要把历史待测事项或旧方案当成当前实现。
+更新日期：2026-11-17（Asia/Hong_Kong）。第 1、2A 节为当前状态；第 3–7 节及旧 `HANDOFF.md` 是历史交接记录，`docs/RELEASE_0.9.0.md` 只描述 0.9.0 发布。不要把历史待测事项或旧方案当成当前实现。
 
 ## 1. 当前状态（新会话从这里开始）
 
 - 项目路径：`D:\MyFiles\Documents\ChatGPT\SKSE模组 收藏轮盘`，Windows / PowerShell / C++23 / xmake / SKSE。
-- 当前版本 **0.10.0**，插件元数据 **0.10.0.0**；0.10.0 已打包（发布包见第 3 节）。I4 与乐器修复完成后再决定下一个版本号和发布策略。
-- 分支 `feat/outfit-parts-p1`（未推送）。本分支自 0.10.0 之后的提交，按时间先后：
+- 当前版本 **0.11.0**，插件元数据 **0.11.0.0**。2026-11-17 用户确认 I4 图标适配及轮盘配置菜单调整已验收，并授权提交、推送和正式发布；TNG 52 槽仍待反馈者实测。发布记录见 docs/RELEASE_0.11.0.md。
+- 分支 `feat/outfit-parts-p1`（本次发布提交并推送）。本分支自 0.10.0 之后的提交，按时间先后：
 
 | 提交 | 内容 |
 |---|---|
@@ -22,16 +22,35 @@
 | （本文件） | docs：HANDOFF 整理 |
 
 - 当前未提交改动：T-6 改造了 `tests/WheelPreview.cpp` 的四个 i4-* 场景，使用合成 SWF 与真实 I4Textures 路径；并更新本文件、README、I4_ICONS、ICON_LIBRARY 和方案。此前预览改动已整合，未提交。
-- 已部署 DLL：`H:/Games/Dev Skyrim/mods/36 - FavoriteWheel/SKSE/Plugins/FavoriteWheel.dll`，SHA256 `F961E0232934FEF154826BF25472B9AD6416A278458DACC8E1859FE02051C84C`（2026-11-15 主工作区构建，含 I4 颜色一致性修复；21 个 INI 哈希不变）。干净 worktree 构建产物的哈希会不同（路径等元数据差异），以部署目录为准。
-- **下一步**：三项 T-5/T-4b 实机检查已完成，见 2A.4。接下来是用户完整 AC-10 验收 → 决定版本号与发布；T-6 已于 2026-11-13 完成预览改造与文档更新，尚未提交；干净 worktree 复验已通过（820 项集成检查、五张截图逐字节一致）。验证结果见 build/i4-phase3/t6/REPORT.md，剩余实机清单见 `docs/I4_GAME_ACCEPTANCE.md`。
+- 已部署 DLL：`H:/Games/Dev Skyrim/mods/36 - FavoriteWheel/SKSE/Plugins/FavoriteWheel.dll`，SHA256 `491BB0E2E6119F50BDE89E9E5FC38910A902B54BF8347F9B7268A685ADB33CEE`（2026-11-15 主工作区 0.11.0 候选，含 I4 修复、装备缺失兼容和 UI 整理；页签和底部间距复调后仅部署 DLL，21 个 INI 哈希不变）。干净 worktree 构建产物的哈希会不同（路径等元数据差异），以部署目录为准。
+- **下一步**：跟进 TNG 52 槽兼容反馈；本次验收和发布状态取代下方历史“未提交／不推送／待完整验收”描述。
 
-### 1.1a I4 颜色一致性验收修复（2026-11-15，实机已验收，本次提交）
+### 1.1a I4 颜色一致性验收修复（2026-11-15，实机已验收，已提交 `9d0f26c`）
 
 - 用户反馈部分书籍、法术在扇区偏白，详情为主题金色。部署配置为 classic / I4；原因是没有 iconColor 的图标直接继承绘制位置 ink，扇区文字色与详情强调色不同。
 - src/IconLibrary.cpp：Theme 使用主题 accent；I4 有 iconColor 时保留指定色，缺失时使用 accent；Original 原色不变，保留调用位置 alpha。图标包覆盖和内置图标策略不变，无需清缓存。
 - tests/I4IntegrationTests.cpp 补充缺色 Default/Rule、主题切换、位置及透明度回归，随修复提交；tests/WheelPreview.cpp 的缺色样本依赖原有 T-6 改造，继续保留为未提交改动。
 - 主工作区与干净 worktree 集成测试均通过 844 项，三种配色预览逐字节一致；图标库测试通过，规则 1178 项、字段推导 1029 项通过。schools 截图与原基线一致。报告：build/i4-phase3/color-consistency/REPORT.md。
 - 2026-11-15 用户重启游戏后确认扇区与详情图标颜色一致，本次问题实机验收通过；依据为用户反馈。已同步 docs/I4_GAME_ACCEPTANCE.md。此次确认不代表完整 AC-10 或全部配色切换场景通过。本次仅提交颜色修复、集成回归及验收记录；此前 T-6 改动保留在工作区，不推送。
+
+### 1.1b TNG／动态辅助装备缺失兼容（2026-11-15，未提交、待实机验收）
+
+- 用户授权 I4 颜色修复提交且不推送，提交为 `9d0f26c`。T-6 预览及文档改动保留未提交；本次装备兼容代码也暂未提交。
+- 新反馈日志 G:/Downloads/Browser/Favorite Wheeler Log.txt：Plain 预设 3 件，TNG GenitalCover（TheNewGentleman.esp:AFF）完全不在背包，same_base_candidates=0、uid=0；不是此前 UID 改变问题。灯笼缺失为用户描述，日志没有对应条目证据。
+- 用户选择每套预设独立设置。编辑页新增“跳过缺失物品”（默认关），鼠标／M／手柄 X 切换，F5／Y 保存；还需保存游戏持久化。按基础物品不存在判断缺失，不绕过歧义、改造属性、重复或装备保护。
+- FWO 3／co-save 3 保存策略，读取旧 1、2 默认严格；覆盖、导入导出保留。固定本次可用目标，允许动态消失／重建；全部缺失不执行。说明与验收清单：docs/OUTFIT_MISSING_ITEMS.md。
+- 主工作区与独立副本：OutfitMissingTests 29 项、OutfitTests、LayoutSkinTests、SettingsTests 通过；中英文 WARP 离屏预览逐字节一致且视觉检查通过。旧 LayoutSkinTests 固定 11 项断言在未改 HEAD 也失败，已修正为检查目标设置存在。
+- 报告 build/outfit-missing/REPORT.md。没有接管键鼠，未验证 TNG／灯笼实际脚本交互。
+
+### 1.1c 0.11.0 界面整理与发布准备（2026-11-15，未提交）
+
+- 用户指出跳过缺失物品按钮越过内容区分隔线，设置外观页拥挤。此前只检查控件互不重叠，漏掉内容区边界；已补充内容区／底部操作区约束。
+- 编辑页五行仍保留，单行 40 单位、列表高 200；移除／添加按钮、缺失开关全部位于分隔线以上，保存／取消回到底部操作区。绘制与鼠标行命中共用 rowHeight。
+- 设置改为外观、图标、键盘、手柄、游戏行为五页。外观保留 11 项，I4 三项移至图标页；行距、按钮高度、鼠标页签命中、手柄循环顺序与八种语言同步。
+- 版本号调整至 0.11.0；docs/RELEASE_0.11.0.md 为本地发布准备记录。英文回复草稿 release-materials/0.11.0/tng-reply-en.txt，未发送。
+- 用户当前无法做本地实机测试，TNG／灯笼交由反馈者单独测试，不能将离屏 UI 验证或本次开发标记成兼容性实机通过。
+- 2026-11-15 用户预览反馈后续调整：图标页签紧邻外观，手柄顺序同步；编辑页说明 y=218、分隔线 y=236、保存／取消 y=254..290、底部帮助 y=308。最终预览 build/ui-011/spacing/edit.jpg 与 settings.jpg。
+- 验证记录：build/ui-011/REPORT.md。本轮不自动提交、推送、上传或正式发布。
 
 ### 1.1 SGT/MISC 乐器修复（`609f066`，已验收）
 

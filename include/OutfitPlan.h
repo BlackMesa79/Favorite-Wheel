@@ -21,8 +21,13 @@ namespace Wheel::Outfits {
         return result;
     }
     template<class Candidate> std::vector<PlannedOperation> ReplacementPlan(
-        const std::vector<Candidate>& inventory,const std::vector<int>& matches,bool removeOnly,const Preset&) {
-        // Retain FWO 2 metadata, but apply legacy full-outfit semantics.
+        const std::vector<Candidate>& inventory,const std::vector<int>& matches,bool removeOnly,const Preset& p) {
+        if(removeOnly && p.missingPolicy==MissingPolicy::Skip) {
+            std::vector<PlannedOperation> result;
+            for(int i:matches)if(inventory[i].worn)result.push_back({inventory[i].piece,false});
+            return result;
+        }
+        // Retain legacy part metadata, but apply full-outfit replacement semantics.
         return ReplacementPlan(inventory,matches,removeOnly);
     }
     // Limits submissions as well as time; one slow engine call cannot be preempted.

@@ -34,7 +34,7 @@ namespace Wheel {
         bool settingsOpen = false, capturingKey = false, gamepad=false, saveError = false;
         bool appliedGamepadMove=false;
         bool appliedKbMove=false;
-        int settingsTab=0; // 0 appearance, 1 keyboard, 2 gameplay, 3 controller.
+        int settingsTab=0; // 0 appearance, 1 keyboard, 2 gameplay, 3 controller, 4 icons.
         int captureBinding=0; // favorites, actions, switch, controller favorites
         Settings config;
         Category category = Category::Weapons;

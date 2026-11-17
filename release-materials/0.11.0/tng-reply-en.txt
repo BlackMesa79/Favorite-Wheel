@@ -1,0 +1,7 @@
+Thanks for the explanation and the log. Your log shows that TNG GenitalCover was completely absent from the inventory, so the earlier fix for changing inventory unique IDs could not resolve this case. The preset was being blocked because it required every saved item to be present.
+
+I've added a per-preset "Skip missing items" option for 0.11.0. To enable it, right-click the affected outfit preset, open "Edit Outfit", turn "Skip missing items" ON, then save the preset. You can click the toggle, press M on the keyboard, or press X on a controller. Save your game afterward to keep the setting.
+
+With this enabled, the preset can equip the available items while skipping items that are completely absent from the inventory. It also accounts for items disappearing or being recreated during an outfit change. The option is OFF by default and only affects the preset where you enable it. It does not bypass ambiguous item matches or protected-equipment checks. If none of the preset's items are available, it will not unequip your current gear.
+
+I can't test your exact TNG and lantern setup locally, so compatibility with those mods still needs confirmation. Once you have the build, could you test the affected preset both while clothed and after undressing? Please try the lantern case too, and check that the option remains enabled after saving and loading. If anything still fails, please send a fresh FavoriteWheel.log and tell me which preset and item were involved.

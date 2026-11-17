@@ -74,3 +74,20 @@ Skyrim.esm|00012FCC=my_healing
 原版治疗术 `Skyrim.esm|00012FCC` 单独映射到青色 9，优先于恢复系的绿色 5。其他恢复系法术仍显示 5，例如快速治疗 `player.addspell 0002F3B8`。将其收藏即可对照测试。
 
 修复了闭合曲线末点重复起点造成的零长度线段，涉及幻术、毁灭和杂项接缝；召唤图标中央竖线已接到菱形下端。离屏检查图：`build/icons-seams-fixed.jpg`、`build/icons-pack-test.jpg`。本轮之前用户已确认基本功能测试正常，本轮接缝和图标包的游戏内验收仍待反馈。
+
+## I4 图标覆盖
+
+主题 INI 可设置 `I4Icons=Off`，让该主题停用 I4 规则及 SkyUI 默认图标；主设置仍控制全局开关。
+
+在图标包 `icons.ini` 中可以按 SWF 来源和帧标签覆盖：
+
+```ini
+[Icons]
+custom_sword=sword.png|tint
+[I4]
+i4iconaddon/icons.swf|sword=custom_sword
+```
+
+左侧为 `source|label`，来源路径会统一斜杠及 ASCII 大小写，标签保留大小写；右侧引用 `[Icons]` 键。请使用规则实际输出的来源与标签，示例不保证适用于所有图标库。
+
+I4 生效时优先级为 `[Forms]` → `[I4]` → I4 规则图标 → 图标包分类（含 magic 回退）→ SkyUI 默认图标 → 内置图标。后台纹理尚未就绪时继续向下回退。功能按钮不受 I4 替换影响。

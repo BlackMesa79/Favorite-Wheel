@@ -10,6 +10,10 @@
 #include "WheelIcons.h"
 #include "SkinTextures.h"
 #include "Transition.h"
+#include "I4Textures.h"
+#include "SwfRasterFixtures.h"
+#include <deque>
+#include <thread>
 #include <Windows.h>
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -22,6 +26,8 @@
 #include <cstdlib>
 #include <chrono>
 #include <iomanip>
+#include <sstream>
+#include <iterator>
 #include <source_location>
 namespace Wheel {
     View preview;
@@ -43,6 +49,7 @@ int main(int argc, char** argv) {
     using Microsoft::WRL::ComPtr;
     unsigned width = argc > 2 ? std::atoi(argv[2]) : 1600;
     unsigned height = argc > 3 ? std::atoi(argv[3]) : 1000;
+    std::deque<std::function<void()>> i4Tasks;
     const bool empty = argc > 4 && std::string(argv[4]) == "empty";
     const bool showcase = argc > 4 && std::string(argv[4]) == "showcase";
     Wheel::LoadResources(argc>13?argv[13]:"assets"); // Optional alternate package root for fallback/style comparisons.
@@ -65,7 +72,8 @@ int main(int argc, char** argv) {
     if(argc>15)config.kbCategoryNextKey=std::atoi(argv[15]);
     Wheel::EditSettings(config);
     Wheel::preview.config=config;Wheel::preview.appliedGamepadMove=config.gamepadMoveWhileOpen;
-    Wheel::preview.settingsOpen=argc>4 && std::string(argv[4])=="settings";
+    Wheel::preview.settingsOpen=argc>4 && (std::string(argv[4])=="settings" || std::string(argv[4])=="settings-icons");
+    if(argc>4 && std::string(argv[4])=="settings-icons")Wheel::preview.settingsTab=4;
     if(argc>4 && (std::string(argv[4])=="controls-swapped" || std::string(argv[4])=="controls" || std::string(argv[4])=="controls-pad" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")) {
         Wheel::preview.settingsOpen=true;Wheel::preview.settingsTab=std::string(argv[4])=="controls-pad"?3:(std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay")?2:1;
     }
@@ -104,7 +112,7 @@ int main(int argc, char** argv) {
     for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
         const int detail=((x/8+y/8)%2)*48;
         const auto at=(y*width+x)*4;
-        if(showcase) {
+        if(showcase || std::getenv("FW_PREVIEW_I4_MANIFEST")) {
             // Neutral presentation backdrop; diagnostic modes retain their checkerboard.
             const float dx=(float(x)/width-.45f)*1.25f,dy=(float(y)/height-.46f)*1.15f;
             const int glow=int(12*std::clamp(1.f-dx*dx-dy*dy,0.f,1.f));
@@ -164,12 +172,14 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if(argc>4 && std::string(argv[4])=="outfit-edit") {
+    if(argc>4 && (std::string(argv[4])=="outfit-edit" || std::string(argv[4])=="outfit-edit-skip")) {
         using namespace Wheel;using namespace Wheel::Outfits;
         const bool zh=config.language=="zh_CN";
         preview.functions=true;preview.outfitDialog=7;preview.outfitId=12;
         preview.outfitName.Set(zh?"旅行者的礼仪服装与珠宝收藏":"Traveler's ceremonial apparel and jewelry collection");
-        auto& edit=preview.outfitEdit;edit.original.id=12;edit.original.name=preview.outfitName.text;
+        auto& edit=preview.outfitEdit;
+        if(std::string(argv[4])=="outfit-edit-skip"){edit.missingPolicy=MissingPolicy::Skip;preview.gamepad=true;}
+        edit.original.id=12;edit.original.name=preview.outfitName.text;
         for(unsigned i=0;i<16;++i) {
             Piece p;p.base={"Skyrim.esm",i+1};p.mask=i%2?64:4;
             p.label=(zh?"精工附魔的皇家旅行长袍与极长名称测试配件 ":"Mastercrafted enchanted ceremonial traveler apparel with a very long name ")+std::to_string(i+1);
@@ -385,6 +395,75 @@ int main(int argc, char** argv) {
         Wheel::preview.x=point.x;Wheel::preview.y=point.y;Wheel::preview.sortDrag.Move(point.x,point.y);
         if(std::string(argv[4])=="drag-sort-static"){config.animations=false;Wheel::preview.config.animations=false;}
     }
+    if(argc>4 && (std::string(argv[4])=="i4-icons" || std::string(argv[4])=="i4-armor" ||
+        std::string(argv[4])=="i4-items" || std::string(argv[4])=="i4-magic")) {
+        // Synthetic SWF fixtures exercise the production worker, rasterizer and GPU upload path.
+        using namespace Wheel;
+        const std::string mode=argv[4];
+        struct Sample { const char* label; IconKind icon; };
+        const Sample weapons[]={{"Sword",IconKind::Sword},{"Dagger",IconKind::Dagger},{"Axe",IconKind::Axe},
+            {"Mace",IconKind::Mace},{"Bow",IconKind::Bow},{"Crossbow",IconKind::Crossbow},{"Staff",IconKind::Staff},{"Arrow",IconKind::Arrow}};
+        const Sample armor[]={{"Armor",IconKind::Armor},{"Robe",IconKind::Robe},{"Helmet",IconKind::Helmet},
+            {"Gloves",IconKind::Gloves},{"Boots",IconKind::Boots},{"Ring",IconKind::Ring},{"Amulet",IconKind::Amulet},{"Shield",IconKind::Shield}};
+        const Sample items[]={{"Potion",IconKind::Potion},{"Poison",IconKind::Poison},{"Food",IconKind::Food},
+            {"Scroll",IconKind::Scroll},{"Torch",IconKind::Torch},{"Book",IconKind::Book},{"Other",IconKind::Other}};
+        const Sample magic[]={{"Magic",IconKind::Magic},{"Alteration",IconKind::Alteration},{"Conjuration",IconKind::Conjuration},
+            {"Destruction",IconKind::Destruction},{"Illusion",IconKind::Illusion},{"Restoration",IconKind::Restoration},{"Shout",IconKind::Shout},{"Power",IconKind::Power}};
+        const Sample* samples=mode=="i4-icons"?weapons:mode=="i4-armor"?armor:mode=="i4-items"?items:magic;
+        const int count=mode=="i4-items"?int(std::size(items)):int(std::size(weapons));
+        preview.category=mode=="i4-icons"?Category::Weapons:mode=="i4-armor"?Category::Armor:mode=="i4-items"?Category::Other:Category::Spells;
+        preview.items.clear();preview.x=.62f;preview.y=-.2f;
+        for(int i=0;i<count;++i) {
+            Item item;item.name=samples[i].label;item.icon=samples[i].icon;item.category=preview.category;item.count=1;
+            item.i4={"preview/"+std::to_string(i)+".swf","icon",0x40C0FF,I4::IconOrigin::Rule};
+            if(i%2!=0)item.i4.color.reset(); // Include uncolored icons beside explicit I4 colors.
+            preview.items.push_back(item);
+        }
+        const char* manifest=std::getenv("FW_PREVIEW_I4_MANIFEST");
+        if(manifest) {
+            std::ifstream input(manifest);std::string line;preview.items.clear();
+            while(std::getline(input,line)) {
+                std::istringstream record(line);Item item;item.category=preview.category;item.count=1;
+                unsigned color=0;
+                if(!(record>>std::quoted(item.name)>>std::quoted(item.i4.source)>>std::quoted(item.i4.label)>>color)) {
+                    std::cerr<<"Invalid I4 preview manifest record\n";return 5;
+                }
+                item.i4.color=color;item.i4.origin=I4::IconOrigin::Rule;preview.items.push_back(std::move(item));
+            }
+            if(!input.eof() || preview.items.empty() || preview.items.size()>10) {
+                std::cerr<<"I4 preview manifest must contain 1-10 entries\n";return 5;
+            }
+        }
+        auto runtime=I4::Runtime();runtime.iconCache=false;
+        runtime.color=mode=="i4-armor"?I4::ColorMode::I4:mode=="i4-magic"?I4::ColorMode::Original:I4::ColorMode::Theme;
+        I4::runtimeConfig=runtime;I4::dataAvailable=true;
+        auto& tasks=i4Tasks;
+        I4Textures::Configure([manifest](const std::string& source)->std::optional<std::vector<std::uint8_t>> {
+            if(manifest) {
+                std::ifstream input(std::filesystem::u8path(source),std::ios::binary);
+                if(!input)return std::nullopt;
+                return std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input),{});
+            }
+            ::Style style;style.curve=source.find("1.swf")!=std::string::npos;
+            style.type=source.find("2.swf")!=std::string::npos?0x10:0;
+            return Simple(style).v;
+        },[&](std::function<void()> task){tasks.push_back(std::move(task));},
+        [](const std::string& warning){std::cerr<<warning<<'\n';});
+        I4Textures::Initialize(device.Get(),context.Get());I4Textures::BeginFrame(128);
+        std::vector<I4::Icon> requests;for(const auto& item:preview.items)requests.push_back(item.i4);
+        I4Textures::RequestSnapshot(requests);
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+        bool ready=false;
+        while(!ready && std::chrono::steady_clock::now()<deadline) {
+            auto current=std::move(tasks);tasks.clear();for(auto& task:current)task();
+            I4Textures::BeginFrame(128);
+            ready=std::all_of(requests.begin(),requests.end(),[](const auto& icon){return I4Textures::Find(icon).view!=nullptr;});
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if(!ready){I4Textures::Shutdown();std::cerr<<"I4 preview upload timed out\n";return 5;}
+        std::cout<<"I4 textures ready: "<<requests.size()<<"; renders="<<I4Textures::Stats().renders<<'\n';
+        // Keep uploaded textures alive until draw and readback complete.
+    }
     const auto scale = Wheel::ViewScale(float(width),float(height),Wheel::preview);
     auto require = [](bool ok, std::source_location at=std::source_location::current()) {
         if (!ok) { std::cerr << "Visual regression failed at line " << at.line() << '\n'; std::exit(5); }
@@ -587,6 +666,22 @@ int main(int argc, char** argv) {
             d->AddText({at.x-42,at.y+45},theme.text,labels[i]);
         }
     }
+    if(std::getenv("FW_PREVIEW_I4_MANIFEST")) {
+        auto* draw=ImGui::GetForegroundDrawList();const float unit=float(width)/1920.f;
+        const auto text=[&](float y,float size,ImU32 color,const char* label) {
+            draw->AddText(ImGui::GetFont(),size*unit,{90*unit,y*unit},color,label);
+        };
+        text(90,22,IM_COL32(183,159,116,255),"FAVORITE WHEEL / 0.11.0");
+        text(285,58,IM_COL32(240,236,225,255),"I4 ICONS");
+        const char* mode=argv[4];
+        const char* caption=std::string_view(mode)=="i4-armor"?"I4 COLOR / SKYRIM":
+            std::string_view(mode)=="i4-magic"?"ORIGINAL / POLYGON":"THEME COLOR / CLASSIC GOLD";
+        text(370,23,IM_COL32(183,159,116,255),caption);
+        text(435,21,IM_COL32(172,178,185,255),"Your icon rules. Your wheel.");
+        text(474,21,IM_COL32(172,178,185,255),"Background rendering. Disk caching.");
+        text(960,17,IM_COL32(137,145,155,255),"OFFSCREEN UI PREVIEW / SAMPLE INVENTORY");
+        text(995,17,IM_COL32(137,145,155,255),"Icons: B.O.O.B.I.E.S / installed separately");
+    }
     ImGui::Render();
     const auto drawData=ImGui::GetDrawData();
     int drawCalls=0;
@@ -647,7 +742,7 @@ int main(int argc, char** argv) {
         out.write(reinterpret_cast<char*>(row.data()),row.size());
     }
     context->Unmap(staging.Get(),0);
-    Wheel::IconLibrary::Reset();Wheel::SkinTextures::Reset();ImGui_ImplDX11_Shutdown(); ImGui::DestroyContext();
+    Wheel::I4Textures::Shutdown();Wheel::IconLibrary::Reset();Wheel::SkinTextures::Reset();ImGui_ImplDX11_Shutdown(); ImGui::DestroyContext();
     if (!out) return 4;
     std::cout << "Rendered actual wheel UI at " << width << "x" << height << '\n';
 }

@@ -102,7 +102,7 @@ int wmain(int argc,wchar_t** argv) {
         Check(row.y+row.h<174,"Appearance settings stay above the hint");
         if(slot)Check(ValueButton(slot-1).y+ValueButton(slot-1).h<row.y,"Appearance setting buttons do not overlap");
     }
-    Check(SettingCount(0)==14 && SettingRow(0,11)==32 && SettingRow(0,13)==34,"I4 settings are reachable on the appearance page");
+    Check(SettingCount(0)==11 && SettingCount(4)==3 && SettingRow(4,0)==32 && SettingRow(4,2)==34,"I4 settings have their own icons page");
     const auto newPath=root/"Fresh.ini";
     SetSettingsPath(newPath.string());LoadSettings();
     Check(Config().language=="auto","Fresh installs follow the Windows display language");
@@ -400,8 +400,8 @@ int wmain(int argc,wchar_t** argv) {
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
     Check(SettingCount(2)==10 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay tab includes continuous use, empty categories and wheel memory");
-    Check(SettingCount(0)==14 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
-    Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,-1)==2,"Controller cycles all four tabs in visual order");
+    Check(SettingCount(0)==11 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
+    Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,1)==4 && NextSettingsTab(4,1)==1 && NextSettingsTab(0,-1)==2,"Controller cycles all five tabs in visual order");
     Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();
     std::cout<<"Settings persistence, cancellation, failure, localization, themes and hit regions passed\n";
 }

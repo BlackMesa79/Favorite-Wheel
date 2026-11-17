@@ -68,6 +68,17 @@ MO2 的虚拟文件系统决定时间戳更新/删除落到哪个实际文件。
 
 离线验收：`IconCacheTests` 覆盖文件校验、独立实例、版本/内容失效、真实 Windows 只读 ACL、容量与清空；`I4IntegrationTests` 覆盖两次独立管线启动，第二次 Render/Parse 均为零。所有缓存夹具只写入 build 目录。
 
+## T-6 离屏预览（2026-11-13）
+
+`WheelPreview.exe <输出.bmp> 1280 800 <场景> en classic` 支持 `i4-icons`、`i4-armor`、`i4-items`、`i4-magic`。分别显示武器、防具、物品和魔法测试条目；前两种配色测试中的防具使用 I4 指定青色，魔法使用 Original，其余使用 Theme。
+
+这些是程序生成的矩形、曲线和渐变 SWF，复用 `SwfRasterFixtures.h`，不代表真实物品美术，不依赖 build 下第三方图片。测试身份直接写入 Item 快照，经真实 I4Textures 调度、SWF 解析、后台栅格化、GPU 上传和 DrawWheel 离屏 WARP 渲染。它不验证游戏字段推导或 JSON 匹配；这些由 I4Entry/I4Rules 与集成测试覆盖。上传等待上限 10 秒，超时失败；磁盘缓存关闭，不写游戏目录。
+
+实机缓存位置已确认：本机 MO2 写入 `H:/Games/Dev Skyrim/overwrite/SKSE/Plugins/FavoriteWheel/IconCache/`。设置页操作已由用户验收；启动缺失插件日志为 62 条警告加 1 条信息汇总，另有 3 条 SWF 汇总诊断。完整 AC-10、重启缓存命中及 500 项性能仍需专项实机证据。
+
+剩余实机操作见 [I4 实机验收清单](I4_GAME_ACCEPTANCE.md)。当前游戏日志不输出缓存命中或 Render 计数，不能用文件存在证明第二次启动零栅格化。
+
+
 ## 2026-11-15 验收修正：扇区与详情颜色一致
 
 部分书籍、非元素法术没有 `iconColor`，原来回退到绘制位置传入的 ink：未悬停扇区为文字色，中心和详情为强调色。切换配色时仍会看到同一批扇区图标偏白。现在 `Theme` 模式统一使用主题 `accent`；`I4` 模式有颜色时保留指定色，无颜色时使用主题 `accent`。`Original` 保留素材原色，素材本身是白色时仍会显示白色。所有模式保留调用位置透明度；图标包覆盖和内置图标原有策略不变。此修复不改变位图缓存，不需要清缓存。

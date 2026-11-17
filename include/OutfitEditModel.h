@@ -41,8 +41,10 @@ namespace Wheel::Outfits::Edit {
         result=std::move(validated.front());return true;
     }
     inline constexpr int visibleRows=5;
+    inline constexpr int rowHeight=40;
     struct State {
         Preset original;
+        MissingPolicy missingPolicy=MissingPolicy::Required;
         std::vector<Row> draft,inventory;
         std::vector<std::size_t> available;
         Filter filter=Filter::All;
@@ -51,6 +53,14 @@ namespace Wheel::Outfits::Edit {
         std::string messageKey,replaced;
         int clickedColumn=-1,clickedRow=-1;
         double clickedAt=0;
+        void ToggleMissing() {
+            if(loading || saving)return;
+            missingPolicy=missingPolicy==MissingPolicy::Required?MissingPolicy::Skip:MissingPolicy::Required;
+        }
+        bool Save(Preset& result) const {
+            auto configured=original;configured.missingPolicy=missingPolicy;
+            return Edit::Save(configured,draft,result);
+        }
         int Count(int col) const {return static_cast<int>(col?available.size():draft.size());}
         void Clamp(bool reveal=false) {
             for(int col=0;col<2;++col) {

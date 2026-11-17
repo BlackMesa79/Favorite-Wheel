@@ -1,6 +1,13 @@
 # Favorite Wheel - Radial Actions
 
-## 0.9.0
+## 0.11.0
+
+- I4 icon rules and SWF rendering with Theme / I4 / Original colors, background processing and disk caching.
+- Separate Appearance, Icons, Keyboard, Controller and Gameplay settings tabs; clearer outfit editor spacing.
+- Optional per-outfit **Skip missing items**, off by default. The reported TNG slot 52 fix awaits reporter confirmation.
+- Fixed inconsistent I4 colors, small-icon sampling and favorited SGT / MISC instrument use.
+
+### Earlier 0.9.0 changes
 
 - **T** cycles sorting; **Shift+T** toggles manual sorting; **F2** opens settings. Manual sorting supports short LMB release / RMB to move earlier / later, and LMB dragging onto an occupied sector to insert there. Scroll while held to change pages; RMB or Esc cancels the drag. Save the game to keep the order.
 - Weapons and apparel support damage/armor, weight and value sorting; spells support magicka-cost sorting. These use detail-panel values and refresh with the directory. Concentration spell cost is per second; there is no combined spell-damage metric.
@@ -15,7 +22,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. Action modules include outfit presets, combat presets, combat cycles and optional Face Lighting controls.
 
-Current build: **0.10.0** (not yet packaged or released; latest published release: 0.9.0). The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP, Papyrus scripts, and SWF assets are not required.
+Current release: **0.11.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP and Papyrus scripts are not required. I4 icons use separately installed rule files and SWF assets; the wheel also works without them.
 
 Version 0.9.0 adds category/stat sorting, animated drag arrangement and session wheel memory; improves first opening; fixes zero-health outfit capture and spell reselect toggling. See the [0.9.0 changelog](release-materials/0.9.0/Nexus-changelog-en.txt), [Nexus description](release-materials/0.9.0/Nexus-description-en.bbcode.txt) and [release record](docs/RELEASE_0.9.0.md).
 
@@ -26,6 +33,8 @@ Version 0.7.3 fixes the reported LB+Y controller shortcut opening vanilla Favori
 Version 0.7.2 fixes dual wielding identical weapons when only one copy is favorited, false changed-item errors after native stack splitting/merging, and cursor recentering on first equip. See the [short changelog](release-materials/0.7.2/Nexus-changelog-en.txt).
 
 Version 0.7.1 fixes startup after title-screen console commands such as `coc qasmoke` and follows controller Favorites modifiers from custom control maps. Plain buttons retain their normal use; identical Favorites/Actions controller chords prefer Favorites. Single weapons can switch hands in one click; a spell already in both hands keeps only the requested hand when clicked again. See the [short changelog](release-materials/0.7.1/Nexus-changelog-en.txt).
+
+Version **0.11.0** adds I4 icon rules and cached SWF rendering, a dedicated Icons settings tab, improved outfit editor spacing and an optional per-preset Skip missing items setting. I4 and menu changes are user-accepted; the reported TNG slot 52 compatibility fix awaits reporter confirmation. See the [short changelog](release-materials/0.11.0/Nexus-changelog-en.txt).
 
 Version **0.6.0** adds three-layer theme authoring, a rebuilt Classic Gold, and the Skyrim / Skyrim Polygon skins. Colors/components, local PNG materials, wheel shapes and detail-card preferences can be mixed in external theme INIs. It also improves animation and category-switch performance, fixes torch/poison use and paused equipment, and strengthens empty-INI saving. See the [theme-making guide](docs/THEME_AUTHORING_0.6.0.md) and [short changelog](release-materials/0.6.0/Nexus-changelog-en.txt).
 
@@ -308,3 +317,5 @@ Copyright (C) 2026 BlackMesa79. Favorite Wheel's own code is licensed under **GP
 Thanks to the SKSE, CommonLibSSE-NG, Address Library, Dear ImGui, spdlog, and Microsoft DirectX contributors, and to the users testing different game versions.
 
 Grid Inventory and Outfit Wheeler were feature references. No code, icons, or artwork from either mod is included. Developed with AI assistance and refined through hands-on testing.
+
+I4 开发版已提供合成 SWF 离屏预览（T-6），操作与验证边界见 [I4 图标说明](docs/I4_ICONS.md)，主题覆盖见 [图标库说明](docs/ICON_LIBRARY.md)。完整游戏内验收尚未完成。

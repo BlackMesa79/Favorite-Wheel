@@ -35,12 +35,14 @@ namespace Wheel::Outfits {
         bool optional=false;
         bool operator==(const Piece&) const = default;
     };
+    enum class MissingPolicy : std::uint8_t { Required, Skip };
     struct Preset {
         std::uint32_t id=0;
         std::string name;
         std::vector<Piece> pieces;
         std::array<PartMode,7> parts{};
         bool loose=false;
+        MissingPolicy missingPolicy=MissingPolicy::Required;
         bool operator==(const Preset&) const = default;
     };
     inline bool Same(const Piece& a,const Piece& b) {
@@ -70,11 +72,12 @@ namespace Wheel::Outfits {
         return nullptr;
     }
     inline std::string Encode(const std::vector<Preset>& presets) {
-        std::ostringstream out;out.imbue(std::locale::classic());out<<"FWO 2 "<<presets.size()<<'\n'<<std::setprecision(std::numeric_limits<float>::max_digits10);
+        std::ostringstream out;out.imbue(std::locale::classic());out<<"FWO 3 "<<presets.size()<<'\n'<<std::setprecision(std::numeric_limits<float>::max_digits10);
         auto ref=[&](const FormRef& r){out<<std::quoted(r.plugin)<<' '<<r.id<<' ';};
         for(const auto& p:presets) {
             out<<p.id<<' '<<std::quoted(p.name)<<' '<<p.pieces.size()<<' '<<p.loose;
-            for(auto mode:p.parts)out<<' '<<static_cast<unsigned>(mode);out<<'\n';
+            for(auto mode:p.parts)out<<' '<<static_cast<unsigned>(mode);
+            out<<' '<<static_cast<unsigned>(p.missingPolicy)<<'\n';
             for(const auto& x:p.pieces) {
                 ref(x.base);ref(x.enchantment);ref(x.owner);
                 out<<x.unique<<' '<<x.health<<' '<<std::quoted(x.customName)<<' '<<std::quoted(x.label)<<' '<<x.mask<<' '<<x.optional<<'\n';
@@ -82,24 +85,38 @@ namespace Wheel::Outfits {
         }
         return out.str();
     }
+    inline bool ReadPresetOptions(std::istream& in,Preset& p,unsigned version) {
+        if(version==1){p.parts.fill(PartMode::Set);return true;}
+        unsigned loose=0;
+        if(!(in>>loose)||loose>1)return false;
+        p.loose=loose!=0;
+        for(auto& mode:p.parts) {
+            unsigned value=0;
+            if(!(in>>value)||value>2)return false;
+            mode=static_cast<PartMode>(value);
+        }
+        if(version==2)return true;
+        unsigned policy=0;
+        if(!(in>>policy)||policy>1)return false;
+        p.missingPolicy=static_cast<MissingPolicy>(policy);return true;
+    }
     inline bool Decode(const std::string& text,std::vector<Preset>& result) {
         if(text.size()>1024*1024) return false;
         std::istringstream in(text);in.imbue(std::locale::classic());std::string magic;unsigned version=0,count=0;
-        if(!(in>>magic>>version>>count) || magic!="FWO" || (version!=1&&version!=2) || count>100) return false;
+        if(!(in>>magic>>version>>count) || magic!="FWO" || (version<1||version>3) || count>100) return false;
         std::vector<Preset> next;
         auto ref=[&](FormRef& r){return bool(in>>std::quoted(r.plugin)>>r.id) && r.plugin.size()<260;};
         for(unsigned i=0;i<count;++i) {
             Preset p;unsigned n=0;
             if(!(in>>p.id>>std::quoted(p.name)>>n) || !p.id || p.id>1000000 || !ValidName(p.name) || n==0 || n>64 ||
                 std::any_of(next.begin(),next.end(),[&](const auto& other){return other.id==p.id;})) return false;
-            if(version==2){unsigned loose=0;if(!(in>>loose)||loose>1)return false;p.loose=loose!=0;for(auto& mode:p.parts){unsigned value=0;if(!(in>>value)||value>2)return false;mode=static_cast<PartMode>(value);}}
-            else p.parts.fill(PartMode::Set);
+            if(!ReadPresetOptions(in,p,version))return false;
             for(unsigned j=0;j<n;++j) {
                 Piece x;unsigned uid=0;
                 unsigned optional=0;
                 if(!ref(x.base)||!ref(x.enchantment)||!ref(x.owner)||!(in>>uid>>x.health>>std::quoted(x.customName)>>std::quoted(x.label)) ||
                     uid>65535 || PieceDataProblem(x)) return false;
-                if(version==2&&(!(in>>x.mask>>optional)||optional>1))return false;x.optional=optional!=0;
+                if(version>=2&&(!(in>>x.mask>>optional)||optional>1))return false;x.optional=optional!=0;
                 x.unique=static_cast<std::uint16_t>(uid);p.pieces.push_back(std::move(x));
             }
             next.push_back(std::move(p));
@@ -132,6 +149,9 @@ namespace Wheel::Outfits {
         }
         return found;
     }
+    template<class Candidate> bool MissingFromInventory(const Piece& piece,const std::vector<Candidate>& inventory) {
+        return std::none_of(inventory.begin(),inventory.end(),[&](const auto& c){return c.piece.base==piece.base;});
+    }
     enum class ResolveReason { None, Missing, Changed, Ambiguous, Duplicate };
     struct ResolveProblem {
         ResolveReason reason=ResolveReason::None;
@@ -148,6 +168,7 @@ namespace Wheel::Outfits {
                 if(i<0&&p.loose)for(int n=0;n<static_cast<int>(inventory.size());++n)
                     if(inventory[n].piece.base==piece.base&&inventory[n].piece.enchantment==piece.enchantment&&
                         std::find(used.begin(),used.end(),n)==used.end()&&(i<0||inventory[n].worn))i=n;
+                if(i<0 && p.missingPolicy==MissingPolicy::Skip && MissingFromInventory(piece,inventory))continue;
                 if(i<0 || std::find(used.begin(),used.end(),i)!=used.end()) {
                     if(problem) {
                         const bool basePresent=std::any_of(inventory.begin(),inventory.end(),[&](const auto& c){return c.piece.base==piece.base;});
@@ -158,7 +179,9 @@ namespace Wheel::Outfits {
                 used.push_back(i);
                 matches.push_back(i);
             }
-            return true;
+            if(!matches.empty())return true;
+            if(problem)*problem={ResolveReason::Missing,0};
+            return false;
         }
     // The badge describes the preset's pieces, including items equipped manually.
     // Additional worn apparel does not make those pieces unequipped.
@@ -171,7 +194,8 @@ namespace Wheel::Outfits {
     template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches) {
             return WearingPieces(inventory,matches) && std::count_if(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;})==matches.size();
         }
-    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,const Preset&) {
+    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,const Preset& p) {
+        if(p.missingPolicy==MissingPolicy::Skip)return WearingPieces(inventory,matches);
         return Wearing(inventory,matches);
     }
 

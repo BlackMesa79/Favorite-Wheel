@@ -530,7 +530,6 @@ namespace Wheel
                  t.textShadow);
             Text(d, {c.x, c.y - 241 * s}, Fit(hint, 14 * s, 620 * s), 14 * s, t.muted, 0, t.textShadow);
             Rule(d, {c.x, c.y - 222 * s}, 300 * s, t, s);
-            Rule(d, {c.x, c.y + 214 * s}, 300 * s, t, s);
         }
         void Button(ImDrawList *d, ImVec2 c, float s, const View &v, Rect rect, const std::string &label,
                     bool accent = false, bool danger = false)
@@ -613,6 +612,7 @@ namespace Wheel
             const auto& t=Style(v.config);const auto& edit=v.outfitEdit;
             auto tr=[&](const char* key){return Tr(v.config,key);};
             PanelFrame(d,c,s,t,tr("outfitEditTitle"),tr(v.gamepad?"outfitEditPadHelp":"outfitEditKeyHelp"));
+            Rule(d,{c.x,c.y+outfitEditDividerY*s},300*s,t,s);
             Text(d,{c.x,c.y-202*s},Fit(v.outfitName.text,18*s,590*s),18*s,t.text);
             for(int i=0;i<7;++i)Button(d,c,s,v,OutfitFilterTab(i),tr(Outfits::Edit::filterKeys[i]),i==static_cast<int>(edit.filter));
             LeftText(d,{c.x-295*s,c.y-127*s},tr("outfitEditDraft"),16*s,t.text);
@@ -626,21 +626,22 @@ namespace Wheel
                 for(int slot=0;slot<Outfits::Edit::visibleRows;++slot) {
                     const int index=edit.scroll[col]+slot;if(index>=edit.Count(col))break;
                     const auto& row=col?edit.inventory[edit.available[index]]:edit.draft[index];
-                    const float top=a.y+slot*48*s;
-                    if(index==edit.selected[col])d->AddRectFilled({a.x+2*s,top+2*s},{b.x-2*s,top+46*s},Alpha(t.accent,col==edit.column?.25f:.10f));
+                    const float top=a.y+slot*Outfits::Edit::rowHeight*s;
+                    if(index==edit.selected[col])d->AddRectFilled({a.x+2*s,top+2*s},{b.x-2*s,top+(Outfits::Edit::rowHeight-2)*s},Alpha(t.accent,col==edit.column?.25f:.10f));
                     LeftText(d,{a.x+9*s,top+6*s},Fit(row.piece.label,16*s,270*s),16*s,t.text);
                     const auto part=tr(Outfits::Edit::filterKeys[static_cast<int>(Outfits::Edit::Category(row.Mask()))]);
-                    LeftText(d,{a.x+9*s,top+28*s},Fit(part+(row.worn?"  /  "+tr("outfitEditWorn"):""),12*s,270*s),12*s,row.worn?t.accent:t.muted);
+                    LeftText(d,{a.x+9*s,top+24*s},Fit(part+(row.worn?"  /  "+tr("outfitEditWorn"):""),12*s,270*s),12*s,row.worn?t.accent:t.muted);
                 }
                 if(!edit.Count(col))Text(d,{(a.x+b.x)/2,(a.y+b.y)/2},tr(edit.loading?"outfitEditLoading":"outfitEditEmpty"),14*s,t.muted);
                 d->PopClipRect();
                 const int count=edit.Count(col),first=count?edit.scroll[col]+1:0,last=std::min(count,edit.scroll[col]+Outfits::Edit::visibleRows);
-                Text(d,{(a.x+b.x)/2,c.y+148*s},std::to_string(first)+" - "+std::to_string(last)+" / "+std::to_string(count),12*s,t.muted);
+                Text(d,{(a.x+b.x)/2,c.y+108*s},std::to_string(first)+" - "+std::to_string(last)+" / "+std::to_string(count),12*s,t.muted);
             }
             Button(d,c,s,v,outfitRemoveButton,tr("outfitEditRemove"));Button(d,c,s,v,outfitAddButton,tr("outfitEditAdd"));
-            if(!edit.messageKey.empty())Text(d,{c.x,c.y+202*s},Fit(tr(edit.messageKey.c_str())+(edit.replaced.empty()?"":" "+edit.replaced),12*s,600*s),12*s,t.accent);
-            Button(d,c,s,v,cancelButton,tr("cancel"));Button(d,c,s,v,applyButton,tr(edit.saving?"outfitEditSaving":"outfitEditSave"),true);
-            Text(d,{c.x,c.y+298*s},Fit(tr("outfitEditMouseHelp"),12*s,610*s),12*s,t.muted);
+            if(!edit.messageKey.empty())Text(d,{c.x,c.y+outfitEditMessageY*s},Fit(tr(edit.messageKey.c_str())+(edit.replaced.empty()?"":" "+edit.replaced),12*s,600*s),12*s,t.accent);
+            Button(d,c,s,v,outfitMissingButton,tr(edit.missingPolicy==Outfits::MissingPolicy::Skip?"outfitSkipMissingOn":"outfitSkipMissingOff")+(v.gamepad?"  [X]":"  [M]"),edit.missingPolicy==Outfits::MissingPolicy::Skip);
+            Button(d,c,s,v,outfitEditCancelButton,tr("cancel"));Button(d,c,s,v,outfitEditSaveButton,tr(edit.saving?"outfitEditSaving":"outfitEditSave"),true);
+            Text(d,{c.x,c.y+outfitEditHelpY*s},Fit(tr("outfitEditMouseHelp"),12*s,610*s),12*s,t.muted);
         }
         void OutfitPanel(ImDrawList *d, ImVec2 c, float s, const View &v)
         {
@@ -650,6 +651,7 @@ namespace Wheel
             const bool naming = v.outfitDialog == 1 || v.outfitDialog == 2;
             PanelFrame(d, c, s, t, tr(v.cycleDialog?(v.cycleMemberDialog?"cycleMemberManage":"cycleManage"):v.combatDialog?(v.outfitDialog==1?"combatSave":"combatManage"):v.outfitDialog == 1 ? "outfitSave" : "outfitManage"),
                        tr(naming ? "outfitNameEditHelp" : v.cycleMemberDialog ? "cycleMemberHelp" : "outfitManageHelp"));
+            Rule(d,{c.x,c.y+214*s},300*s,t,s);
             if (naming)
                 NameField(d, c, s, v);
             else if(v.cycleMemberDialog)
@@ -695,10 +697,12 @@ namespace Wheel
                 (v.appliedGamepadMove?"padSettingsHelpRight":"controllerControlsHelp"):v.gamepad?
                 (v.appliedGamepadMove?"padSettingsHelpRight":"padSettingsHelp"):
                 v.settingsTab==2?"gameplaySettingsHelp":v.settingsTab==1?"keyboardControlsHelp":"layoutSettingsHelp"));
+            Rule(d,{c.x,c.y+214*s},300*s,t,s);
             Button(d,c,s,v,generalTab,tr("settingsGeneral"),v.settingsTab==0);
             Button(d,c,s,v,controlsTab,tr("settingsKeyboard"),v.settingsTab==1);
             Button(d,c,s,v,gamepadTab,tr("settingsController"),v.settingsTab==3);
             Button(d,c,s,v,gameplayTab,tr("settingsGameplay"),v.settingsTab==2);
+            Button(d,c,s,v,iconsTab,tr("settingsIcons"),v.settingsTab==4);
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
@@ -742,10 +746,8 @@ namespace Wheel
                 }
                 Button(d, c, s, v, ValueButton(slot,v.settingsTab),v.capturingKey && v.captureBinding==row?"...":values[row]);
             }
-            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsPhysicsHint":v.settingsTab==1?"controlsCaptureHint":"appearanceHint"), 14 * s, 610 * s),
+            Text(d, {c.x, c.y + 181 * s}, Fit(tr(v.capturingKey ? (v.captureBinding==15?"capturePad":"captureChord") : v.settingsTab==3?"controllerCaptureHint":v.settingsTab==2?"timeSettingsPhysicsHint":v.settingsTab==1?"controlsCaptureHint":v.settingsTab==4?"i4ApplyHint":"appearanceHint"), 14 * s, 610 * s),
                  14 * s, t.muted, 0, t.textShadow);
-            if(v.settingsTab==0)
-                Text(d,{c.x,c.y+201*s},Fit(tr("i4ApplyHint"),13*s,610*s),13*s,t.muted,0,t.textShadow);
             if(v.settingsTab==1) {
                 const bool conflict=(config.actionHotkey<0 || config.actionHotkey==config.hotkey) && config.actionModifier==config.hotkeyModifier;
                 Text(d,{c.x,c.y+145*s},Fit(tr(conflict?"bindingConflict":"controlsBindHint"),14*s,610*s),14*s,conflict?t.accent:t.muted);

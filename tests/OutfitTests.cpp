@@ -190,8 +190,8 @@ int main(){
         std::vector<Preset> migrated;
         Check(Decode(v1,migrated)&&migrated.size()==1&&!migrated[0].loose&&
             std::all_of(migrated[0].parts.begin(),migrated[0].parts.end(),[](PartMode m){return m==PartMode::Set;})&&
-            !migrated[0].pieces[0].optional&&Encode(migrated).find("FWO 2 ")==0,
-            "FWO 1 migrates to strict required-item replacement semantics and writes FWO 2");
+            !migrated[0].pieces[0].optional&&Encode(migrated).find("FWO 3 ")==0,
+            "FWO 1 migrates to strict required-item replacement semantics and writes FWO 3");
     }
     Check(!Decode(Encode({outfit})+"trailing",decoded),"Reject trailing data");
     Check(!Decode("FWO 1 1000000",decoded),"Reject excessive count");

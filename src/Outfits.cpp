@@ -2,6 +2,7 @@
 #include "OutfitModel.h"
 #include "OutfitStep.h"
 #include "OutfitPlan.h"
+#include "OutfitExecution.h"
 #include "CombatPresets.h"
 #include "CombatCycles.h"
 #include "InventoryOrder.h"
@@ -115,7 +116,7 @@ namespace Wheel::Outfits {
         std::uint32_t NextID() {std::uint32_t id=1;for(const auto& p:presets)id=std::max(id,p.id+1);return id;}
         void Save(SKSE::SerializationInterface* api) {
             std::lock_guard lock(mutex);const auto text=Encode(presets);
-            if(!api->WriteRecord(record,2,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets: presets={} bytes={}",presets.size(),text.size());
+            if(!api->WriteRecord(record,3,text.data(),static_cast<std::uint32_t>(text.size())))SKSE::log::error("Unable to save outfit presets: presets={} bytes={}",presets.size(),text.size());
             else SKSE::log::info("Outfit co-save written: presets={} bytes={}",presets.size(),text.size());
             Combat::Save(api);Cycles::Save(api);Ordering::Save(api);
         }
@@ -128,7 +129,7 @@ namespace Wheel::Outfits {
                 if(type==Combat::bindingRecord){Combat::LoadBindings(api,version,length);continue;}
                 if(type==Cycles::record){Cycles::Load(api,version,length);continue;}
                 if(type==Ordering::record){Ordering::Load(api,version,length);continue;}
-                if(type!=record || (version!=1&&version!=2) || length>1024*1024)continue;
+                if(type!=record || (version<1||version>3) || length>1024*1024)continue;
                 std::string text(length,'\0');std::vector<Preset> loaded;
                 if(api->ReadRecordData(text.data(),length)!=length || !Decode(text,loaded)) {SKSE::log::error("Invalid outfit record");continue;}
                 for(auto& p:loaded)for(auto& x:p.pieces)for(auto r:{&x.base,&x.enchantment,&x.owner}) {
@@ -185,6 +186,7 @@ namespace Wheel::Outfits {
         if(replace && found==presets.end())return false;
         if(!replace && presets.size()>=100){SKSE::log::warn("Outfit capture rejected: reason=preset-count presets={} maximum=100",presets.size());Tell("outfitLimit");return false;}
         next.id=replace?replace:NextID();
+        if(replace)next.missingPolicy=found->missingPolicy;
         auto updated=presets;
         if(replace)updated[std::distance(presets.begin(),found)]=next;else updated.push_back(next);
         std::vector<Preset> validated;
@@ -257,6 +259,7 @@ namespace Wheel::Outfits {
                                 if(match>=0)throw std::runtime_error("ambiguous import instance");match=i;
                             }
                         }
+                        if(match<0 && p.missingPolicy==MissingPolicy::Skip && MissingFromInventory(piece,inventory))continue;
                         if(match<0)throw std::runtime_error("missing import piece");
                         piece=inventory[match].piece;
                     }
@@ -269,7 +272,7 @@ namespace Wheel::Outfits {
             auto next=presets;
             std::uint32_t nextID=NextID();
             for(auto& p:added) {
-                if(std::any_of(next.begin(),next.end(),[&](const auto& existing){return existing.name==p.name && existing.pieces==p.pieces;}))continue;
+                if(std::any_of(next.begin(),next.end(),[&](const auto& existing){return existing.name==p.name && existing.pieces==p.pieces && existing.missingPolicy==p.missingPolicy;}))continue;
                 p.id=nextID++;next.push_back(std::move(p));
             }
             std::vector<Preset> validated;
@@ -295,16 +298,18 @@ namespace Wheel::Outfits {
             auto armor=object?object->As<RE::TESObjectARMO>():nullptr;
             if(armor && armor->IsShield() && data.second && data.second->IsWorn())shieldMask|=armor->GetSlotMask().underlying();
         }
-        const bool removeOnly=Wearing(inventory,matches);
+        const bool removeOnly=Wearing(inventory,matches,p);
         for(int i:matches)if(!removeOnly && (inventory[i].armor->GetSlotMask().underlying()&shieldMask)){Tell("outfitBlocked");return;}
         for(const auto& c:inventory)if(c.worn) {
             if(c.quest){Tell("outfitBlocked");return;}
         }
-        Job next;next.preset=p;next.removeOnly=removeOnly;
-        next.operations=ReplacementPlan(inventory,matches,removeOnly);
+        for(const auto& piece:p.pieces)if(MissingFromInventory(piece,inventory))
+            SKSE::log::info("Outfit {} skipped missing target: {} base={}:{:X}",id,piece.label,piece.base.plugin,piece.base.id);
+        Job next;next.preset=ExecutionPreset(p,inventory,matches);next.removeOnly=removeOnly;
+        next.operations=ReplacementPlan(inventory,matches,removeOnly,p);
         next.started=std::chrono::steady_clock::now();
         cancelRequested=false;job=std::move(next);busy=true;
-        SKSE::log::info("Outfit {} started: mode=replacement removeOnly={} operations={}",id,removeOnly,job->operations.size());
+        SKSE::log::info("Outfit {} started: mode=replacement removeOnly={} operations={} skipMissing={} skipped={}",id,removeOnly,job->operations.size(),p.missingPolicy==MissingPolicy::Skip,p.pieces.size()-matches.size());
         Tell("outfitWorking");
     }
     bool Busy() {return busy.load();}
@@ -322,9 +327,11 @@ namespace Wheel::Outfits {
             if(job->index==job->operations.size()) {
                 auto inventory=Inventory();std::vector<int> matches;
                 const bool success=job->removeOnly?
-                    std::none_of(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;}):
-                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches);
-                Finish(success?(job->removeOnly?"outfitRemoved":"outfitApplied"):"outfitPartial");return;
+                    RemovalComplete(job->preset,inventory):
+                    Resolve(job->preset,inventory,matches)&&Wearing(inventory,matches,job->preset);
+                const char* applied=job->preset.missingPolicy==MissingPolicy::Skip?"outfitAppliedAvailable":"outfitApplied";
+                const char* removed=job->preset.missingPolicy==MissingPolicy::Skip?"outfitRemovedAvailable":"outfitRemoved";
+                Finish(success?(job->removeOnly?removed:applied):"outfitPartial");return;
             }
             const auto& op=job->operations[job->index];
             // Do not clean up old apparel until every target is observed worn.
@@ -337,8 +344,13 @@ namespace Wheel::Outfits {
                 if(!OutfitBudgetAvailable(calls,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-now).count()))return;
             }
             const auto form=RuntimeID(op.piece.base);
-            if(!form){Finish("outfitChanged");return;}
-            auto inventory=Inventory(form);const int match=Match(op.piece,inventory);
+            const auto inventory=form?Inventory(form):std::vector<Candidate>{};
+            if(job->preset.missingPolicy==MissingPolicy::Skip && MissingFromInventory(op.piece,inventory)) {
+                SKSE::log::info("Outfit {} skipped absent step {}/{}: {} base={}:{:X}",job->preset.id,
+                    job->index+1,job->operations.size(),op.piece.label,op.piece.base.plugin,op.piece.base.id);
+                ++job->index;job->issued=false;continue;
+            }
+            const int match=Match(op.piece,inventory);
             if(match<0){Finish("outfitChanged");return;}
             const auto& candidate=inventory[match];
             switch(DecideStep(candidate.worn,op.equip,job->issued,std::chrono::duration<double>(std::chrono::steady_clock::now()-job->issuedAt).count())) {
@@ -366,6 +378,7 @@ namespace Wheel::Outfits {
             const auto found=std::find_if(presets.begin(),presets.end(),[&](const Preset& p){return p.id==id;});
             if(found==presets.end())return false;next.original=*found;
         }
+        next.missingPolicy=next.original.missingPolicy;
         // Game thread only. No extra-data pointers escape this snapshot.
         const auto inventory=Inventory(0,true);
         for(const auto& c:inventory)next.inventory.push_back({c.piece,c.mask,c.worn});
@@ -378,7 +391,7 @@ namespace Wheel::Outfits {
         next.Refresh();state=std::move(next);return true;
     }
     bool SaveEdit(const Edit::State& state) {
-        Preset edited;if(!Edit::Save(state.original,state.draft,edited))return false;
+        Preset edited;if(!state.Save(edited))return false;
         std::lock_guard lock(mutex);auto next=presets;
         for(auto& p:next)if(p.id==edited.id) {
             // Reject stale drafts instead of overwriting another change.

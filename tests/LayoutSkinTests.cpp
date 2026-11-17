@@ -12,8 +12,29 @@ int main() {
     using namespace Wheel;
     {
         const std::vector<Rect> management{outfitNameButton,outfitOverwriteButton,outfitDeleteButton,outfitEditButton,outfitShareButton,applyButton,cancelButton};
-        std::vector<Rect> editor{outfitDraftList,outfitInventoryList,outfitRemoveButton,outfitAddButton,applyButton,cancelButton,{-300,-214,600,24}};
+        std::vector<Rect> editor{outfitDraftList,outfitInventoryList,outfitRemoveButton,outfitAddButton,outfitMissingButton,outfitEditSaveButton,outfitEditCancelButton,{-300,-214,600,24}};
         for(int i=0;i<7;++i)editor.push_back(OutfitFilterTab(i));
+        for(const auto& rect:{outfitDraftList,outfitInventoryList,outfitRemoveButton,outfitAddButton,outfitMissingButton})
+            Check(rect.y+rect.h<=outfitEditDividerY,"Outfit content controls stay above the footer divider");
+        for(const auto& rect:{outfitEditSaveButton,outfitEditCancelButton})
+            Check(rect.y>outfitEditDividerY,"Outfit save and cancel stay in the footer");
+        for(int tab=0;tab<static_cast<int>(settingsTabs.size());++tab) {
+            const auto& rect=settingsTabs[tab];
+            Check(SettingsTabAt(rect.x+rect.w/2,rect.y+rect.h/2)==tab,"All settings tabs have matching hit regions");
+            for(int slot=0;slot<SettingCount(tab);++slot) {
+                const auto value=ValueButton(slot,tab);
+                Check(value.y>=-174&&value.y+value.h<=140,"Setting rows retain space above bottom hints");
+                if(slot)Check(ValueButton(slot-1,tab).y+ValueButton(slot-1,tab).h<value.y,"Setting rows have vertical spacing");
+            }
+        }
+        Check(SettingsTabAt(0,220)==-1,"Footer does not switch settings tabs");
+        Check(outfitEditMessageY-6-outfitMissingButton.y-outfitMissingButton.h>=12,
+            "Outfit status text has breathing room below the missing toggle");
+        Check(outfitEditDividerY-outfitEditMessageY>=18&&outfitEditSaveButton.y-outfitEditDividerY>=18,
+            "Outfit footer divider has space above and below");
+        Check(outfitEditHelpY-outfitEditSaveButton.y-outfitEditSaveButton.h>=18&&outfitEditHelpY+6<325,
+            "Outfit bottom hint clears buttons and frame edge");
+        Check(generalTab.x<iconsTab.x&&iconsTab.x<controlsTab.x,"Icons tab sits immediately after appearance");
         // Management actions are replaced by the editor, never drawn behind its lists.
         for(const auto& panel:{management,editor})for(std::size_t i=0;i<panel.size();++i) {
             const auto& rect=panel[i];
@@ -40,7 +61,7 @@ int main() {
     Check(!memory.Resolve(true,true,false) && memory.Resolve(false,true,true),"Restricted forms force inventory without overwriting human memory");
     memory.Reset();Check(!memory.Resolve(false,true,true),"Loading a save resets opening memory");
     Check(SettingCount(2)==10 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay settings expose all current gameplay options");
-    Check(SettingCount(0)==11 && SettingRow(0,10)==28,"Display settings expose action-notification control");
+    Check(std::find(std::begin(GeneralRows),std::end(GeneralRows),28)!=std::end(GeneralRows),"Display settings expose action-notification control");
     int hits=0,placements=0;
     for(const auto shape:{WheelShape::Circle,WheelShape::Ellipse,WheelShape::Polygon})
         for(const float x:{.9f,1.2f,1.25f})for(const float y:{.9f,.94f,1.2f}) {

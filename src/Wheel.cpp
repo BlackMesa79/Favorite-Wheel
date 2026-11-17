@@ -1054,9 +1054,8 @@ namespace Wheel {
             const auto current=Snapshot();
             const float x=current.x*224, y=current.y*224;
             if (current.capturingKey) return;
-            if(generalTab.Contains(x,y) || controlsTab.Contains(x,y) || gameplayTab.Contains(x,y) || gamepadTab.Contains(x,y)) {
-                std::lock_guard lock(viewMutex);view.settingsTab=gameplayTab.Contains(x,y)?2:gamepadTab.Contains(x,y)?3:controlsTab.Contains(x,y)?1:0;return;
-            }
+            const int tab=SettingsTabAt(x,y);
+            if(tab>=0) {std::lock_guard lock(viewMutex);view.settingsTab=tab;return;}
             if (applyButton.Contains(x,y) && !right) { LeaveSettings(true); return; }
             if (cancelButton.Contains(x,y) && !right) { LeaveSettings(false); return; }
             if (defaultsButton.Contains(x,y) && !right) { DefaultSettings(); return; }
@@ -1099,7 +1098,7 @@ namespace Wheel {
             const auto current=Snapshot();
             if(current.outfitDialog!=7 || current.outfitEdit.loading || current.outfitEdit.saving)return;
             Outfits::Preset checked;
-            if(!Outfits::Edit::Save(current.outfitEdit.original,current.outfitEdit.draft,checked)) {
+            if(!current.outfitEdit.Save(checked)) {
                 std::lock_guard lock(viewMutex);view.outfitEdit.messageKey="outfitEditCountError";view.outfitEdit.replaced.clear();return;
             }
             const auto generation=epoch.load(),serial=openSerial.load();const auto request=outfitEditRequest;
@@ -1122,6 +1121,7 @@ namespace Wheel {
             if(filter){edit.filter=static_cast<Outfits::Edit::Filter>((static_cast<int>(edit.filter)+filter+7)%7);edit.selected[1]=edit.scroll[1]=0;edit.Refresh();}
             edit.selected[edit.column]+=direction;edit.Clamp(true);edit.clickedColumn=-1;
         }
+        void EditToggleMissing() {std::lock_guard lifecycle(lifecycleMutex);std::lock_guard lock(viewMutex);view.outfitEdit.ToggleMissing();}
         void EditExecute() {std::lock_guard lifecycle(lifecycleMutex);std::lock_guard lock(viewMutex);view.outfitEdit.Execute();}
         void EditScroll(int direction) {
             std::lock_guard lifecycle(lifecycleMutex);
@@ -1134,8 +1134,9 @@ namespace Wheel {
         void EditClick() {
             std::lock_guard lifecycle(lifecycleMutex);
             const auto current=Snapshot();const float x=current.x*224,y=current.y*224;
-            if(cancelButton.Contains(x,y)){EndOutfitDialog();return;}
-            if(applyButton.Contains(x,y)){SaveOutfitEdit();return;}
+            if(outfitEditCancelButton.Contains(x,y)){EndOutfitDialog();return;}
+            if(outfitEditSaveButton.Contains(x,y)){SaveOutfitEdit();return;}
+            if(outfitMissingButton.Contains(x,y)){EditToggleMissing();return;}
             std::lock_guard lock(viewMutex);auto& edit=view.outfitEdit;
             if(edit.loading || edit.saving)return;
             for(int i=0;i<7;++i)if(OutfitFilterTab(i).Contains(x,y)) {
@@ -1147,7 +1148,7 @@ namespace Wheel {
             for(int col=0;col<2;++col) {
                 const auto rect=col?outfitInventoryList:outfitDraftList;
                 if(!rect.Contains(x,y))continue;
-                const int slot=static_cast<int>((y-rect.y)/48);
+                const int slot=static_cast<int>((y-rect.y)/Outfits::Edit::rowHeight);
                 const int row=edit.scroll[col]+slot;
                 if(slot>=Outfits::Edit::visibleRows || row>=edit.Count(col))return;
                 const double now=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -1410,12 +1411,14 @@ namespace Wheel {
                                 else if(code==208 || code==31)EditNavigate(-1,1);
                                 else if(code==203 || code==30)EditNavigate(0,0);
                                 else if(code==205 || code==32)EditNavigate(1,0);
+                                else if(code==50)EditToggleMissing();
                                 else if(code==16)EditNavigate(-1,0,-1);
                                 else if(code==18)EditNavigate(-1,0,1);
                             }else if(button->GetDevice()==RE::INPUT_DEVICE::kMouse) {
                                 if(code==0)EditClick();else if(code==8 || code==9)EditScroll(code==8?-1:1);
                             }else if(pad==277)EndOutfitDialog();
                             else if(pad==279)SaveOutfitEdit();
+                            else if(pad==278)EditToggleMissing();
                             else if(pad==276)EditExecute();
                             else if(pad==266 || pad==267)EditNavigate(-1,pad==266?-1:1);
                             else if(pad==268 || pad==269)EditNavigate(pad==268?0:1,0);

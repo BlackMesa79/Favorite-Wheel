@@ -1,6 +1,6 @@
 # 文档索引
 
-更新：2026-10-28（接手审查 task 20261028-takeover-review）。当前版本 0.9.0。
+更新：2026-10-28（接手审查 task 20261028-takeover-review）。当前本地候选版本 0.11.0；发布准备见 [RELEASE_0.11.0.md](RELEASE_0.11.0.md)。
 
 **先读这三份**：项目根目录的 `HANDOFF_CURRENT.md`（当前交接及“不要回归的修复”）、[ARCHITECTURE.md](ARCHITECTURE.md) 末尾的“2026-10-28 接手补充”（模块、线程、序列化、INI、构建部署）、[reports/20261028-takeover-review-audit.md](reports/20261028-takeover-review-audit.md)（最新审查）。
 

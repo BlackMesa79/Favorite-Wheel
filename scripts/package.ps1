@@ -39,6 +39,16 @@ Copyright (C) 2026 BlackMesa79
 SPDX-License-Identifier: GPL-3.0-only
 https://github.com/BlackMesa79/Favorite-Wheel
 
+NEW IN 0.11.0
+I4 rule and SWF icon support with Theme / I4 / Original colors, background
+rendering and optional disk caching. Install rule/icon mods separately.
+Settings now have Appearance, Icons, Keyboard, Controller and Gameplay tabs.
+Outfit editor spacing is improved. Each outfit can optionally skip items whose
+base item is absent from inventory (off by default). Save the preset and game.
+The reported TNG slot 52 compatibility fix awaits reporter confirmation.
+FWO 1/2 presets remain readable; new presets use FWO 3 / co-save version 3.
+I4 colors, small-icon sampling and favorited SGT/MISC instrument use are fixed.
+
 INSTALLATION AND CONTROLS
 Install with your mod manager and launch through SKSE64. Requires SKSE64 and
 Address Library matching your game version, plus the Microsoft Visual C++
