@@ -227,6 +227,41 @@ namespace Wheel::FrameworkSettings {
         template<Page page> void __stdcall Render() {
             try {RenderPage(page);}catch(const std::exception& e){SKSE::log::error("Framework settings rendering failed: {}",e.what());}
         }
+        // Screen arbitration uses only the framework's published 3-API exports
+        // (SKSEMenuFramework.h): both are read-only state queries, so the
+        // framework keeps working when it is updated. Its input path is not
+        // hooked or patched in any way.
+        using BlockingWindowQuery=bool (*)();
+        struct FrameworkWindow { std::atomic<bool> isOpen; std::atomic<bool> blockUserInput; };
+        using MainWindowQuery=FrameworkWindow* (*)();
+        struct WindowArbitration {
+            BlockingWindowQuery anyBlockingWindow=nullptr;
+            MainWindowQuery mainWindow=nullptr;
+            bool bound=false;
+        };
+        WindowArbitration& Arbitration() {
+            // The framework may be loaded after this plugin, so keep re-probing.
+            static WindowArbitration arbitration;
+            if(!arbitration.bound) {
+                if(const auto module=GetModuleHandleW(L"SKSEMenuFramework.dll")) {
+                    arbitration.anyBlockingWindow=reinterpret_cast<BlockingWindowQuery>(GetProcAddress(module,"IsAnyBlockingWindowOpened"));
+                    arbitration.mainWindow=reinterpret_cast<MainWindowQuery>(GetProcAddress(module,"GetMainWindow"));
+                    if((arbitration.bound=arbitration.anyBlockingWindow!=nullptr || arbitration.mainWindow!=nullptr))
+                        SKSE::log::info("SKSE Menu Framework window arbitration active: blockingQuery={} mainWindow={}",
+                            arbitration.anyBlockingWindow!=nullptr,arbitration.mainWindow!=nullptr);
+                }
+            }
+            return arbitration;
+        }
+    }
+    bool BlockingWindowOpen() {
+        const auto& arbitration=Arbitration();
+        if(arbitration.anyBlockingWindow && arbitration.anyBlockingWindow())return true;
+        // IsOpen is the first member of the published WindowInterface class;
+        // BlockUserInput defaults to true, so IsOpen alone decides ownership.
+        if(arbitration.mainWindow)if(const auto window=arbitration.mainWindow())
+            return window->isOpen.load(std::memory_order_relaxed);
+        return false;
     }
     void Register() {
         static bool registered=false;if(registered)return;

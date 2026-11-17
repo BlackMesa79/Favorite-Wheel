@@ -6,6 +6,7 @@
 #include "CombatCycleModel.h"
 #include "CombatPresetModel.h"
 #include "Settings.h"
+#include "FrameworkSettings.h"
 #include "InputGate.h"
 #include "InputDispatchChain.h"
 #include "OpenPolicy.h"
@@ -166,6 +167,10 @@ namespace Wheel {
             if (!Focused()) return "game not foreground";
             if (!ui) return "UI unavailable";
             if (const auto menu = BlockingMenu()) return menu;
+            // SKSE Menu Framework windows are not native menus, so BlockingMenu()
+            // cannot see them; opening here would draw the wheel over the framework
+            // and swallow its gamepad navigation.
+            if (FrameworkSettings::BlockingWindowOpen()) return "SKSE Menu Framework window open";
             if (ui->GameIsPaused()) return "another menu pauses game";
             if (!controls) return "control map unavailable";
             if (!controls->IsMenuControlsEnabled()) return "menu controls disabled";
@@ -1254,6 +1259,25 @@ namespace Wheel {
             if (dispatchCount.fetch_add(1) == 0) SKSE::log::info("Input dispatch active (first callback)");
             ProbeInitialSession();
             auto ui=RE::UI::GetSingleton();
+            // SKSE Menu Framework windows own every input device while open: ImGui
+            // navigation consumes the same raw gamepad/keyboard stream. Yield the
+            // whole batch untouched and drop a wheel that opened before the window
+            // appeared, otherwise captured buttons starve the framework's controls.
+            if (FrameworkSettings::BlockingWindowOpen()) {
+                if (IsOpen() || openQueued) {
+                    SKSE::log::info("Wheel yields to an open SKSE Menu Framework window");
+                    Cancel(false);
+                }
+                // Nothing owns these devices now, so no physical release may stay
+                // swallowed once the framework window closes again.
+                inputGate.Reset();movementStick.Capture(false);lookStick.Reset(AppliedGamepadMoveWhileOpen());
+                controllerPages.Reset();controllerTriggers.Reset();padChords.Reset();
+                std::fill_n(keyboardHeld,256,false);shiftHeld[0]=shiftHeld[1]=false;
+                { std::lock_guard lock(viewMutex); padX=padY=0; }
+                previousDispatch(source, events);
+                PumpAction();
+                return;
+            }
             bool captureBatch = IsOpen() || closing || openQueued ||
                 (ui && (ui->IsMenuOpen(menuName) || ui->IsMenuOpen(pauseMenuName)));
             movementStick.Capture(captureBatch);
