@@ -116,6 +116,7 @@ namespace Wheel::FrameworkSettings {
                 draft.i4IconCache=defaults.i4IconCache;draft.i4IconCacheMB=defaults.i4IconCacheMB;break;
             case Page::Gameplay:
                 draft.allInventory=defaults.allInventory;draft.hideEmptyCategories=defaults.hideEmptyCategories;
+                draft.shieldsInWeapons=defaults.shieldsInWeapons;draft.outfitSkipMissingAll=defaults.outfitSkipMissingAll;
                 draft.rememberLastWheel=defaults.rememberLastWheel;draft.keepOpen=defaults.keepOpen;
                 draft.keepOpenConsumables=defaults.keepOpenConsumables;draft.timeMode=defaults.timeMode;
                 draft.slowPercent=defaults.slowPercent;
@@ -205,6 +206,7 @@ namespace Wheel::FrameworkSettings {
                 Slider("slowTimePercent",draft.slowPercent,50,100);
                 api.endDisabled();
                 Check("kbMoveWhileOpen",draft.kbMoveWhileOpen);Keyboard("kbCategoryPrevKey",draft.kbCategoryPrevKey);Keyboard("kbCategoryNextKey",draft.kbCategoryNextKey);
+                Check("shieldsInWeapons",draft.shieldsInWeapons);Check("outfitSkipMissingAll",draft.outfitSkipMissingAll);
                 break;
             }
             case Page::Keyboard: {

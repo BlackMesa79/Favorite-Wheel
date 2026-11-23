@@ -103,13 +103,34 @@ void DisabledAndClear(const fs::path& root) {
     Write(temporary,{1});{IconCache::Store restart(directory);restart.Configure(true,64);Check(!restart.Get(hash,key) && !fs::exists(temporary),"orphan temp alone is a miss");}
     std::cout<<"PASS disabled/clear/interrupted write\n";
 }
+void LazyDirectory(const fs::path& root) {
+    const auto parent=root/"lazy-directory",directory=parent/"IconCache";
+    const auto hash=Hash("lazy-directory");
+    const IconCache::Key key{"icon",Swf::Variant::Mask,32};const auto bitmap=Pixels(32);
+    unsigned warnings=0;IconCache::Store cache(directory,[&](const auto&){++warnings;});
+    cache.Configure(true,64);cache.Configure(true,32);cache.Flush();
+    Check(cache.DiskAvailable() && !fs::exists(parent) && warnings==0,"startup and budget change leave absent directory untouched");
+    Check(!cache.Get(hash,key) && !fs::exists(parent),"disk miss does not create directory");
+    Check(cache.Clear() && !fs::exists(parent),"clear on absent cache succeeds without creating directory");
+    cache.Put(hash,key,bitmap);
+    Check(!fs::exists(parent),"pending bitmap does not create directory before commit");
+    cache.Flush();
+    Check(fs::exists(directory/(hash+".fwic")) && cache.WriteCount()==1,"first commit creates directory and cache file");
+    IconCache::Store reader(directory);reader.Configure(true,32);
+    const auto hit=reader.Get(hash,key);
+    Check(hit && hit->rgba==bitmap.rgba && reader.WriteCount()==0,"new store reads existing disk cache without writing a bitmap");
+    std::cout<<"PASS lazy cache directory lifecycle\n";
+}
 void Unwritable(const fs::path& root) {
     const auto blocker=root/"blocker";Write(blocker,{1});
     const auto hash=Hash("fallback");IconCache::Key key{"icon",Swf::Variant::Mask,32};auto bitmap=Pixels(32);
     unsigned warnings=0;
     IconCache::Store missing(blocker/"cache",[&](const auto&){++warnings;});missing.Configure(true,64);
-    missing.Put(hash,key,bitmap);Check(missing.Get(hash,key)->rgba==bitmap.rgba,"cannot create directory retains memory bitmap");
-    missing.Put(hash,key,bitmap);Check(!missing.DiskAvailable() && warnings==1,"unwritable directory warns once");
+    missing.Put(hash,key,bitmap);missing.Flush();
+    const auto memory=missing.Get(hash,key);
+    Check(memory && memory->rgba==bitmap.rgba,"cannot create directory retains memory bitmap");
+    missing.Put(hash,key,bitmap);missing.Flush();
+    Check(!missing.DiskAvailable() && warnings==1,"unwritable directory warns once on commit");
     // 对独立临时目录设置真实 Windows DACL；不用没有权限意义的目录 readonly 属性。
     const auto directory=root/"readonly";fs::create_directories(directory);
     PACL original=nullptr;PSECURITY_DESCRIPTOR descriptor=nullptr;
@@ -125,6 +146,8 @@ void Unwritable(const fs::path& root) {
     Check(SetEntriesInAclW(1,&access,original,&restore.denied)==ERROR_SUCCESS,"build readonly ACL");
     Check(SetNamedSecurityInfoW(const_cast<LPWSTR>(directory.c_str()),SE_FILE_OBJECT,DACL_SECURITY_INFORMATION,nullptr,nullptr,restore.denied,nullptr)==ERROR_SUCCESS,"set readonly ACL only on test directory");
     warnings=0;IconCache::Store readonly(directory,[&](const auto&){++warnings;});readonly.Configure(true,64);readonly.Put(hash,key,bitmap);
+    Check(readonly.DiskAvailable() && warnings==0,"unwritable directory is not probed before flush");
+    readonly.Flush();
     Check(!readonly.DiskAvailable() && readonly.Get(hash,key)->rgba==bitmap.rgba && warnings==1,"real readonly directory falls back to memory once");
     Check(fs::is_empty(directory),"readonly directory has no files");
     std::cout<<"PASS cannot-create/readonly memory fallback\n";
@@ -292,7 +315,7 @@ void SettingsCoverage(const fs::path& root) {
 int main() {
     try {
         const auto root=fs::path("build/i4-phase3/t4b-fix1/unit")/std::to_string(GetCurrentProcessId());fs::create_directories(root);
-        Basic(root);Validation(root);DisabledAndClear(root);Unwritable(root);TouchFailure(root);TrimFailure(root);TrimEvictionFailure(root);Capacity(root);Batching(root);SettingsCoverage(root);
+        Basic(root);Validation(root);DisabledAndClear(root);LazyDirectory(root);Unwritable(root);TouchFailure(root);TrimFailure(root);TrimEvictionFailure(root);Capacity(root);Batching(root);SettingsCoverage(root);
         std::cout<<"IconCacheTests passed: "<<checks<<" checks; fixtures="<<root.string()<<'\n';return 0;
     } catch(const std::exception& error){std::cerr<<"IconCacheTests failed: "<<error.what()<<'\n';return 1;}
 }

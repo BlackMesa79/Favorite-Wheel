@@ -100,6 +100,8 @@ namespace Wheel {
     Settings Config() { std::lock_guard lock(settingsMutex); return settings; }
     bool AppliedGamepadMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).gamepadMoveWhileOpen;}
     bool AppliedI4Icons() {return I4::Runtime().icons;}
+    bool AppliedShieldsInWeapons() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).shieldsInWeapons;}
+    bool AppliedOutfitSkipMissingAll() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).outfitSkipMissingAll;}
     bool AppliedKbMoveWhileOpen() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbMoveWhileOpen;}
     int AppliedKbCategoryPrevKey() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbCategoryPrevKey;}
     int AppliedKbCategoryNextKey() {std::lock_guard lock(settingsMutex);return (editing?saved:settings).kbCategoryNextKey;}
@@ -122,6 +124,8 @@ namespace Wheel {
             settings.allInventory = number(L"General",L"AllInventory",settings.allInventory) != 0;
             settings.rememberLastWheel=number(L"General",L"RememberLastWheel",settings.rememberLastWheel)!=0;
             settings.hideEmptyCategories=number(L"General",L"HideEmptyCategories",settings.hideEmptyCategories)!=0;
+            settings.shieldsInWeapons=number(L"General",L"ShieldsInWeapons",settings.shieldsInWeapons)!=0;
+            settings.outfitSkipMissingAll=number(L"General",L"OutfitSkipMissingAll",settings.outfitSkipMissingAll)!=0;
             settings.keepOpenConsumables=number(L"General",L"KeepOpenConsumables",settings.keepOpenConsumables)!=0;
             settings.keepOpen = number(L"General",L"KeepOpen",settings.keepOpen) != 0;
             settings.timeMode=number(L"General",L"TimeMode",settings.timeMode);
@@ -233,6 +237,8 @@ namespace Wheel {
             write(L"General",L"AllInventory",settings.allInventory?"1":"0") &&
             write(L"General",L"RememberLastWheel",settings.rememberLastWheel?"1":"0") &&
             write(L"General",L"HideEmptyCategories",settings.hideEmptyCategories?"1":"0") &&
+            write(L"General",L"ShieldsInWeapons",settings.shieldsInWeapons?"1":"0") &&
+            write(L"General",L"OutfitSkipMissingAll",settings.outfitSkipMissingAll?"1":"0") &&
             write(L"General",L"KeepOpenConsumables",settings.keepOpenConsumables?"1":"0") &&
             write(L"General",L"KeepOpen",settings.keepOpen?"1":"0") &&
             write(L"General",L"TimeMode",std::to_string(settings.timeMode)) &&

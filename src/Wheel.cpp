@@ -245,7 +245,7 @@ namespace Wheel {
                     labels[static_cast<int>(mode)];
                 if(mode==Ordering::Mode::StatDescending || mode==Ordering::Mode::StatAscending) {
                     const bool ascending=mode==Ordering::Mode::StatAscending;
-                    label=view.category==Category::Weapons?(ascending?"sortDamageAsc":"sortDamageDesc"):
+                    label=view.category==Category::Weapons?(AppliedShieldsInWeapons()?label:(ascending?"sortDamageAsc":"sortDamageDesc")):
                         view.category==Category::Armor?(ascending?"sortArmorAsc":"sortArmorDesc"):(ascending?"sortCostAsc":"sortCostDesc");
                 }
                 view.sortingLabel=Tr(Config(),label);
@@ -660,7 +660,10 @@ namespace Wheel {
                 const auto now=Snapshot();
                 if(generation!=epoch.load() || serial!=openSerial.load() || !now.open || now.functions!=combat ||
                     now.settingsOpen || now.outfitDialog || !Focused() || !ValidPlayer() || BlockedMenu() ||
-                    HasPendingAction() || Outfits::Busy() || Combat::Busy())return;
+                    HasPendingAction() || Outfits::Busy() || Combat::Busy()) {
+                    if(!combat)SKSE::log::info("Favorite quick slot: form={:08X} key={} assignment=skipped reason=context-changed",selected.key.form,slot+1);
+                    return;
+                }
                 int next=-1;
                 if(combat) {
                     if(now.functionSection!=FaceLight::Section::Combat || !Combat::BindQuickSlot(selected.actionId,slot,&next))return;
@@ -671,7 +674,10 @@ namespace Wheel {
                     RE::SendHUDMessage::ShowHUDMessage(Tr(Config(),next<0?"combatQuickUnbound":"combatQuickBound").c_str());
                     RefreshFunctions();return;
                 }
-                if(!BindFavoriteQuickSlot(selected,slot,&next))return;
+                if(!BindFavoriteQuickSlot(selected,slot,&next)) {
+                    SKSE::log::info("Favorite quick slot: form={:08X} key={} assignment=failed reason=bind-rejected",selected.key.form,slot+1);
+                    return;
+                }
                 Combat::ClearQuickSlot(slot);
                 std::lock_guard lock(viewMutex);
                 if(generation!=epoch.load() || serial!=openSerial.load() || !view.open || view.functions)return;
@@ -907,21 +913,23 @@ namespace Wheel {
             return controls && controls->GetMappingFromEventName("Favorites",RE::UserEvents::INPUT_CONTEXT_ID::kGameplay,
                 RE::INPUT_DEVICE::kGamepad,mapping)?ControllerModifierMask(mapping.modifier):0;
         }
-        std::uint16_t OpeningControllerHeld(ControllerSample sample) {
-            const auto config=Config();
-            return ControllerOpeningHeld(padChords.Mask(),sample,EffectiveGamepadKey(config),
-                NativeGamepadModifiers() | ControllerKeyBit(config.gamepadModifier) | ControllerKeyBit(config.gamepadActionModifier));
+        std::uint16_t OpeningControllerHeld(ControllerSample sample,int mainKey) {
+            return ControllerOpeningHeld(padChords.Mask(),sample,mainKey);
         }
         bool ReplacedEntrance(const RE::ButtonEvent* button,ControllerSample sample) {
             const auto config=Config();
             if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard)
                 return button->GetIDCode()==FavoritesScanCode() && static_cast<int>(button->GetIDCode())==EffectiveKeyboardKey(config);
-            if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad)
-                return button->GetIDCode()==FavoritesScanCode(RE::INPUT_DEVICE::kGamepad) &&
-                    static_cast<int>(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()))==EffectiveGamepadKey(config) &&
-                    !ForeignGamepadChord(OpeningControllerHeld(sample),EffectiveGamepadKey(config),NativeGamepadModifiers(),
+            if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad) {
+                const int favorite=EffectiveGamepadKey(config);
+                if(button->GetIDCode()!=FavoritesScanCode(RE::INPUT_DEVICE::kGamepad) ||
+                    static_cast<int>(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()))!=favorite)return false;
+                const auto held=OpeningControllerHeld(sample,favorite);
+                const auto nativeRequired=NativeGamepadModifiers();
+                return !ForeignGamepadChord(held,favorite,nativeRequired,
                         config.gamepadHotkey<0,config.gamepadModifier,config.gamepadActionModifier) &&
-                    (OpeningControllerHeld(sample) & NativeGamepadModifiers())==NativeGamepadModifiers();
+                    (held & nativeRequired)==nativeRequired;
+            }
             return false;
         }
         Opening ToggleKey(const RE::ButtonEvent* button,ControllerSample sample) {
@@ -934,7 +942,7 @@ namespace Wheel {
             if(button->GetDevice()==RE::INPUT_DEVICE::kGamepad) {
                 const int favorite=EffectiveGamepadKey(config);
                 return ResolvedGamepadOpening(SKSE::InputMap::GamepadMaskToKeycode(button->GetIDCode()),favorite,
-                    OpeningControllerHeld(sample),NativeGamepadModifiers(),config.gamepadHotkey<0,
+                    OpeningControllerHeld(sample,favorite),NativeGamepadModifiers(),config.gamepadHotkey<0,
                     config.gamepadModifier,config.gamepadActionModifier);
             }
             return Opening::None;
@@ -983,6 +991,8 @@ namespace Wheel {
         }
         void LeaveSettings(bool save) {
             const bool i4WasEnabled=AppliedI4Icons();
+            const bool shieldsWereInWeapons=AppliedShieldsInWeapons();
+            const bool outfitsWereSkipping=AppliedOutfitSkipMissingAll();
             if (save && !SaveSettings()) {
                 SKSE::log::error("Settings save failed: {}",SettingsDiagnostic());
                 std::lock_guard lock(viewMutex);view.saveError=true;return;
@@ -993,16 +1003,20 @@ namespace Wheel {
                     SettingsDiagnostic(),config.language,config.theme,config.scale,config.hotkey,config.keepOpen,config.gamepadCategoryButtons,config.gamepadMoveWhileOpen,config.kbMoveWhileOpen,config.kbCategoryPrevKey,config.kbCategoryNextKey);
             }
             if (!save) RevertSettings();
-            bool reload=false;
+            const auto config=Config();
+            bool reload=false,refreshFunctions=false;
             {std::lock_guard lock(viewMutex);
                 view.settingsOpen=view.capturingKey=view.saveError=false;view.x=view.y=0;
                 padX=padY=0;
-                if(save && (Config().allInventory!=inventoryScope || (!i4WasEnabled && Config().i4Icons))) {
+                if(save && (config.allInventory!=inventoryScope || (!i4WasEnabled && config.i4Icons) ||
+                    config.shieldsInWeapons!=shieldsWereInWeapons)) {
                     inventoryLoaded=false;++directoryRevision;reload=!view.functions;
                 }
+                refreshFunctions=save && view.functions && config.outfitSkipMissingAll!=outfitsWereSkipping;
                 if(!reload && inventoryLoaded && !view.functions)FilterItems();
             }
             if(reload)RequestDirectory();
+            if(refreshFunctions)RefreshFunctions();
             SyncWheelTime();
         }
         void AdjustSetting(int row,int direction) {
@@ -1036,6 +1050,8 @@ namespace Wheel {
             case 25: config.swapMouseHands=!config.swapMouseHands; break;
             case 26: config.rememberLastWheel=!config.rememberLastWheel; break;
             case 27: config.keepOpenConsumables=!config.keepOpenConsumables; break;
+            case shieldsInWeaponsRow: config.shieldsInWeapons=!config.shieldsInWeapons; break;
+            case outfitSkipMissingAllRow: config.outfitSkipMissingAll=!config.outfitSkipMissingAll; break;
             case 28: config.showActionNotifications=!config.showActionNotifications; break;
             case 29: config.kbMoveWhileOpen=!config.kbMoveWhileOpen; break;
             case 30: config.kbCategoryPrevKey=-1; break;
@@ -1316,18 +1332,26 @@ namespace Wheel {
                     const auto code = button->GetIDCode();
                     const auto identity = (static_cast<std::uint64_t>(button->GetDevice()) << 32) | code;
                     const bool pressed = button->IsPressed();
+                    const bool keyboard=button->GetDevice()==RE::INPUT_DEVICE::kKeyboard;
                     const bool gamepad=button->GetDevice()==RE::INPUT_DEVICE::kGamepad;
+                    const int quickSlot=keyboard?QuickSlotFromKey(code,button->GetUserEvent().c_str()):-1;
                     const auto pad=gamepad?SKSE::InputMap::GamepadMaskToKeycode(code):0u;
                     const bool pageDown=gamepad && controllerPages.Observe(pad,pressed,button->IsDown());
                     const bool triggerDown=gamepad && controllerTriggers.Observe(pad,pressed,button->IsDown());
                     // Some controller event sources omit the native zero-duration
                     // down or emit release with zero duration. Do not retain the
                     // UI's swallowed state after an observed physical release.
-                    const bool up = gamepad?!pressed:button->IsUp();
+                    const bool wasSwallowed=inputGate.Swallowed(identity);
+                    const bool nativeUp=button->IsUp();
+                    const bool zeroDurationRelease=keyboard && wasSwallowed && button->Value()==0.f && !nativeUp;
+                    const bool up = gamepad?!pressed:nativeUp || zeroDurationRelease;
                     const bool down = gamepad && IsOpen() && (pad==266 || pad==267 || pad==280 || pad==281)?
                         (pad>=280?triggerDown:pageDown):button->IsDown();
+                    // A new keyboard down after the wheel has closed can follow
+                    // a key-up hidden by a menu or another input hook.
+                    const bool recovered=wasSwallowed && down && !captureBatch && ValidQuickSlot(quickSlot) && inputGate.RecoverFreshPress(identity);
                     bool nameRepeat=false;
-                    if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && code<256) {
+                    if(keyboard && code<256) {
                         if(up)nameRepeatAt[code]=0;
                         else if(down)nameRepeatAt[code]=.4f;
                         else if(pressed && nameRepeatAt[code]>0 && button->GetRuntimeData().heldDownSecs>=nameRepeatAt[code]) {
@@ -1356,15 +1380,16 @@ namespace Wheel {
                     if(down && pad && (toggle || pad==266 || static_cast<int>(pad)==EffectiveGamepadKey(Config()))) {
                         const auto reason=yieldEntry?"entry control group disabled":OpenBlockReason();
                         const auto config=Config();const int favorite=EffectiveGamepadKey(config);
-                        const auto openingMask=OpeningControllerHeld(controllerSample);
+                        const auto openingMask=OpeningControllerHeld(controllerSample,favorite);
                         auto held=[&](int key){return key<0 || (key!=favorite && (openingMask & ControllerKeyBit(key)));};
-                        SKSE::log::info("Controller entrance: raw={} key={} mapped={} effective={} mode={} open={} blocked='{}' favoriteModifier={} favoriteHeld={} actionModifier={} actionHeld={} heldMask={:04X} nativeRequired={:04X} followNative={} engineAvailable={} engineMask={:04X} openingMask={:04X} event='{}' state=events+engine-v2 binding=native-chord-v1",
+                        SKSE::log::info("Controller entrance: raw={} key={} mapped={} effective={} mode={} open={} blocked='{}' favoriteModifier={} favoriteHeld={} actionModifier={} actionHeld={} heldMask={:04X} nativeRequired={:04X} followNative={} engineAvailable={} engineMask={:04X} openingMask={:04X} event='{}' state=events+engine-v3 binding=native-chord-v1",
                             code,pad,FavoritesScanCode(RE::INPUT_DEVICE::kGamepad),favorite,
                             opening==Opening::Actions?"actions":opening==Opening::Favorites?"favorites":"none",IsOpen(),reason?reason:"none",
                             config.gamepadModifier,held(config.gamepadModifier),config.gamepadActionModifier,held(config.gamepadActionModifier),padChords.Mask(),NativeGamepadModifiers(),config.gamepadHotkey<0,
                             controllerSample.available,controllerSample.held,openingMask,button->GetUserEvent().c_str());
                     }
                     bool consume = captureBatch || inputGate.Swallowed(identity);
+                    const char* shortcutOwner="none";
                     const auto current=Snapshot();
                     if(pageDown && current.open)SKSE::log::info("Controller page input: raw={} key={} nativeDown={} swallowed={} settings={} dialog={}",
                         code,pad,button->IsDown(),inputGate.Swallowed(identity),current.settingsOpen,current.outfitDialog);
@@ -1397,10 +1422,11 @@ namespace Wheel {
                             !current.settingsOpen && !current.outfitDialog && !toggle &&
                             code!=static_cast<unsigned>(Config().switchKey) && SortingShortcut(code,HeldModifiers())>=0) && TryCycleShortcut(static_cast<int>(code),HeldModifiers(),toggle)) {
                         consume=true;
-                    } else if(down && !current.open && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard && HeldModifiers()==0 &&
-                        ValidQuickSlot(QuickSlotFromKey(code,button->GetUserEvent().c_str())) && EntryControlsEnabled(button->GetDevice(),code) &&
-                        TryCombatQuickSlot(QuickSlotFromKey(code,button->GetUserEvent().c_str()),toggle,HeldModifiers())) {
+                        shortcutOwner="cycle";
+                    } else if(down && !current.open && ValidQuickSlot(quickSlot) && HeldModifiers()==0 &&
+                        EntryControlsEnabled(button->GetDevice(),code) && TryCombatQuickSlot(quickSlot,toggle,HeldModifiers())) {
                         consume=true;
+                        shortcutOwner="combat";
                     } else if(down && current.open && current.outfitDialog && !inputGate.Swallowed(identity)) {
                         if(current.outfitDialog==7) {
                             if(button->GetDevice()==RE::INPUT_DEVICE::kKeyboard) {
@@ -1485,7 +1511,6 @@ namespace Wheel {
                         else if (!OpenBlockReason()) { RequestOpen(opening==Opening::Actions,button->GetDevice(),code); consume = captureBatch = true; }
                     } else if (down && IsOpen() && !inputGate.Swallowed(identity)) {
                         if (button->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
-                            const int quickSlot=QuickSlotFromKey(code,button->GetUserEvent().c_str());
                             const auto navigation=KeyboardWheelCommand(kbMove,AppliedKbCategoryPrevKey(),AppliedKbCategoryNextKey(),code);
                             if(!kbMove && HeldModifiers()==0 && quickSlot>=0)BindQuickSlot(quickSlot);
                             else if(navigation!=KbWheelCommand::None) {
@@ -1539,10 +1564,11 @@ namespace Wheel {
                         IsMovementEvent(controls->GetUserEventName(code,button->GetDevice())));
                     const auto decision = inputGate.Filter(identity, pressed, up,
                         kbMovement?false:movement?captureBatch:consume, wheelImpulse, movement);
-                    if(down && button->GetDevice()==RE::INPUT_DEVICE::kKeyboard &&
-                        ((code>=2 && code<=11) || code==82 || (code>=79 && code<=81)))
-                        SKSE::log::info("Numeric shortcut input: scan={} event='{}' wheel={} queued={} closing={} filter={}",
-                            code,button->GetUserEvent().c_str(),current.open,openQueued.load(),closing.load(),
+                    if(keyboard && (down || zeroDurationRelease) &&
+                        (ValidQuickSlot(quickSlot) || (code>=2 && code<=11) || code==82 || (code>=79 && code<=81)))
+                        SKSE::log::info("Numeric shortcut input: scan={} event='{}' slot={} phase={} wheel={} queued={} closing={} capturedBatch={} entrance={} owner={} swallowed={} recovered={} filter={}",
+                            code,button->GetUserEvent().c_str(),quickSlot+1,down?"down":"zero-duration-up",current.open,openQueued.load(),closing.load(),
+                            captureBatch,toggle,shortcutOwner,wasSwallowed,recovered,
                             decision==InputGate::Result::Pass?"pass":decision==InputGate::Result::Release?"release":
                             decision==InputGate::Result::Resume?"resume":"suppress");
                     if(down && (pad==274 || pad==275 || pad==280 || pad==281) && consume)
@@ -1798,7 +1824,7 @@ namespace Wheel {
         SKSE::log::info("Game active={}", active);
         if (active) {
             const auto config=Config();const auto favorite=EffectiveKeyboardKey(config);
-            SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={} effectiveFavorite={} favoriteModifiers={} effectiveAction={} actionModifiers={} gamepadMain={} gamepadModifier={} gamepadActionModifier={} controllerState=events+engine-v2",
+            SKSE::log::info("Input state after load: callbacks={} favoritesScan={} override={} effectiveFavorite={} favoriteModifiers={} effectiveAction={} actionModifiers={} gamepadMain={} gamepadModifier={} gamepadActionModifier={} controllerState=events+engine-v3",
                 dispatchCount.load(),FavoritesScanCode(),config.hotkey,favorite,config.hotkeyModifier,
                 config.actionHotkey<0?favorite:config.actionHotkey,config.actionModifier,
                 EffectiveGamepadKey(config),config.gamepadModifier,config.gamepadActionModifier);

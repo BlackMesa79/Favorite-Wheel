@@ -21,6 +21,8 @@
 
 namespace Wheel {
     namespace {
+        struct InventoryViewOptions {bool allInventory;bool shieldsInWeapons;};
+        constexpr int ammoSortType=100,shieldSortType=101;
         bool ImportantProvider() {
             // Inventory collection starts in-game, after all SKSE plugins load.
             // Cache presence once; do not inspect modules per item or per frame.
@@ -43,9 +45,9 @@ namespace Wheel {
             }
             return key;
         }
-        Category Classify(RE::TESBoundObject* form) {
+        Category Classify(RE::TESBoundObject* form,bool shieldsInWeapons) {
             if (form->As<RE::TESObjectWEAP>() || form->As<RE::TESAmmo>()) return Category::Weapons;
-            if (form->As<RE::TESObjectARMO>()) return Category::Armor;
+            if (const auto armor=form->As<RE::TESObjectARMO>()) return ArmorWheelCategory(armor->IsShield(),shieldsInWeapons);
             if (const auto potion = form->As<RE::AlchemyItem>()) {
                 return AlchemyCategory(potion->IsPoison(),potion->IsFood());
             }
@@ -90,9 +92,9 @@ namespace Wheel {
         }
         void SetSortClassification(Item& item,RE::TESBoundObject* object) {
             if(auto weapon=object->As<RE::TESObjectWEAP>())item.sortType=static_cast<int>(weapon->GetWeaponType());
-            else if(object->As<RE::TESAmmo>())item.sortType=100;
+            else if(object->As<RE::TESAmmo>())item.sortType=ammoSortType;
             else if(auto armor=object->As<RE::TESObjectARMO>()) {
-                item.sortType=static_cast<int>(armor->GetArmorType());
+                item.sortType=item.category==Category::Weapons?shieldSortType:static_cast<int>(armor->GetArmorType());
                 switch(item.icon) {
                 case IconKind::Helmet:item.sortSlot=0;break;
                 case IconKind::Armor:case IconKind::Robe:item.sortSlot=armor->IsChestpiece()?1:8;break;
@@ -217,12 +219,12 @@ namespace Wheel {
             return HandEquip::None; // Apparel/ammunition are equipped, but not in a hand.
         }
         void AppendInventory(std::vector<Item>& result,RE::TESBoundObject* object,int count,
-            RE::InventoryEntryData* entry,bool allInventory,const Item* exact=nullptr,double* i4Milliseconds=nullptr) {
+            RE::InventoryEntryData* entry,InventoryViewOptions options,const Item* exact=nullptr,double* i4Milliseconds=nullptr) {
             if(!object || count<=0)return;
-            const auto category=Classify(object);const auto icon=ClassifyIcon(object);const bool usable=Supported(object);
+            const auto category=Classify(object,options.shieldsInWeapons);const auto icon=ClassifyIcon(object);const bool usable=Supported(object);
             const bool instrument=TalentInstrument(object);
             // A favorite marker may cover just one instrument. Keep ordinary copies for display grouping.
-            const bool collectUnfavorited=allInventory || instrument;
+            const bool collectUnfavorited=options.allInventory || instrument;
             auto append=[&](RE::ExtraDataList* extra,int amount,const PlainWeaponStack* stack=nullptr) {
                 if(amount<=0)return;
                 const auto hotkey=extra?extra->GetByType<RE::ExtraHotkey>():nullptr;
@@ -239,7 +241,7 @@ namespace Wheel {
                 result.push_back({Key(object,extra),category,name && *name?name:"?",amount,
                     extra && (extra->HasType<RE::ExtraWorn>() || extra->HasType<RE::ExtraWornLeft>()),
                     false,usable,ActionKind::Favorite,0,icon});
-                auto& item=result.back();item.iconForm=IconForm(object);item.scriptedInstrument=instrument;item.book=object->As<RE::TESObjectBOOK>()!=nullptr;SetSortClassification(item,object);item.favorited=favorite;item.inventoryWide=allInventory;
+                auto& item=result.back();item.iconForm=IconForm(object);item.scriptedInstrument=instrument;item.book=object->As<RE::TESObjectBOOK>()!=nullptr;SetSortClassification(item,object);item.favorited=favorite;item.inventoryWide=options.allInventory;
                 item.miscFallback = !usable && object->As<RE::TESObjectMISC>() != nullptr && favorite;
                 item.handEquip=InventoryHand(object,extra && extra->HasType<RE::ExtraWorn>(),extra && extra->HasType<RE::ExtraWornLeft>());
                 if(stack) {
@@ -268,7 +270,7 @@ namespace Wheel {
                 if(amount>0 && (!anchor || (!anchorFavorite && favorite)) && InventoryVisible(collectUnfavorited,favorite) && (instrument?PlainInstrument(extra):Plain(extra))) {
                     // Preserve native favorites behavior; all-inventory merging
                     // additionally protects ownership/charge/poison/soul differences.
-                    const bool compatible=(!allInventory && !instrument) || (!extra->HasType<RE::ExtraOwnership>() &&
+                    const bool compatible=(!options.allInventory && !instrument) || (!extra->HasType<RE::ExtraOwnership>() &&
                         !extra->HasType<RE::ExtraCharge>() && !extra->HasType<RE::ExtraPoison>() && !extra->HasType<RE::ExtraSoul>());
                     if(compatible){anchor=extra;anchorFavorite=favorite;}
                 }
@@ -302,7 +304,8 @@ namespace Wheel {
             const auto [entry,count]=FindInventory(player,object);
             if(count<=0)return {};
             std::vector<Item> candidates;
-            AppendInventory(candidates,object,static_cast<int>(std::min<std::int64_t>(count,INT_MAX)),entry,requested.inventoryWide,&requested);
+            const InventoryViewOptions options{requested.inventoryWide,AppliedShieldsInWeapons()};
+            AppendInventory(candidates,object,static_cast<int>(std::min<std::int64_t>(count,INT_MAX)),entry,options,&requested);
             for(auto& candidate:candidates)if((requested.weaponStack?candidate.weaponStack:candidate.key==requested.key) &&
                 (!requested.favorited || candidate.favorited))return std::move(candidate);
             return {};
@@ -318,6 +321,7 @@ namespace Wheel {
         const auto formMode=CurrentFormMode();
         if(formMode==FormMode::UnsupportedBeast)return result;
         std::array<Ordering::Mode,categoryCount> sortModes{};
+        const InventoryViewOptions options{allInventory,AppliedShieldsInWeapons()};
         if(formMode==FormMode::Human)for(int c=0;c<categoryCount;++c)
             sortModes[c]=Ordering::Current(allInventory,static_cast<Category>(c));
         // Borrow native entries only for this synchronous walk. Match CommonLib's
@@ -338,14 +342,15 @@ namespace Wheel {
         for(const auto& [object,stock]:inventory) {
             if(stock.count<=0 || (!allInventory && (!stock.entry || !stock.entry->IsFavorited())))continue;
             const auto first=result.size();
-            AppendInventory(result,object,static_cast<int>(std::min<std::int64_t>(stock.count,INT_MAX)),stock.entry,allInventory,nullptr,&i4Milliseconds);
-            const auto mode=sortModes[static_cast<int>(Classify(object))];
+            AppendInventory(result,object,static_cast<int>(std::min<std::int64_t>(stock.count,INT_MAX)),stock.entry,options,nullptr,&i4Milliseconds);
+            if(first==result.size())continue;
+            const auto mode=sortModes[static_cast<int>(result[first].category)];
             if(includeInfo || Ordering::Numeric(mode))for(auto i=first;i<result.size();++i) {
                 const auto stats=CaptureItemInfo(object,reinterpret_cast<RE::ExtraDataList*>(result[i].key.extra),player,includeInfo);
                 if(Ordering::Numeric(mode)) {
                     result[i].sortNumber=mode==Ordering::Mode::WeightAscending?stats.weight:
                         mode==Ordering::Mode::ValueDescending?(stats.value?std::optional<float>{static_cast<float>(*stats.value)}:std::nullopt):
-                        result[i].category==Category::Weapons?stats.damage:stats.armor;
+                        stats.EquipmentSortStat();
                 }
                 if(includeInfo){result[i].info=stats;result[i].infoReady=true;}
             }

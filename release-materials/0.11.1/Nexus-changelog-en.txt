@@ -1,0 +1,6 @@
+0.11.1
+- Added a global Skip Missing Items option for outfit presets. Turning it off restores each preset's own setting.
+- Added an option to list shields under Weapons in both Favorites and All Inventory.
+- Improved controller chord passthrough, including when a modifier is hidden from the input event list.
+- Fixed a case where a missed key release could block keyboard quick slots 1–8 after closing the wheel.
+- Fixed empty I4 IconCache folders appearing in MO2 Overwrite when no new cache files were written.

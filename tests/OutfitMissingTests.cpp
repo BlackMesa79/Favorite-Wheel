@@ -60,6 +60,25 @@ void DynamicLifecycle() {
     Check(!Resolve(withAccessories,inventory,matches),"Changed mid-operation target still interrupts");
     Check(RemovalComplete(execution,std::vector<Candidate>{}),"Script-deleted removed target counts as removed");
 }
+void GlobalPolicy() {
+    auto strict=Compatible();strict.missingPolicy=MissingPolicy::Required;
+    const auto before=Encode({strict});
+    const std::vector<Candidate> inventory{{body,true,body.mask}};
+    std::vector<int> matches;ResolveProblem problem;
+    const auto policy=EffectiveMissingPolicy(strict.missingPolicy,true);
+    Check(ResolveWithPolicy(strict,inventory,matches,policy,&problem) && Wearing(inventory,matches,policy),
+        "Global skip enables the usable and worn badges for a strict preset with an absent item");
+    Check(Encode({strict})==before && !ResolveWithPolicy(strict,inventory,matches,EffectiveMissingPolicy(strict.missingPolicy,false)),
+        "Turning off the global setting restores strict matching without altering the stored preset");
+    auto enabled=Compatible();
+    Check(ResolveWithPolicy(enabled,inventory,matches,EffectiveMissingPolicy(enabled.missingPolicy,false)),
+        "Existing per-preset skip remains active when the global setting is off");
+    Check(!ResolveWithPolicy(strict,std::vector<Candidate>{},matches,policy,&problem) && matches.empty(),
+        "Global skip cannot apply an entirely absent outfit");
+    auto changed=body;changed.health=2;
+    Check(!ResolveWithPolicy(strict,std::vector<Candidate>{{changed}},matches,policy,&problem) && problem.reason==ResolveReason::Changed,
+        "Global skip also rejects a changed instance still present in inventory");
+}
 void Serialization() {
     auto configured=Compatible();std::vector<Preset> decoded;
     Check(Decode(Encode({configured}),decoded)&&decoded==std::vector<Preset>{configured},"FWO 3 persists per-preset policy");
@@ -87,6 +106,6 @@ void Editor() {
 }
 }
 int main() {
-    Resolution();DynamicLifecycle();Serialization();Editor();
+    Resolution();DynamicLifecycle();GlobalPolicy();Serialization();Editor();
     std::cout<<"OutfitMissingTests passed: "<<checks<<" checks\n";
 }

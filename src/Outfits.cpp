@@ -152,12 +152,14 @@ namespace Wheel::Outfits {
     }
     std::string Names() {std::lock_guard lock(mutex);std::string names;for(const auto& p:presets)names+=p.name;return names;}
     std::vector<Item> Entries() {
+        const bool skipForAll=AppliedOutfitSkipMissingAll();
         const auto inventory=Inventory();std::lock_guard lock(mutex);std::vector<Item> result;
         result.push_back({{},Category::Armor,Tr(Config(),"outfitSave"),0,false,true,true,ActionKind::SaveOutfit});
         result.push_back({{},Category::Armor,Tr(Config(),"outfitImport"),0,false,true,true,ActionKind::ImportOutfits});
         for(const auto& p:presets) {
-            std::vector<int> matches;ResolveProblem problem;const bool valid=Resolve(p,inventory,matches,&problem);
-            result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&Wearing(inventory,matches,p),false,valid,ActionKind::Outfit,p.id});
+            const auto policy=EffectiveMissingPolicy(p.missingPolicy,skipForAll);
+            std::vector<int> matches;ResolveProblem problem;const bool valid=ResolveWithPolicy(p,inventory,matches,policy,&problem);
+            result.push_back({{},Category::Armor,p.name,static_cast<int>(p.pieces.size()),valid&&Wearing(inventory,matches,policy),false,valid,ActionKind::Outfit,p.id});
             if(valid)reportedProblems.erase(p.id);
             else {
                 result.back().detail=Tr(Config(),ReasonKey(problem.reason))+": "+p.pieces[problem.piece].label;
@@ -241,6 +243,7 @@ namespace Wheel::Outfits {
     }
     bool Import() {
         std::vector<Preset> added;
+        const bool skipForAll=AppliedOutfitSkipMissingAll();
         try {
             std::filesystem::create_directories(folder/"Imports");
             auto inventory=Inventory();
@@ -251,6 +254,7 @@ namespace Wheel::Outfits {
                 std::vector<Preset> incoming;if(!Decode(text,incoming))throw std::runtime_error("invalid import");
                 for(auto& p:incoming) {
                     if(!Portable(p))throw std::runtime_error("nonportable import");
+                    const auto policy=EffectiveMissingPolicy(p.missingPolicy,skipForAll);
                     for(auto& piece:p.pieces) {
                         piece.unique=0;piece.owner={};int match=-1;
                         for(int i=0;i<static_cast<int>(inventory.size());++i) {
@@ -259,11 +263,11 @@ namespace Wheel::Outfits {
                                 if(match>=0)throw std::runtime_error("ambiguous import instance");match=i;
                             }
                         }
-                        if(match<0 && p.missingPolicy==MissingPolicy::Skip && MissingFromInventory(piece,inventory))continue;
+                        if(match<0 && policy==MissingPolicy::Skip && MissingFromInventory(piece,inventory))continue;
                         if(match<0)throw std::runtime_error("missing import piece");
                         piece=inventory[match].piece;
                     }
-                    std::vector<int> matches;if(!Resolve(p,inventory,matches))throw std::runtime_error("duplicate outfit pieces");
+                    std::vector<int> matches;if(!ResolveWithPolicy(p,inventory,matches,policy))throw std::runtime_error("duplicate outfit pieces");
                     added.push_back(std::move(p));if(added.size()>100)throw std::runtime_error("too many imports");
                 }
             }
@@ -286,6 +290,7 @@ namespace Wheel::Outfits {
         SKSE::log::info("Outfit {} apply requested",id);
         Preset p;{std::lock_guard lock(mutex);for(const auto& entry:presets)if(entry.id==id)p=entry;}
         if(!p.id)return;
+        p.missingPolicy=EffectiveMissingPolicy(p.missingPolicy,AppliedOutfitSkipMissingAll());
         auto inventory=Inventory();std::vector<int> matches;ResolveProblem problem;
         if(!Resolve(p,inventory,matches,&problem)) {
             LogProblem(p,inventory,problem,"apply");

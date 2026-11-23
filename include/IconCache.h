@@ -41,7 +41,7 @@ namespace Wheel::IconCache {
         std::filesystem::path directory_;
         Logger logger_;
         std::uint32_t converter_;
-        bool enabled_=false, unavailable_=false, initialized_=false, ioWarned_=false;
+        bool enabled_=false, unavailable_=false, cleanedTemporaryFiles_=false, ioWarned_=false;
         bool touchWarned_=false, trimWarned_=false;
         unsigned budgetMB_=64;
         std::uint64_t writeCount_=0;
@@ -52,7 +52,6 @@ namespace Wheel::IconCache {
         std::map<Key,Entry> entries_;
         std::set<std::string> invalidWarned_;
         void Unavailable();
-        bool Prepare();
         void Select(const std::string& hash);
         void Invalid(const std::string& hash);
         void Trim();

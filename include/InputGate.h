@@ -12,6 +12,11 @@ namespace Wheel {
     public:
         enum class Result { Pass, Release, Suppress, Resume };
         bool Swallowed(std::uint64_t id) const { return swallowed.contains(id); }
+        bool RecoverFreshPress(std::uint64_t id) {
+            if(!swallowed.erase(id))return false;
+            capturedMovement.erase(id);
+            return true;
+        }
         Result Filter(std::uint64_t id, bool pressed, bool up, bool capture, bool impulse = false, bool movement = false) {
             if(movement && !impulse) {
                 if(capture) {

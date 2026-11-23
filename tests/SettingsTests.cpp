@@ -124,6 +124,13 @@ int wmain(int argc,wchar_t** argv) {
     BeginSettings();auto consumables=Config();consumables.keepOpenConsumables=true;EditSettings(consumables);
     Check(SaveSettings(),"Save consumable retention");LoadSettings();
     Check(Config().keepOpenConsumables,"Consumable retention survives reload");
+    Check(!AppliedShieldsInWeapons() && !AppliedOutfitSkipMissingAll(),"Both gameplay extensions default to off");
+    auto equipment=Config();equipment.shieldsInWeapons=true;equipment.outfitSkipMissingAll=true;
+    BeginSettings();EditSettings(equipment);
+    Check(!AppliedShieldsInWeapons() && !AppliedOutfitSkipMissingAll(),"Gameplay drafts do not change the applied policies");
+    RevertSettings();Check(!Config().shieldsInWeapons && !Config().outfitSkipMissingAll,"Cancel drops both gameplay drafts");
+    BeginSettings();EditSettings(equipment);Check(SaveSettings(),"Save gameplay extensions");LoadSettings();
+    Check(AppliedShieldsInWeapons() && AppliedOutfitSkipMissingAll(),"Both gameplay settings survive reload");
     {std::ofstream file(path);file<<"; retained comment\n[General]\nChinese=0\n[Display]\nScalePercent=100\nDimPercent=95\nBlurStrength=100\nFont=C:/Windows/Fonts/msyh.ttc\n[Custom]\nKeep=123\n";}
     const auto initialBytes=bytes(path);
     SetSettingsPath(path.string()); LoadSettings();
@@ -399,7 +406,8 @@ int wmain(int argc,wchar_t** argv) {
     }
     Check(!generalTab.Contains(controlsTab.x+5,controlsTab.y+5) && !controlsTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Three settings tabs have distinct targets");
     Check(!controlsTab.Contains(gamepadTab.x+5,gamepadTab.y+5) && !gamepadTab.Contains(gameplayTab.x+5,gameplayTab.y+5),"Controller tab has a separate hit region");
-    Check(SettingCount(2)==10 && SettingRow(2,0)==18 && SettingRow(2,1)==19 && SettingRow(2,2)==20 && SettingRow(2,3)==22 && SettingRow(2,4)==24 && SettingRow(2,5)==26 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay tab includes continuous use, empty categories and wheel memory");
+    Check(SettingCount(2)==12 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,10)==shieldsInWeaponsRow &&
+        SettingRow(2,11)==outfitSkipMissingAllRow && BindingRow(30) && BindingRow(31),"Gameplay includes equipment options and category binds");
     Check(SettingCount(0)==11 && SettingRow(0,10)==28 && SettingCount(1)==6 && SettingRow(1,5)==25 && SettingCount(3)==5 && SettingRow(3,3)==21 && SettingRow(3,4)==23,"Display tab includes action notifications; controller retains its separate settings");
     Check(NextSettingsTab(1,1)==3 && NextSettingsTab(3,1)==2 && NextSettingsTab(2,1)==0 && NextSettingsTab(0,1)==4 && NextSettingsTab(4,1)==1 && NextSettingsTab(0,-1)==2,"Controller cycles all five tabs in visual order");
     Ac1_Utf8ThemeId();Ac2_UnreadableThemeEntry();Ac5_BuiltinEnglishCoverage();Ac8_TranslationCacheConsistency();

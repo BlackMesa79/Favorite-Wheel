@@ -19,6 +19,7 @@ namespace Wheel {
         std::vector<EffectInfo> effects;
         std::uint32_t moreEffects=0;
         bool HasData() const {return weight || value || damage || armor || magicka || !effects.empty() || moreEffects;}
+        std::optional<float> EquipmentSortStat() const {return armor?armor:damage;}
     };
     inline constexpr std::size_t maxItemEffects=6;
     struct InfoRow {std::string label,value;};

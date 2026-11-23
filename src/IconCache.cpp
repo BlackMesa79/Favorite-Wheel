@@ -24,6 +24,13 @@ namespace {
         return name.size()>64 && Digest(std::string_view(name).substr(0,64)) &&
             name.substr(64)==(temporary?".fwic.tmp":".fwic");
     }
+    fs::directory_iterator CacheFiles(const fs::path& directory) {
+        std::error_code error;
+        fs::directory_iterator files(directory,error);
+        if(error && error!=std::errc::no_such_file_or_directory)
+            throw fs::filesystem_error("list I4 icon cache",directory,error);
+        return files;
+    }
     bool Valid(const Key& key) {
         return !key.label.empty() && key.label.size()<=maxLabelBytes && key.edge>=1 && key.edge<=256 &&
             (key.variant==Swf::Variant::Original || key.variant==Swf::Variant::Mask);
@@ -65,22 +72,7 @@ void Store::Configure(bool enabled,unsigned budgetMB) {
     const bool changed=enabled_!=enabled || budgetMB_!=std::clamp(budgetMB,8u,512u);
     enabled_=enabled;budgetMB_=std::clamp(budgetMB,8u,512u);
     if(toggled) { active_.clear();entries_.clear();pendingEntries_=0;pendingBytes_=0; }
-    if(enabled_ && changed && Prepare())Trim();
-}
-bool Store::Prepare() {
-    if(!DiskAvailable())return false;
-    if(initialized_)return true;
-    try {
-        fs::create_directories(directory_);
-        // 真实写入探测；Windows 目录的 readonly 属性不代表写权限。
-        const auto probe=directory_/L".fwic-write-probe";
-        Handle handle{CreateFileW(probe.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,
-            FILE_ATTRIBUTE_TEMPORARY|FILE_FLAG_DELETE_ON_CLOSE,nullptr)};
-        if(handle.value==INVALID_HANDLE_VALUE){Unavailable();return false;}
-        for(const auto& item:fs::directory_iterator(directory_))
-            if(item.is_regular_file() && Owned(item.path(),true))fs::remove(item.path());
-        initialized_=true;return true;
-    } catch(...) {Unavailable();return false;}
+    if(enabled_ && changed)Trim();
 }
 void Store::Invalid(const std::string& hash) {
     entries_.clear();
@@ -133,7 +125,7 @@ void Store::Select(const std::string& hash) {
     if(active_==hash)return;
     Flush();
     active_=hash;entries_.clear();pendingEntries_=0;pendingBytes_=0;
-    if(!Prepare())return;
+    if(!DiskAvailable())return;
     try {
         const auto file=directory_/(hash+".fwic");
         if(fs::exists(file) && !Load(file))Invalid(hash);
@@ -162,7 +154,7 @@ std::optional<Swf::Bitmap> Store::Get(const std::string& hash,const Key& key) {
     return {};
 }
 void Store::Save() {
-    if(!Prepare())return;
+    if(!DiskAvailable())return;
     try {
         std::uint64_t tableSize=0,total=20,decoded=0;
         for(const auto& [key,entry]:entries_) {tableSize+=40+key.label.size();total+=40+key.label.size()+entry.compressed.size();decoded+=Raw(key);}
@@ -177,6 +169,9 @@ void Store::Save() {
             bytes.insert(bytes.end(),key.label.begin(),key.label.end());offset+=entry.compressed.size();
         }
         for(const auto& [key,entry]:entries_)bytes.insert(bytes.end(),entry.compressed.begin(),entry.compressed.end());
+        // MO2 会把建目录和临时文件重定向到 Overwrite，即使缓存已经从模组命中。
+        // 只有实际提交位图时才创建目录并打开写句柄。
+        fs::create_directories(directory_);
         const auto final=directory_/(active_+".fwic"),temporary=directory_/(active_+".fwic.tmp");
         {
             Handle handle{CreateFileW(temporary.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr)};
@@ -220,11 +215,15 @@ void Store::Trim() {
         ++trimCount_;writesSinceTrim_=0;bytesSinceTrim_=0;
         struct File { fs::path path;fs::file_time_type time;std::uint64_t size; };
         std::vector<File> files;std::uint64_t total=0;
-        for(const auto& item:fs::directory_iterator(directory_))if(item.is_regular_file() && Owned(item.path())) {
+        for(const auto& item:CacheFiles(directory_)) {
+            if(!item.is_regular_file())continue;
+            if(!cleanedTemporaryFiles_ && Owned(item.path(),true))fs::remove(item.path());
+            if(!Owned(item.path()))continue;
             const auto size=item.file_size();
             if(size>std::numeric_limits<std::uint64_t>::max()-total)throw std::runtime_error("FWIC capacity");
             total+=size;files.push_back({item.path(),item.last_write_time(),size});
         }
+        cleanedTemporaryFiles_=true;
         std::ranges::sort(files,[](const File& a,const File& b){return a.time!=b.time?a.time<b.time:a.path<b.path;});
         for(const auto& file:files) {
             if(total<=std::uint64_t(budgetMB_)*1024*1024)break;
@@ -240,9 +239,9 @@ void Store::Trim() {
 }
 bool Store::Clear() {
     active_.clear();entries_.clear();pendingEntries_=0;pendingBytes_=0;
-    if(!Prepare())return false;
+    if(!DiskAvailable())return false;
     try {
-        for(const auto& item:fs::directory_iterator(directory_))
+        for(const auto& item:CacheFiles(directory_))
             if(item.is_regular_file() && (Owned(item.path()) || Owned(item.path(),true)))fs::remove(item.path());
         return true;
     } catch(...) {Unavailable();return false;}

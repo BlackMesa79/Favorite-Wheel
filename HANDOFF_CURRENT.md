@@ -1,12 +1,12 @@
 # FavoriteWheel 当前项目交接
 
-更新日期：2026-11-17（Asia/Hong_Kong）。第 1、2A 节为当前状态；第 3–7 节及旧 `HANDOFF.md` 是历史交接记录，`docs/RELEASE_0.9.0.md` 只描述 0.9.0 发布。不要把历史待测事项或旧方案当成当前实现。
+更新日期：2026-11-23（Asia/Hong_Kong）。第 1 节记录 0.11.1 当前交接，其余章节是各阶段记录。当前反馈进度见 `docs/reports/20261122-feedback-0.11.0.md`。
 
 ## 1. 当前状态（新会话从这里开始）
 
 - 项目路径：`D:\MyFiles\Documents\ChatGPT\SKSE模组 收藏轮盘`，Windows / PowerShell / C++23 / xmake / SKSE。
-- 当前版本 **0.11.0**，插件元数据 **0.11.0.0**。2026-11-17 用户确认 I4 图标适配及轮盘配置菜单调整已验收，并授权提交、推送和正式发布；TNG 52 槽仍待反馈者实测。发布记录见 docs/RELEASE_0.11.0.md。
-- 分支 `feat/outfit-parts-p1`（本次发布提交并推送）。本分支自 0.10.0 之后的提交，按时间先后：
+- 当前版本 **0.11.1**，插件元数据 **0.11.1.0**。用户已验收全局跳过缺失物品和盾牌分类开关，同时纳入手柄组合键、数字快捷键和 MO2 空缓存目录修复。Nexus 英文更新日志见 `release-materials/0.11.1/Nexus-changelog-en.txt`。
+- 发布分支为 `feat/outfit-parts-p1`。下表记录 0.10.0 后 I4 上线阶段的主要提交。
 
 | 提交 | 内容 |
 |---|---|
@@ -21,9 +21,8 @@
 | `58a0cd3` | I4 第三期 T-4b：磁盘位图缓存 |
 | （本文件） | docs：HANDOFF 整理 |
 
-- 当前未提交改动：T-6 改造了 `tests/WheelPreview.cpp` 的四个 i4-* 场景，使用合成 SWF 与真实 I4Textures 路径；并更新本文件、README、I4_ICONS、ICON_LIBRARY 和方案。此前预览改动已整合，未提交。
-- 已部署 DLL：`H:/Games/Dev Skyrim/mods/36 - FavoriteWheel/SKSE/Plugins/FavoriteWheel.dll`，SHA256 `491BB0E2E6119F50BDE89E9E5FC38910A902B54BF8347F9B7268A685ADB33CEE`（2026-11-15 主工作区 0.11.0 候选，含 I4 修复、装备缺失兼容和 UI 整理；页签和底部间距复调后仅部署 DLL，21 个 INI 哈希不变）。干净 worktree 构建产物的哈希会不同（路径等元数据差异），以部署目录为准。
-- **下一步**：跟进 TNG 52 槽兼容反馈；本次验收和发布状态取代下方历史“未提交／不推送／待完整验收”描述。
+- 0.11.1 已部署 DLL 位于 `H:/Games/Dev Skyrim/mods/36 - FavoriteWheel/SKSE/Plugins/FavoriteWheel.dll`，SHA256 `2BA0B424D77977A3E8CFA3B93A68ACF9E98EF6A7BEB41927A8E71BD63BAFE234`。最终构建仅部署 DLL，162 份其余文件已核对。
+- 本版提供 `dist/FavoriteWheel-0.11.1.zip` 供 Nexus 上传。待跟进事项包括原反馈者环境的复测、左手戒指模组信息及 TNG 52 槽兼容。
 
 ### 1.1a I4 颜色一致性验收修复（2026-11-15，实机已验收，已提交 `9d0f26c`）
 

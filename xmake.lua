@@ -1,5 +1,5 @@
 set_project("FavoriteWheel")
-set_version("0.11.0")
+set_version("0.11.1")
 set_languages("cxx23")
 set_encodings("utf-8")
 set_config("skyrim_se", true)

@@ -1,5 +1,11 @@
 # Favorite Wheel - Radial Actions
 
+## 0.11.1
+
+- Added Gameplay options to put shields in Weapons and skip missing items in all outfits. Both default to off.
+- Improved controller chord passthrough and recovery for keyboard quick slots 1–8 after missed key releases.
+- Fixed empty I4 `IconCache` folders being created in MO2 Overwrite. See the [short changelog](release-materials/0.11.1/Nexus-changelog-en.txt).
+
 ## 0.11.0
 
 - I4 icon rules and SWF rendering with Theme / I4 / Original colors, background processing and disk caching.
@@ -22,7 +28,7 @@
 
 An independently implemented SKSE plugin for Skyrim Special Edition. Replace the Favorites menu with a categorized radial interface and access a separate wheel for quick actions. Action modules include outfit presets, combat presets, combat cycles and optional Face Lighting controls.
 
-Current release: **0.11.0**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP and Papyrus scripts are not required. I4 icons use separately installed rule files and SWF assets; the wheel also works without them.
+Current release: **0.11.1**. The UI uses Dear ImGui and Direct3D 11; SKSE Menu Framework, an ESP and Papyrus scripts are not required. I4 icons use separately installed rule files and SWF assets; the wheel also works without them.
 
 Version 0.9.0 adds category/stat sorting, animated drag arrangement and session wheel memory; improves first opening; fixes zero-health outfit capture and spell reselect toggling. See the [0.9.0 changelog](release-materials/0.9.0/Nexus-changelog-en.txt), [Nexus description](release-materials/0.9.0/Nexus-description-en.bbcode.txt) and [release record](docs/RELEASE_0.9.0.md).
 
