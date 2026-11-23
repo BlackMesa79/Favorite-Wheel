@@ -7,6 +7,7 @@
 #include <Windows.h>
 #include <array>
 #include <algorithm>
+#include <atomic>
 #include <cfloat>
 #include <exception>
 
@@ -229,11 +230,23 @@ namespace Wheel::FrameworkSettings {
         template<Page page> void __stdcall Render() {
             try {RenderPage(page);}catch(const std::exception& e){SKSE::log::error("Framework settings rendering failed: {}",e.what());}
         }
+        using BlockingWindowQuery=bool (*)();
+        std::atomic<BlockingWindowQuery> blockingWindowQuery{nullptr};
+    }
+    bool BlockingWindowOpen() {
+        const auto query=blockingWindowQuery.load(std::memory_order_relaxed);
+        return query && query();
     }
     void Register() {
         static bool registered=false;if(registered)return;
         const auto module=GetModuleHandleW(L"SKSEMenuFramework.dll");
         if(!module){SKSE::log::info("SKSE Menu Framework absent; wheel settings remain available");return;}
+        // PostPostLoad runs after the SKSE modules load. Publish the export
+        // independently of the optional settings page's ImGui exports.
+        BlockingWindowQuery query=nullptr;
+        const bool arbitration=Bind(module,query,"IsAnyBlockingWindowOpened");
+        blockingWindowQuery.store(query,std::memory_order_relaxed);
+        SKSE::log::info("SKSE Menu Framework input arbitration: blockingQuery={}",arbitration);
         const bool compatible=Bind(module,api.add,"AddSectionItem") && Bind(module,api.text,"igTextUnformatted") &&
             Bind(module,api.check,"igCheckbox") && Bind(module,api.slider,"igSliderInt") && Bind(module,api.sliderFloat,"igSliderFloat") &&
             Bind(module,api.button,"igButton") && Bind(module,api.sameLine,"igSameLine") &&
