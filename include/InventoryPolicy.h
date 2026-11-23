@@ -1,4 +1,5 @@
 #pragma once
+#include "WheelLogic.h"
 #include <algorithm>
 #include <cstdint>
 #include <limits>
@@ -14,6 +15,9 @@ namespace Wheel {
         int Spare() const {return static_cast<int>(std::clamp<std::int64_t>(remaining,0,std::numeric_limits<int>::max()));}
     };
     inline bool InventoryVisible(bool all,bool favorited){return all || favorited;}
+    inline constexpr Category ArmorWheelCategory(bool shield,bool shieldsInWeapons) {
+        return shield && shieldsInWeapons?Category::Weapons:Category::Armor;
+    }
     // Double Favorite As Important preserves ExtraHotkey for item protection,
     // using 0xFA for an Important item that must be excluded from favorites.
     // Interpret that private marker only while its provider is actually loaded.

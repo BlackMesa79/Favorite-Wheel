@@ -17,6 +17,11 @@ namespace SKSE::log {
 #include <filesystem>
 #include <fstream>
 namespace Wheel {bool IsOpen(){return false;}}
+namespace Wheel::I4Textures {
+    // 离屏设置页使用固定缓存状态，避免启动磁盘后台任务。
+    void ClearCache() {}
+    ClearStatus CacheClearStatus() {return ClearStatus::Idle;}
+}
 namespace {
     using namespace Wheel::FrameworkSettings;
     void Require(bool value){if(!value)throw std::runtime_error("framework preview check failed");}
@@ -54,7 +59,7 @@ namespace {
         context->Unmap(staging.Get(),0);Require(bool(out));
     }
 }
-int main(int argc,char** argv) {
+int main(int argc,char** argv) try {
     using namespace Wheel;using namespace Wheel::FrameworkSettings;using Microsoft::WRL::ComPtr;
     LoadResources("assets");
     const auto root=std::filesystem::path("build")/("framework-preview-"+std::to_string(GetCurrentProcessId()));
@@ -66,16 +71,20 @@ int main(int argc,char** argv) {
     Require(!draft.enabled && draft.font=="preserved.ttf");Defaults(Page::Keyboard);Require(draft.hotkey==Settings{}.hotkey && draft.gamepadHotkey==268);
     draft.kbMoveWhileOpen=true;draft.kbCategoryPrevKey=46;draft.kbCategoryNextKey=44;
     Defaults(Page::Controller);Require(draft.kbMoveWhileOpen && draft.kbCategoryPrevKey==46 && draft.kbCategoryNextKey==44);
+    draft.shieldsInWeapons=draft.outfitSkipMissingAll=true;
     Defaults(Page::Gameplay);Require(!draft.kbMoveWhileOpen && draft.kbCategoryPrevKey==44 && draft.kbCategoryNextKey==46);
+    Require(!draft.shieldsInWeapons && !draft.outfitSkipMissingAll);
     Refresh();
     ComPtr<ID3D11Device> device;ComPtr<ID3D11DeviceContext> context;D3D_FEATURE_LEVEL level;
     Check(D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&device,&level,&context));
-    D3D11_TEXTURE2D_DESC desc{};desc.Width=1100;desc.Height=760;desc.MipLevels=desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+    // 外观页包含图标缓存控件，需要覆盖完整页面才能检查所有行。
+    D3D11_TEXTURE2D_DESC desc{};desc.Width=1100;desc.Height=960;desc.MipLevels=desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count=1;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
     ComPtr<ID3D11Texture2D> texture;Check(device->CreateTexture2D(&desc,nullptr,&texture));
     ComPtr<ID3D11RenderTargetView> target;Check(device->CreateRenderTargetView(texture.Get(),nullptr,&target));
     auto raw=target.Get();context->OMSetRenderTargets(1,&raw,nullptr);
-    IMGUI_CHECKVERSION();ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1100,760};io.DeltaTime=1.f/60;
+    IMGUI_CHECKVERSION();ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;
+    io.DisplaySize={static_cast<float>(desc.Width),static_cast<float>(desc.Height)};io.DeltaTime=1.f/60;
     ImFontGlyphRangesBuilder glyphBuilder;glyphBuilder.AddRanges(io.Fonts->GetGlyphRangesChineseFull());
     glyphBuilder.AddChar(0x2190);glyphBuilder.AddChar(0x2192); // Category direction labels.
     glyphBuilder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());ImVector<ImWchar> glyphs;glyphBuilder.BuildRanges(&glyphs);
@@ -91,7 +100,8 @@ int main(int argc,char** argv) {
             for(int p=0;p<4;++p)ImGui::Selectable(Tr(config,PageKey(static_cast<Page>(p))).c_str(),p==index);
             ImGui::EndChild();ImGui::SameLine();ImGui::BeginChild("page");
             RenderPage(static_cast<Page>(index));
-            Require(ImGui::GetScrollMaxX()==0 && ImGui::GetScrollMaxY()==0);
+            if(ImGui::GetScrollMaxX()!=0 || ImGui::GetScrollMaxY()!=0)
+                throw std::runtime_error("unexpected scroll on framework page "+std::to_string(index));
             ImGui::EndChild();ImGui::End();ImGui::Render();
             const float clear[]={.06f,.065f,.07f,1};context->ClearRenderTargetView(target.Get(),clear);
             const auto data=ImGui::GetDrawData();Require(data->TotalVtxCount>100);
@@ -101,4 +111,4 @@ int main(int argc,char** argv) {
         SaveImage(device.Get(),context.Get(),texture.Get(),desc,(root/("page-"+std::to_string(index)+".bmp")).string());
     }
     ImGui_ImplDX11_Shutdown();ImGui::DestroyContext();std::cout<<"Four production pages rendered; page-default checks passed: "<<root.string()<<'\n';
-}
+} catch(const std::exception& error) {std::cerr<<error.what()<<'\n';return 1;}

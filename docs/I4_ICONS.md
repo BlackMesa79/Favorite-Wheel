@@ -54,6 +54,8 @@ BOOBIES 的当前实际启用版本目录包含 10 个 SWF，THICC 包含 46 个
 
 缓存位于游戏 exe 所在目录下的 `Data/SKSE/Plugins/FavoriteWheel/IconCache/`，由 `GetModuleFileNameW` 定位。MO2 下新文件预期进入 overwrite 或指定输出 mod；不同实例使用各自的虚拟 Data 目录，不使用公共 My Games。只缓存本机 SWF 转换出的非预乘 RGBA，不缓存规则、物品匹配结果或 GPU 纹理。每次启动仍通过游戏资源系统读取 SWF，后台对内容计算 SHA-256；内容、标签原文、变体、边长或转换器版本变化都会失效。
 
+目录在实际尝试提交位图时创建。启动维护、读取命中、查找缺失项和清空尚不存在的缓存均无需在 Overwrite 创建 `IconCache`。旧版留下的空 `IconCache` 可以在退出游戏后清理一次。
+
 主 INI 的 `[Display]` 段支持 `I4IconCache=1` 和 `I4IconCacheMB=64`（MiB，范围 8–512）。它们与 I4 显示设置同属显示资源配置；缺失时使用默认值，只有用户点击应用才写回主 INI。设为 `I4IconCache=0` 后不读写缓存目录，清空按钮也不会执行磁盘操作。已经开始的后台 IO 可能在设置切换前完成。
 
 SKSE Menu Framework 的 FavoriteWheel 外观页提供开关、容量与“清空图标缓存”。清空在后台执行，界面显示排队、完成或不可用状态；当前已准备/上传的纹理保留，清空前已排队的转换不会重新写回磁盘。之后新请求可以再次生成缓存。轮盘内外观页已有 14 行、24 像素行距，因此不再增加缓存控件。也可在退出游戏后删除 IconCache 目录。

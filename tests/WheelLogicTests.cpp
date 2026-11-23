@@ -381,27 +381,44 @@ int main() {
         ControllerChordState events;events.Observe(274,true);
         events.Observe(274,false);events.Observe(279,true); // reporter 21:00:35.252
         Check(ResolvedGamepadOpening(279,279,events.Mask(),lb,true,274,275)==Opening::None,"Reporter packet reproduces the 0.7.2 rejection");
-        const auto repaired=ControllerOpeningHeld(events.Mask(),{true,ControllerPacketButtons(0x8100,0,0)},279,lb|rb);
+        const auto repaired=ControllerOpeningHeld(events.Mask(),{true,ControllerPacketButtons(0x8100,0,0)},279);
         Check(ResolvedGamepadOpening(279,279,repaired,lb,true,274,275)==Opening::Favorites && !events.Held(274),
             "Current LB+Y repairs only opening resolution, without inventing a persistent LB event");
         Check(ResolvedGamepadOpening(279,279,repaired,lb,true,-1,275)==Opening::Favorites,
             "Inherited native LB still works when the wheel-specific modifier is disabled");
-        const auto plain=ControllerOpeningHeld(y,{true,y},279,lb|rb);
+        const auto plain=ControllerOpeningHeld(y,{true,y},279);
         Check(ResolvedGamepadOpening(279,279,plain,lb,true,-1,275)==Opening::None,"Actual LB release leaves plain Y available for Jump");
-        Check(ControllerOpeningHeld(y,{false,static_cast<std::uint16_t>(lb|y)},279,lb)==y &&
-            ControllerOpeningHeld(y,{true,lb},279,lb)==y,"Unavailable samples and a main key absent from the packet never manufacture a chord");
-        Check(ControllerOpeningHeld(y,{true,static_cast<std::uint16_t>(lb|rb|y)},279,lb)==(lb|y),
-            "Only configured modifiers can be repaired; unrelated buttons are not imported");
-        Check(ResolvedGamepadOpening(279,279,ControllerOpeningHeld(y,{true,static_cast<std::uint16_t>(lb|rb|y)},279,lb|rb),lb,true,-1,275)==Opening::Actions,
+        Check(ControllerOpeningHeld(y,{false,static_cast<std::uint16_t>(lb|y)},279)==y &&
+            ControllerOpeningHeld(y,{true,lb},279)==y,"Unavailable samples and a main key absent from the packet never manufacture a chord");
+        Check(ResolvedGamepadOpening(279,279,ControllerOpeningHeld(y,{true,static_cast<std::uint16_t>(lb|rb|y)},279),lb,true,-1,275)==Opening::Actions,
             "A genuinely held distinct action modifier retains its priority");
-        Check(ControllerOpeningHeld(lb|y,{},279,lb)==(lb|y),"Event-only synthetic controllers keep existing sparse-event behavior");
+        Check(ControllerOpeningHeld(lb|y,{},279)==(lb|y),"Event-only synthetic controllers keep existing sparse-event behavior");
         events.Observe(274,true);events.Observe(279,false);events.Observe(274,false);
-        Check(ControllerOpeningHeld(events.Mask(),{true,0},279,lb|rb)==0,"Release and next fresh packet retain no grace-period modifier");
+        Check(ControllerOpeningHeld(events.Mask(),{true,0},279)==0,"Release and next fresh packet retain no grace-period modifier");
         InputGate gate;
         Check(gate.Filter(279,true,false,true)==InputGate::Result::Suppress &&
             gate.Filter(279,true,false,false)==InputGate::Result::Suppress &&
             gate.Filter(279,false,true,false)==InputGate::Result::Suppress &&
             gate.Filter(279,true,false,false)==InputGate::Result::Pass,"Repaired entrance owns hold/release, then yields the next unmodified Y to gameplay");
+    }
+    {
+        constexpr int upKey=266,aKey=276,lbKey=274;
+        const auto up=ControllerKeyBit(upKey);
+        ControllerChordState events;
+        events.Observe(aKey,true);
+        events.Observe(aKey,false);
+        events.Observe(upKey,true);
+        const ControllerSample combo{true,ControllerPacketButtons(0x1001,0,0)};
+        const auto held=ControllerOpeningHeld(events.Mask(),combo,upKey);
+        Check(ResolvedGamepadOpening(upKey,upKey,held,0,true,-1,lbKey)==Opening::None,
+            "A hidden by the remapper still yields A+Up to gameplay");
+        Check(ForeignGamepadChord(held,upKey,0,true,-1,lbKey) && events.Mask()==up,
+            "The replaced vanilla entrance also yields without changing tracked events");
+        Check(ResolvedGamepadOpening(upKey,upKey,held,0,true,-1,aKey)==Opening::Actions,
+            "An intentionally assigned A+Up remains available to the wheel");
+        const auto plain=ControllerOpeningHeld(events.Mask(),{true,up},upKey);
+        Check(ResolvedGamepadOpening(upKey,upKey,plain,0,true,-1,lbKey)==Opening::Favorites,
+            "The next unmodified Up can open Favorites");
     }
     {
         ControllerChordState chords;int firstDevice=0,secondDevice=0;
@@ -642,6 +659,20 @@ int main() {
         Check(gate.Filter(2,false,true,false)==(own?InputGate::Result::Suppress:InputGate::Result::Pass),
             "Combat release is swallowed; native item release is preserved");
         Check(gate.Filter(2,true,false,false)==InputGate::Result::Pass,"Releasing a combat key does not capture a future native press");
+    }
+    {
+        using Result=InputGate::Result;
+        constexpr std::uint64_t numberOne=2,numberTwo=3;
+        InputGate gate;
+        gate.Filter(numberOne,true,false,true);
+        gate.Filter(numberTwo,true,false,true);
+        Check(gate.Filter(numberOne,true,false,false)==Result::Suppress,"A number held across close cannot activate gameplay");
+        Check(gate.RecoverFreshPress(numberOne) && !gate.RecoverFreshPress(numberOne) && gate.Swallowed(numberTwo),
+            "A new down recovers only its own missed release");
+        Check(gate.Filter(numberOne,true,false,false)==Result::Pass && gate.Filter(numberOne,false,true,false)==Result::Pass,
+            "A recovered number forwards its new press and release to gameplay");
+        Check(gate.RecoverFreshPress(numberTwo) && gate.Filter(numberTwo,true,false,true)==Result::Suppress,
+            "A recovered number can still be captured by a currently bound shortcut");
     }
     std::cout<<"Hand equipment and shared combat shortcut input policy passed\n";
 }

@@ -36,6 +36,9 @@ namespace Wheel::Outfits {
         bool operator==(const Piece&) const = default;
     };
     enum class MissingPolicy : std::uint8_t { Required, Skip };
+    inline constexpr MissingPolicy EffectiveMissingPolicy(MissingPolicy presetPolicy,bool skipForAll) {
+        return skipForAll?MissingPolicy::Skip:presetPolicy;
+    }
     struct Preset {
         std::uint32_t id=0;
         std::string name;
@@ -158,8 +161,8 @@ namespace Wheel::Outfits {
         std::size_t piece=0;
     };
     inline std::uint32_t ManagedMask(const Preset& p){std::uint32_t mask=0;for(std::size_t i=0;i<p.parts.size();++i)if(p.parts[i]!=PartMode::Ignore)mask|=partBits[i];return mask;}
-    template<class Candidate> bool Resolve(const Preset& p,const std::vector<Candidate>& inventory,std::vector<int>& matches,
-        ResolveProblem* problem=nullptr) {
+    template<class Candidate> bool ResolveWithPolicy(const Preset& p,const std::vector<Candidate>& inventory,std::vector<int>& matches,
+        MissingPolicy missingPolicy,ResolveProblem* problem=nullptr) {
             matches.clear();std::vector<int> used;
             if(problem)*problem={};
             for(std::size_t at=0;at<p.pieces.size();++at) {
@@ -168,7 +171,7 @@ namespace Wheel::Outfits {
                 if(i<0&&p.loose)for(int n=0;n<static_cast<int>(inventory.size());++n)
                     if(inventory[n].piece.base==piece.base&&inventory[n].piece.enchantment==piece.enchantment&&
                         std::find(used.begin(),used.end(),n)==used.end()&&(i<0||inventory[n].worn))i=n;
-                if(i<0 && p.missingPolicy==MissingPolicy::Skip && MissingFromInventory(piece,inventory))continue;
+                if(i<0 && missingPolicy==MissingPolicy::Skip && MissingFromInventory(piece,inventory))continue;
                 if(i<0 || std::find(used.begin(),used.end(),i)!=used.end()) {
                     if(problem) {
                         const bool basePresent=std::any_of(inventory.begin(),inventory.end(),[&](const auto& c){return c.piece.base==piece.base;});
@@ -183,6 +186,10 @@ namespace Wheel::Outfits {
             if(problem)*problem={ResolveReason::Missing,0};
             return false;
         }
+    template<class Candidate> bool Resolve(const Preset& p,const std::vector<Candidate>& inventory,std::vector<int>& matches,
+        ResolveProblem* problem=nullptr) {
+        return ResolveWithPolicy(p,inventory,matches,p.missingPolicy,problem);
+    }
     // The badge describes the preset's pieces, including items equipped manually.
     // Additional worn apparel does not make those pieces unequipped.
     template<class Candidate> bool WearingPieces(const std::vector<Candidate>& inventory,const std::vector<int>& matches) {
@@ -194,9 +201,12 @@ namespace Wheel::Outfits {
     template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches) {
             return WearingPieces(inventory,matches) && std::count_if(inventory.begin(),inventory.end(),[](const auto& c){return c.worn;})==matches.size();
         }
-    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,const Preset& p) {
-        if(p.missingPolicy==MissingPolicy::Skip)return WearingPieces(inventory,matches);
+    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,MissingPolicy missingPolicy) {
+        if(missingPolicy==MissingPolicy::Skip)return WearingPieces(inventory,matches);
         return Wearing(inventory,matches);
+    }
+    template<class Candidate> bool Wearing(const std::vector<Candidate>& inventory,const std::vector<int>& matches,const Preset& p) {
+        return Wearing(inventory,matches,p.missingPolicy);
     }
 
 }

@@ -639,7 +639,10 @@ namespace Wheel
             }
             Button(d,c,s,v,outfitRemoveButton,tr("outfitEditRemove"));Button(d,c,s,v,outfitAddButton,tr("outfitEditAdd"));
             if(!edit.messageKey.empty())Text(d,{c.x,c.y+outfitEditMessageY*s},Fit(tr(edit.messageKey.c_str())+(edit.replaced.empty()?"":" "+edit.replaced),12*s,600*s),12*s,t.accent);
-            Button(d,c,s,v,outfitMissingButton,tr(edit.missingPolicy==Outfits::MissingPolicy::Skip?"outfitSkipMissingOn":"outfitSkipMissingOff")+(v.gamepad?"  [X]":"  [M]"),edit.missingPolicy==Outfits::MissingPolicy::Skip);
+            const bool skipMissing=edit.missingPolicy==Outfits::MissingPolicy::Skip;
+            auto missingLabel=tr(skipMissing?"outfitSkipMissingOn":"outfitSkipMissingOff")+(v.gamepad?"  [X]":"  [M]");
+            if(v.config.outfitSkipMissingAll)missingLabel+="  ·  "+tr("outfitSkipMissingGlobalActive");
+            Button(d,c,s,v,outfitMissingButton,missingLabel,skipMissing);
             Button(d,c,s,v,outfitEditCancelButton,tr("cancel"));Button(d,c,s,v,outfitEditSaveButton,tr(edit.saving?"outfitEditSaving":"outfitEditSave"),true);
             Text(d,{c.x,c.y+outfitEditHelpY*s},Fit(tr("outfitEditMouseHelp"),12*s,610*s),12*s,t.muted);
         }
@@ -706,7 +709,8 @@ namespace Wheel
             constexpr const char *keys[] = {"wheelSize",      "sensitivity", "hints",      "language",
                                             "theme",          "hotkey",      "positionX",  "positionY",
                                             "overlayOpacity", "sounds",      "animations", "switchWheelKey",
-                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications","kbMoveWhileOpen","kbCategoryPrevKey","kbCategoryNextKey","i4Icons","i4IconColor","i4IconScope"};
+                                            "favoriteModifier","actionHotkey","actionModifier","gamepadHotkey","gamepadModifier","gamepadActionModifier","inventoryScope","timeMode","slowTimePercent","gamepadCategoryButtons","keepOpen","gamepadMoveWhileOpen","hideEmptyCategories","swapMouseHands","rememberLastWheel","keepOpenConsumables","actionNotifications","kbMoveWhileOpen","kbCategoryPrevKey","kbCategoryNextKey","i4Icons","i4IconColor","i4IconScope",
+                                            "shieldsInWeapons","outfitSkipMissingAll"};
             const auto language = LanguageLabel(config);
             auto key=[&](int scan){auto copy=config;copy.hotkey=scan;return KeyLabel(copy);};
             const std::string values[] = {std::to_string(int(std::round(config.wheelScale * 100))) + "%",
@@ -727,7 +731,9 @@ namespace Wheel
                                           tr(config.timeMode==0?"timePause":config.timeMode==1?"timeSlow":"timeNormal"),std::to_string(config.slowPercent)+"%",
                                           config.gamepadCategoryButtons==1?"LT / RT":"LB / RB",tr(config.keepOpen?"on":"off"),tr(config.gamepadMoveWhileOpen?"on":"off"),tr(config.hideEmptyCategories?"on":"off"),tr(config.swapMouseHands?"on":"off"),tr(config.rememberLastWheel?"on":"off"),tr(config.keepOpenConsumables?"on":"off"),tr(config.showActionNotifications?"on":"off"),tr(config.kbMoveWhileOpen?"on":"off"),config.kbCategoryPrevKey<0?tr("off"):key(config.kbCategoryPrevKey),config.kbCategoryNextKey<0?tr("off"):key(config.kbCategoryNextKey),
                                           tr(config.i4Icons?"on":"off"),tr(config.i4IconColor=="I4"?"i4ColorI4":config.i4IconColor=="Original"?"i4ColorOriginal":"i4ColorTheme"),
-                                          tr(config.i4IconScope=="Rule"?"i4ScopeRule":"i4ScopeAll")};
+                                          tr(config.i4IconScope=="Rule"?"i4ScopeRule":"i4ScopeAll"),
+                                          tr(config.shieldsInWeapons?"on":"off"),tr(config.outfitSkipMissingAll?"on":"off")};
+            static_assert(std::size(keys)==std::size(values));
             for (int slot = 0; slot < SettingCount(v.settingsTab); ++slot)
             {
                 const int row=SettingRow(v.settingsTab,slot);

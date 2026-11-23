@@ -12,6 +12,11 @@ namespace {
 }
 int main() {
     using namespace Wheel;
+    Check(ArmorWheelCategory(true,false)==Category::Armor && ArmorWheelCategory(true,true)==Category::Weapons &&
+        ArmorWheelCategory(false,true)==Category::Armor,"Only shields move between the two equipment categories");
+    ItemInfo shieldStats,weaponStats;shieldStats.armor=38.f;weaponStats.damage=20.f;
+    Check(shieldStats.EquipmentSortStat()==38.f && weaponStats.EquipmentSortStat()==20.f && !ItemInfo{}.EquipmentSortStat(),
+        "Shields sort by defense and weapons by damage regardless of where they are listed");
     {
         Check(ClassifyFormMode(false,false)==FormMode::Human,"Humanoid vampires retain normal behavior");
         Check(ClassifyFormMode(true,false,true)==FormMode::Werewolf,"Werewolves have a dedicated restricted mode");

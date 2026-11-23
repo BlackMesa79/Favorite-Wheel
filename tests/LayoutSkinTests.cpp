@@ -60,7 +60,11 @@ int main() {
     memory.Observe(true,true);memory.Observe(false,false);
     Check(!memory.Resolve(true,true,false) && memory.Resolve(false,true,true),"Restricted forms force inventory without overwriting human memory");
     memory.Reset();Check(!memory.Resolve(false,true,true),"Loading a save resets opening memory");
-    Check(SettingCount(2)==10 && SettingRow(2,6)==27 && SettingRow(2,7)==29 && SettingRow(2,8)==30 && SettingRow(2,9)==31 && BindingRow(30) && BindingRow(31),"Gameplay settings expose all current gameplay options");
+    Check(std::find(std::begin(GameplayRows),std::end(GameplayRows),shieldsInWeaponsRow)!=std::end(GameplayRows) &&
+        std::find(std::begin(GameplayRows),std::end(GameplayRows),outfitSkipMissingAllRow)!=std::end(GameplayRows) &&
+        BindingRow(30) && BindingRow(31),"Gameplay exposes equipment options and both category bindings");
+    const auto lastGameplayRow=ValueButton(SettingCount(2)-1,2);
+    Check(lastGameplayRow.y+lastGameplayRow.h<120.f,"Gameplay rows leave room for the first help line");
     Check(std::find(std::begin(GeneralRows),std::end(GeneralRows),28)!=std::end(GeneralRows),"Display settings expose action-notification control");
     int hits=0,placements=0;
     for(const auto shape:{WheelShape::Circle,WheelShape::Ellipse,WheelShape::Polygon})

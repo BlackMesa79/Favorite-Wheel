@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
     if(argc>4 && std::string(argv[4])=="custom-font")config.font="C:/Windows/Fonts/georgia.ttf";
     if(argc>4 && (std::string(argv[4])=="inventory" || std::string(argv[4])=="inventory-controls" || std::string(argv[4])=="gameplay"))config.allInventory=true;
     if(argc>4 && std::string(argv[4])=="gameplay"){config.timeMode=1;config.slowPercent=50;}
+    if(argc>4 && std::string(argv[4])=="outfit-edit-global")config.outfitSkipMissingAll=true;
     if(argc>4 && std::string(argv[4])=="pad-triggers")config.gamepadCategoryButtons=1;
     if(argc>4 && (std::string(argv[4])=="controls-pad-move" || std::string(argv[4])=="pad-move" || std::string(argv[4])=="pad-move-pause")) {
         config.gamepadMoveWhileOpen=true;config.timeMode=std::string(argv[4])=="pad-move-pause"?0:1;
@@ -173,7 +174,7 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if(argc>4 && (std::string(argv[4])=="outfit-edit" || std::string(argv[4])=="outfit-edit-skip")) {
+    if(argc>4 && (std::string(argv[4])=="outfit-edit" || std::string(argv[4])=="outfit-edit-skip" || std::string(argv[4])=="outfit-edit-global")) {
         using namespace Wheel;using namespace Wheel::Outfits;
         const bool zh=config.language=="zh_CN";
         preview.functions=true;preview.outfitDialog=7;preview.outfitId=12;

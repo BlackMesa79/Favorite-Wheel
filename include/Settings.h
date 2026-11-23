@@ -5,6 +5,8 @@ namespace Wheel {
         bool enabled = true;
         bool allInventory = false;
         bool hideEmptyCategories = true;
+        bool shieldsInWeapons = false;
+        bool outfitSkipMissingAll = false;
         bool rememberLastWheel = false; // Session-local wheel selection; explicit actions entrance remains direct.
         bool keepOpen = true; // Equipment/magic/actions stay open; consumables close.
         bool keepOpenConsumables = false; // Potions and food only; poisons still close.
@@ -48,6 +50,8 @@ namespace Wheel {
     bool AppliedGamepadMoveWhileOpen(); // Input scheme changes only after successful Apply.
     bool AppliedKbMoveWhileOpen();
     bool AppliedI4Icons();
+    bool AppliedShieldsInWeapons();
+    bool AppliedOutfitSkipMissingAll();
     int AppliedKbCategoryPrevKey();
     int AppliedKbCategoryNextKey();
     void LoadSettings();

@@ -134,15 +134,13 @@ inline std::uint16_t ControllerPacketButtons(std::uint16_t buttons,std::uint8_t 
   return static_cast<std::uint16_t>((buttons & 0x3FFu) | ((buttons & 0xF000u)>>2) |
       (leftTrigger>30?ControllerKeyBit(280):0) | (rightTrigger>30?ControllerKeyBit(281):0));
 }
-inline std::uint16_t ControllerOpeningHeld(std::uint16_t events,ControllerSample sample,int mainKey,std::uint16_t modifiers) {
+inline std::uint16_t ControllerOpeningHeld(std::uint16_t events,ControllerSample sample,int mainKey) {
   const auto mainBit=ControllerKeyBit(mainKey);
-  // Native chord processing may release LB in the very packet that presses Y,
-  // then resume LB with its original held duration. Repair only required
-  // modifiers, only while that same main key is down in the current packet.
-  // The persistent event tracker stays untouched (including real releases).
-  if(sample.available && mainBit && (sample.held & mainBit))
-    events|=static_cast<std::uint16_t>(sample.held & modifiers & ~mainBit);
-  return events;
+  // A remapper can hide held buttons from the event batch. Extra buttons must
+  // still veto the opening when the current packet confirms the same main key.
+  // Keep this evidence local to entrance resolution, separate from tracked events.
+  if(!sample.available || !(sample.held & mainBit))return events;
+  return static_cast<std::uint16_t>(events | (sample.held & ~mainBit));
 }
 // ControlMap stores the primary button and its XInput modifier separately.
 // 0/FFFF mean no modifier; 9/A are the game's trigger IDs, not bit masks.
