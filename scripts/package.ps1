@@ -57,6 +57,8 @@ Gameplay settings add optional global outfit skipping and a Weapons category
 option for shields. Both default to off. Improved controller chord passthrough
 and keyboard quick slot recovery after a missed key release. The I4 cache
 creates its directory when writing bitmaps, avoiding empty MO2 Overwrite folders.
+Fixed wheel overlap and gamepad navigation conflicts with blocking SKSE Menu
+Framework windows. Thanks to kiriko-xx for PR #4.
 Install I4 rule and icon assets separately for I4 icons.
 
 INSTALLATION AND CONTROLS

@@ -4,3 +4,4 @@
 - Improved controller chord passthrough, including when a modifier is hidden from the input event list.
 - Fixed a case where a missed key release could block keyboard quick slots 1–8 after closing the wheel.
 - Fixed empty I4 IconCache folders appearing in MO2 Overwrite when no new cache files were written.
+- Fixed wheel overlap and blocked gamepad navigation in SKSE Menu Framework's blocking windows. Thanks to kiriko-xx (PR #4).

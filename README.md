@@ -4,6 +4,7 @@
 
 - Added Gameplay options to put shields in Weapons and skip missing items in all outfits. Both default to off.
 - Improved controller chord passthrough and recovery for keyboard quick slots 1–8 after missed key releases.
+- Fixed wheel overlap and gamepad navigation conflicts with blocking SKSE Menu Framework windows. Thanks to kiriko-xx ([PR #4](https://github.com/BlackMesa79/Favorite-Wheel/pull/4)).
 - Fixed empty I4 `IconCache` folders being created in MO2 Overwrite. See the [short changelog](release-materials/0.11.1/Nexus-changelog-en.txt).
 
 ## 0.11.0
